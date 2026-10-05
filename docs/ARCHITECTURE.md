@@ -171,7 +171,8 @@ The **single unified Alert schema**, emitted by the Sentinel and by the AI servi
 | `GET /api/v1/auth/check` | Forward-auth for the reverse proxy (camera feed) → `204` / `401` |
 | `POST /api/v1/commands` | Actuator command (schema below, without `cmd_id`/`ts` — the `api` adds them) → `202` |
 | `wss://<pi>/ws` | Live feed (frames below). Session checked on upgrade, `Origin` checked. |
-| history `GET /api/v1/…`, camera feed | Session required |
+| `GET /api/v1/history?from=…&to=…` | Telemetry + Alert history of a time range, oldest first (time-scrubber) — see [`../backend/`](../backend/README.md#history--get-apiv1history). Session required |
+| camera feed | Session required |
 
 ### Actuator command — `command/<id>/actuator`
 
