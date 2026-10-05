@@ -1,0 +1,69 @@
+import type { AddressInfo } from 'node:net'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { Frame, StatusLevel } from '../src/contract.js'
+import { buildServer } from '../src/server.js'
+import { connectClient } from './support/ws-client.js'
+
+type Server = Awaited<ReturnType<typeof buildServer>>
+
+const servers: Server[] = []
+
+async function startServer() {
+  const server = await buildServer()
+  servers.push(server)
+  await server.listen({ port: 0, host: '127.0.0.1' })
+  const { port } = server.server.address() as AddressInfo
+  return { hub: server.hub, connect: () => connectClient(`ws://127.0.0.1:${port}/ws`) }
+}
+
+afterEach(async () => {
+  await Promise.all(servers.splice(0).map((server) => server.close()))
+})
+
+function telemetryFrame(air: number): Frame {
+  return {
+    type: 'telemetry',
+    payload: {
+      sentinel: 'sentinel-01',
+      ts: '2026-10-05T14:23:00Z',
+      readings: { temp: 31.2, humidity: 44, air, pir: false, accel: { x: 0.01, y: -0.02, z: 0.98 } },
+    },
+  }
+}
+
+function statusFrame(status: StatusLevel): Frame {
+  return { type: 'status', payload: { status, ts: '2026-10-05T14:23:05Z' } }
+}
+
+describe('live feed on /ws', () => {
+  it('delivers every broadcast frame to every connected client', async () => {
+    const { hub, connect } = await startServer()
+    const dashboard = await connect()
+    const twin = await connect()
+
+    hub.broadcast(telemetryFrame(420))
+    hub.broadcast(statusFrame('elevated'))
+
+    await vi.waitFor(() => {
+      for (const client of [dashboard, twin]) {
+        expect(client.frames.slice(-2)).toEqual([telemetryFrame(420), statusFrame('elevated')])
+      }
+    })
+  })
+
+  it('keeps feeding the remaining clients after one disconnects', async () => {
+    const { hub, connect } = await startServer()
+    const dashboard = await connect()
+    const twin = await connect()
+
+    hub.broadcast(telemetryFrame(180))
+    await vi.waitFor(() => expect(twin.frames.at(-1)).toEqual(telemetryFrame(180)))
+    twin.close()
+    hub.broadcast(telemetryFrame(420))
+    hub.broadcast(telemetryFrame(700))
+
+    await vi.waitFor(() => {
+      expect(dashboard.frames.slice(-3)).toEqual([telemetryFrame(180), telemetryFrame(420), telemetryFrame(700)])
+    })
+  })
+})
