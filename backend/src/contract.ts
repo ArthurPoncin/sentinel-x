@@ -9,6 +9,7 @@ export const TelemetrySchema = z.strictObject({
     humidity: z.number(),
     air: z.number(),
     pir: z.boolean(),
+    // Share of the cycle the sound sensor heard sound, 0–1: the CZN-15E only says above or below its threshold.
     sound: z.number(),
   }),
 })
@@ -167,3 +168,7 @@ export const HealthSchema = z.strictObject({
   broker: BrokerStateSchema,
 })
 export type Health = z.infer<typeof HealthSchema>
+
+// Body of POST /api/v1/auth/login: the Operator's password, nothing else.
+export const LoginSchema = z.strictObject({ password: z.string().min(1).max(256) })
+export type Login = z.infer<typeof LoginSchema>

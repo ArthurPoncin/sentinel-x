@@ -10,7 +10,11 @@ const address = await server.listen({ host: config.host, port: config.port })
 const mockFeed = `mock feed ${config.mockFeed ? 'on' : 'off'}`
 const mqtt = `MQTT ${config.mqtt ? 'on' : 'off'}`
 const cors = `CORS ${config.corsOrigins.length > 0 ? config.corsOrigins.join(' ') : 'off'}`
-console.log(`Command Post API listening on ${address} (${mockFeed}, ${mqtt}, ${cors}, history in ${config.historyFile})`)
+const login = `Operator login ${config.operatorAuth ? 'on' : 'off'}`
+console.log(
+  `Command Post API listening on ${address} (${login}, ${mockFeed}, ${mqtt}, ${cors}, history in ${config.historyFile})`,
+)
+if (!config.operatorAuth) console.warn('OPERATOR_AUTH=off: anyone who reaches the API gets in. Development only.')
 
 // `docker compose stop` sends SIGTERM: leave the broker and close the history file before going.
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {

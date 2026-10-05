@@ -14,7 +14,7 @@ function telemetry(time: string, air = 180): HistoryRecord {
     payload: {
       sentinel: 'sentinel-01',
       ts: at(time),
-      readings: { temp: 31.2, humidity: 44, air, pir: false, sound: 1350 },
+      readings: { temp: 31.2, humidity: 44, air, pir: false, sound: 0.02 },
     },
   }
 }
