@@ -1,13 +1,13 @@
 import cors from '@fastify/cors'
 import websocket from '@fastify/websocket'
-import fastify, { type FastifyInstance, type FastifyReply } from 'fastify'
+import fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify'
 import type { MqttClient } from 'mqtt'
 import { z } from 'zod'
 import { createAlertPipeline, normalizeAlert } from './alerts.js'
+import { type Service, type ServiceTokens, serviceOf } from './auth.js'
 import { type CommandRelay, createCommandRelay } from './commands.js'
 import {
   type AlertKind,
-  type AlertSource,
   type BrokerState,
   CommandRequestSchema,
   type Health,
@@ -28,6 +28,10 @@ declare module 'fastify' {
   interface FastifyInstance {
     hub: Hub
   }
+  interface FastifyRequest {
+    // The AI service whose token came with the request, on POST /api/v1/alerts.
+    service?: Service
+  }
 }
 
 export interface ServerConfig {
@@ -39,6 +43,8 @@ export interface ServerConfig {
   history: HistoryRepository
   // Origins of the front-ends served elsewhere than the API, allowed to call it from the browser.
   corsOrigins: string[]
+  // The bearer token of each AI service on POST /api/v1/alerts. A service without one cannot post.
+  serviceTokens: ServiceTokens
 }
 
 const ALERT_BODY_LIMIT = 16 * 1024
@@ -46,13 +52,13 @@ const ALERT_BODY_LIMIT = 16 * 1024
 const COMMAND_BODY_LIMIT = 1024
 
 // The one kind each AI service may post. The Sentinel's kinds only come in over MQTT.
-const KIND_OF_SERVICE: Partial<Record<AlertSource, AlertKind>> = {
+const KIND_OF_SERVICE: Record<Service, AlertKind> = {
   vision: 'intrusion',
   predictive: 'predictive',
 }
 
 // Same body as the errors Fastify raises on its own (malformed JSON, body too large…).
-function refuse(reply: FastifyReply, statusCode: 400 | 403 | 404 | 503, error: string, message: string) {
+function refuse(reply: FastifyReply, statusCode: 400 | 401 | 403 | 404 | 503, error: string, message: string) {
   return reply.code(statusCode).send({ statusCode, error, message })
 }
 
@@ -90,14 +96,27 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
     socket.on('close', disconnect)
   })
 
-  app.post('/api/v1/alerts', { bodyLimit: ALERT_BODY_LIMIT }, (request, reply) => {
-    const parsed = normalizeAlert(request.body)
+  const alertRoute = {
+    bodyLimit: ALERT_BODY_LIMIT,
+    // Before the body is even read: no token, no say.
+    onRequest: async (request: FastifyRequest, reply: FastifyReply) => {
+      request.service = serviceOf(request.headers.authorization, config.serviceTokens)
+      if (!request.service) {
+        reply.header('www-authenticate', 'Bearer')
+        return refuse(reply, 401, 'Unauthorized', 'A service token is required')
+      }
+    },
+  }
+
+  app.post('/api/v1/alerts', alertRoute, (request, reply) => {
+    // The token names the source, whatever the body says.
+    const service = request.service as Service
+    const parsed = normalizeAlert(request.body, { source: service })
     if (!parsed.success) return refuse(reply, 400, 'Bad Request', z.prettifyError(parsed.error))
 
-    // Until service tokens name the caller, the service is the `source` it declares.
     const alert = parsed.data
-    if (KIND_OF_SERVICE[alert.source] !== alert.kind) {
-      return refuse(reply, 403, 'Forbidden', `${alert.source} may not post "${alert.kind}" Alerts here`)
+    if (KIND_OF_SERVICE[service] !== alert.kind) {
+      return refuse(reply, 403, 'Forbidden', `${service} may not post "${alert.kind}" Alerts here`)
     }
 
     alerts.accept(alert)

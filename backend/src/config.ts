@@ -16,6 +16,9 @@ const OriginSchema = z
     'Expected an origin alone: no path, no trailing slash',
   )
 
+// Long enough not to be guessed: `openssl rand -hex 32` gives 64 characters.
+const ServiceTokenSchema = z.string().regex(/^\S{32,}$/, 'Expected at least 32 characters, no space')
+
 const EnvSchema = z.object({
   HOST: z.string().min(1).default('127.0.0.1'),
   PORT: z.coerce.number().int().min(0).max(65535).default(8080),
@@ -28,6 +31,9 @@ const EnvSchema = z.object({
     .default('')
     .transform((list) => list.split(',').map((origin) => origin.trim()).filter((origin) => origin !== ''))
     .pipe(z.array(OriginSchema)),
+  // Bearer tokens of the AI services on POST /api/v1/alerts. Unset: that service cannot post.
+  VISION_TOKEN: ServiceTokenSchema.optional(),
+  PREDICTIVE_TOKEN: ServiceTokenSchema.optional(),
 })
 
 // Read only when MQTT_URL is set: it turns MQTT on, and the rest comes with it.
@@ -54,7 +60,12 @@ function mqttConfig(env: Record<string, string | undefined>): Config['mqtt'] {
 }
 
 export function loadConfig(env: Record<string, string | undefined>): Config {
-  const { HOST, PORT, MOCK_FEED, MOCK_FEED_INTERVAL_MS, HISTORY_FILE, CORS_ORIGINS } = read(EnvSchema, env)
+  const { HOST, PORT, MOCK_FEED, MOCK_FEED_INTERVAL_MS, HISTORY_FILE, CORS_ORIGINS, VISION_TOKEN, PREDICTIVE_TOKEN } =
+    read(EnvSchema, env)
+  // The token names the source: two services sharing one could post as each other.
+  if (VISION_TOKEN !== undefined && VISION_TOKEN === PREDICTIVE_TOKEN) {
+    throw new Error('Invalid configuration:\nVISION_TOKEN and PREDICTIVE_TOKEN must differ: one token per service')
+  }
   return {
     host: HOST,
     port: PORT,
@@ -62,5 +73,6 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     mqtt: mqttConfig(env),
     historyFile: HISTORY_FILE,
     corsOrigins: CORS_ORIGINS,
+    serviceTokens: { vision: VISION_TOKEN, predictive: PREDICTIVE_TOKEN },
   }
 }

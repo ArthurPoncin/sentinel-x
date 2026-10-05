@@ -48,6 +48,31 @@ describe('configuration from the environment', () => {
     expect(() => loadConfig({ PORT: 'http' })).toThrow(/PORT/)
   })
 
+  describe('service tokens', () => {
+    const vision = 'a'.repeat(64)
+    const predictive = 'b'.repeat(64)
+
+    it('holds no token unless given: no AI service can post', () => {
+      expect(loadConfig({}).serviceTokens).toEqual({ vision: undefined, predictive: undefined })
+    })
+
+    it('reads each service its own token', () => {
+      expect(loadConfig({ VISION_TOKEN: vision, PREDICTIVE_TOKEN: predictive }).serviceTokens).toEqual({
+        vision,
+        predictive,
+      })
+    })
+
+    it('refuses one token for both services', () => {
+      expect(() => loadConfig({ VISION_TOKEN: vision, PREDICTIVE_TOKEN: vision })).toThrow(/VISION_TOKEN.*PREDICTIVE_TOKEN/)
+    })
+
+    it('refuses a token short enough to be guessed, or with a space in it', () => {
+      expect(() => loadConfig({ VISION_TOKEN: 'secret' })).toThrow(/32 characters.*VISION_TOKEN/s)
+      expect(() => loadConfig({ PREDICTIVE_TOKEN: `${predictive} x` })).toThrow(/PREDICTIVE_TOKEN/)
+    })
+  })
+
   describe('MQTT ingress', () => {
     const broker = {
       MQTT_URL: 'mqtts://mosquitto:8883',
