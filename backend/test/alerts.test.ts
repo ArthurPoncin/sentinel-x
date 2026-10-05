@@ -69,6 +69,7 @@ describe('alert pipeline', () => {
         throw new Error('database or disk is full')
       },
       query: () => [],
+      alerts: () => [],
     }
     const { pipeline, frames } = startPipeline(broken)
 

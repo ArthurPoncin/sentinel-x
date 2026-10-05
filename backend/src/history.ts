@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import type { HistoryRecord } from './contract.js'
+import type { Alert, HistoryRecord } from './contract.js'
 
 // Both ends included, ISO 8601 UTC.
 export interface TimeRange {
@@ -15,16 +15,20 @@ export interface HistoryRepository {
   // The records whose ts falls in the range, oldest first; records sharing a ts in the order
   // they were appended.
   query(range: TimeRange): HistoryRecord[]
+  // Every Alert ever appended, in the order `query` gives them: what Incidents are built from.
+  alerts(): Alert[]
 }
 
 // Orders and filters by instant, not by text: "…:00Z" and "…:00.500Z" do not sort as strings do.
-function instant(ts: string): number {
+export function instant(ts: string): number {
   return Date.parse(ts)
 }
 
 // Keeps everything in the process, gone with it: for tests and for a run without a disk.
 export function createMemoryHistory(): HistoryRepository {
   const records: { at: number; record: HistoryRecord }[] = []
+  // Sorting is stable: records sharing a ts stay in the order they were appended.
+  const sorted = (kept: typeof records) => [...kept].sort((a, b) => a.at - b.at)
 
   return {
     append(record) {
@@ -33,10 +37,10 @@ export function createMemoryHistory(): HistoryRepository {
     },
     query(range) {
       const [from, to] = [instant(range.from), instant(range.to)]
-      return records
-        .filter(({ at }) => from <= at && at <= to)
-        .sort((a, b) => a.at - b.at)
-        .map(({ record }) => structuredClone(record))
+      return sorted(records.filter(({ at }) => from <= at && at <= to)).map(({ record }) => structuredClone(record))
+    },
+    alerts() {
+      return sorted(records).flatMap(({ record }) => (record.type === 'alert' ? [structuredClone(record.payload)] : []))
     },
   }
 }
@@ -59,9 +63,12 @@ export function openSqliteHistory(file: string): HistoryRepository & { close(): 
       record TEXT NOT NULL
     ) STRICT;
     CREATE INDEX IF NOT EXISTS history_by_time ON history (at, id);
+    -- The Alerts are a handful among the telemetry: read them without going through it.
+    CREATE INDEX IF NOT EXISTS history_by_type ON history (type, at, id);
   `)
   const insert = db.prepare('INSERT INTO history (at, type, sentinel, record) VALUES (?, ?, ?, ?)')
   const select = db.prepare('SELECT record FROM history WHERE at BETWEEN ? AND ? ORDER BY at, id')
+  const selectAlerts = db.prepare("SELECT record FROM history WHERE type = 'alert' ORDER BY at, id")
 
   return {
     append(record) {
@@ -71,6 +78,11 @@ export function openSqliteHistory(file: string): HistoryRepository & { close(): 
       return select
         .all(instant(range.from), instant(range.to))
         .map((row) => JSON.parse(String(row.record)) as HistoryRecord)
+    },
+    alerts() {
+      return selectAlerts
+        .all()
+        .map((row) => (JSON.parse(String(row.record)) as Extract<HistoryRecord, { type: 'alert' }>).payload)
     },
     close() {
       db.close()
