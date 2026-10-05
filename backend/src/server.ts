@@ -1,12 +1,16 @@
+import cors from '@fastify/cors'
 import websocket from '@fastify/websocket'
 import fastify, { type FastifyInstance, type FastifyReply } from 'fastify'
+import type { MqttClient } from 'mqtt'
 import { z } from 'zod'
 import { createAlertPipeline, normalizeAlert } from './alerts.js'
 import { type CommandRelay, createCommandRelay } from './commands.js'
 import {
   type AlertKind,
   type AlertSource,
+  type BrokerState,
   CommandRequestSchema,
+  type Health,
   type History,
   HistoryQuerySchema,
   IncidentParamsSchema,
@@ -33,6 +37,8 @@ export interface ServerConfig {
   mqtt: false | MqttConfig
   // Where the telemetry and Alerts that come in are kept, for GET /api/v1/history.
   history: HistoryRepository
+  // Origins of the front-ends served elsewhere than the API, allowed to call it from the browser.
+  corsOrigins: string[]
 }
 
 const ALERT_BODY_LIMIT = 16 * 1024
@@ -66,6 +72,18 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
   const telemetry = createTelemetryPipeline(hub, config.history)
   app.decorate('hub', hub)
   await app.register(websocket)
+  // Only the listed origins, never `*`: the Operator session will ride on a cookie.
+  await app.register(cors, { origin: config.corsOrigins, credentials: true, methods: ['GET', 'POST'] })
+
+  // The connection to the broker, once the server runs with one.
+  let broker: MqttClient | undefined
+
+  // For Docker's healthcheck, on the internal network: the reverse proxy only routes /api and /ws.
+  app.get('/health', (_request, reply) => {
+    const state: BrokerState = !config.mqtt ? 'off' : broker?.connected ? 'connected' : 'disconnected'
+    const health: Health = { status: state === 'disconnected' ? 'degraded' : 'ok', broker: state }
+    return reply.code(health.status === 'ok' ? 200 : 503).send(health)
+  })
 
   app.get('/ws', { websocket: true }, (socket) => {
     const disconnect = hub.connect(socket)
@@ -131,9 +149,10 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
   }
 
   if (config.mqtt) {
-    const broker = config.mqtt
+    const mqtt = config.mqtt
     whileRunning(app, () => {
-      const client = connectBroker(broker)
+      const client = connectBroker(mqtt)
+      broker = client
       startMqttIngress(telemetry, client)
       commands = createCommandRelay(client)
       return () => client.endAsync(true)
