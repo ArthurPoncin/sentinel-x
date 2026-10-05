@@ -5,11 +5,16 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer, type Server } from 'node:tls'
 import { Aedes } from 'aedes'
+import { connectAsync } from 'mqtt'
 import { generate } from 'selfsigned'
 import { onTestFinished, vi } from 'vitest'
-import type { MqttConfig } from '../../src/mqtt-ingress.js'
+import type { MqttConfig } from '../../src/mqtt.js'
 
 const API_PASSWORD = 'api-password'
+const SENTINEL_PASSWORD = 'sentinel-password'
+
+// The broker's password file.
+const PASSWORD_OF: Record<string, string> = { api: API_PASSWORD, 'sentinel-01': SENTINEL_PASSWORD }
 
 const ec = { keyType: 'ec', algorithm: 'sha256' } as const
 
@@ -57,8 +62,8 @@ export async function strangerCaFile(): Promise<string> {
   return certificateFile(stranger.cert)
 }
 
-// Starts an MQTTS broker on a free port, with the `api` user, and stops it when the calling
-// test ends. It can be stopped and started again on the same port in between.
+// Starts an MQTTS broker on a free port, with the `api` and `sentinel-01` users, and stops it when
+// the calling test ends. It can be stopped and started again on the same port in between.
 export async function startBroker() {
   pki ??= createPki()
   const { caCert, key, cert } = await pki
@@ -68,13 +73,24 @@ export async function startBroker() {
   let port = 0
   // Topic filters the clients of the running broker hold.
   const subscriptions: string[] = []
+  // Everything the clients published, in the order the broker took it.
+  const published: { topic: string; payload: string }[] = []
+  // While set: the topics of the publications the running broker received and left unanswered.
+  let unanswered: string[] | undefined
 
   async function start() {
     const aedes = await Aedes.createBroker({
       authenticate: (_client, username, password, done) =>
-        done(null, username === 'api' && password?.toString() === API_PASSWORD),
+        done(null, username !== undefined && password?.toString() === PASSWORD_OF[username]),
+      authorizePublish: (_client, packet, done) => {
+        if (unanswered) unanswered.push(packet.topic)
+        else done(null)
+      },
     })
     aedes.on('subscribe', (granted) => subscriptions.push(...granted.map(({ topic }) => topic)))
+    aedes.on('publish', ({ topic, payload }, client) => {
+      if (client) published.push({ topic, payload: payload.toString() })
+    })
 
     const sockets = new Set<Socket>()
     const server = createServer({ key, cert }, aedes.handle)
@@ -94,6 +110,7 @@ export async function startBroker() {
     const { aedes, server, sockets } = running
     running = undefined
     subscriptions.length = 0
+    unanswered = undefined
     for (const socket of sockets) socket.destroy()
     await new Promise<void>((resolve) => aedes.close(resolve))
     await new Promise((resolve) => server.close(resolve))
@@ -111,6 +128,7 @@ export async function startBroker() {
       caFile,
     } satisfies MqttConfig,
     subscriptions,
+    published,
     // Resolves once a client holds a subscription on the running broker.
     subscribed: () =>
       vi.waitFor(
@@ -128,6 +146,27 @@ export async function startBroker() {
           (error) => (error ? reject(error) : resolve()),
         )
       }),
+    // Makes the broker stop answering publications until it is stopped, as when it goes down
+    // mid-flight. Returns the topics of those it leaves unanswered, as they come in.
+    stopAnswering: () => {
+      unanswered = []
+      return unanswered
+    },
+    // Logs in over MQTTS the way a Sentinel does and collects the payloads the broker delivers
+    // on `topic`. The list fills in as they arrive; the connection ends with the broker's.
+    subscribe: async (topic: string) => {
+      const received: string[] = []
+      const client = await connectAsync(`mqtts://127.0.0.1:${port}`, {
+        username: 'sentinel-01',
+        password: SENTINEL_PASSWORD,
+        ca: caCert,
+        reconnectPeriod: 0,
+      })
+      onTestFinished(() => client.endAsync(true))
+      client.on('message', (_topic, payload) => received.push(payload.toString()))
+      await client.subscribeAsync(topic, { qos: 1 })
+      return received
+    },
     start,
     stop,
   }
