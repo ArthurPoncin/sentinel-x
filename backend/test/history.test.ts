@@ -114,6 +114,20 @@ describe.each([
     expect(history.query({ from: '2026-10-06T00:00:00Z', to: '2026-10-06T01:00:00Z' })).toEqual([])
   })
 
+  it('gives back every Alert, without the telemetry, in the order of the records', async () => {
+    const history = await open()
+    history.append(alert('2026-10-05T14:23:10Z'))
+    history.append(telemetry('2026-10-05T14:23:00Z'))
+    history.append({ type: 'alert', payload: intrusionAlert({ ts: '2026-10-05T14:23:05Z' }) })
+    history.append({ type: 'alert', payload: gasAlert({ state: 'cleared', ts: '2026-10-05T14:23:05Z' }) })
+
+    expect(history.alerts()).toEqual([
+      intrusionAlert({ ts: '2026-10-05T14:23:05Z' }),
+      gasAlert({ state: 'cleared', ts: '2026-10-05T14:23:05Z' }),
+      gasAlert({ ts: '2026-10-05T14:23:10Z' }),
+    ])
+  })
+
   it('is not changed by what a caller does with the records', async () => {
     const history = await open()
     const record = telemetry('2026-10-05T14:23:00Z', 180)
