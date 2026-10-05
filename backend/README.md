@@ -83,15 +83,16 @@ A front-end served elsewhere — the Twin on its own port, the dashboard without
 
 CORS does not apply to the WebSocket: `/ws` will check the `Origin` with the Operator session.
 
-## Sentinel telemetry — MQTTS
-With `MQTT_URL` set, the API logs in to the broker over TLS, checks its certificate against the team CA and nothing else, and subscribes to `sentinel/+/telemetry`. Every snapshot a Sentinel publishes there goes out as a `telemetry` frame on `/ws`.
+## Sentinel telemetry and Alerts — MQTTS
+With `MQTT_URL` set, the API logs in to the broker over TLS, checks its certificate against the team CA and nothing else, and subscribes to `sentinel/+/telemetry` and `sentinel/+/alert`. Every snapshot a Sentinel publishes goes out as a `telemetry` frame on `/ws`. Every Alert goes through the same pipeline as those of `POST /api/v1/alerts`: paired by `alert_id`, recorded in the history, broadcast as an `alert` frame, then the `Status` it leads to.
 
 ```bash
 MQTT_URL=mqtts://192.168.X.1:8883 MQTT_PASSWORD=… MQTT_CA_FILE=/path/to/team-ca.crt npm run dev
 ```
 
 - The payload is the Telemetry snapshot of [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#telemetry-reading-snapshot--sentinelidtelemetry), validated strictly: every Reading present, no unknown field, `ts` in ISO 8601 UTC.
-- `sentinel` is taken from the topic. Whatever the payload says there is overwritten, and it may be left out.
+- An Alert is the Alert of [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#alert--sentinelidalert-and-body-of-post-apiv1alerts), validated just as strictly. Only the kinds the Sentinel decides come in this way: `gas`, `thermal`, `presence`, `noise`. An `intrusion` or `predictive` published there is dropped.
+- `sentinel` is taken from the topic, and an Alert's `source` is always `esp32`. Whatever the payload says there is overwritten, and both may be left out.
 - A payload that does not pass is dropped and logged with the reason (`MQTT: dropped a message on sentinel/sentinel-01/telemetry: … → at readings.air`); the subscription carries on.
 - The host in `MQTT_URL` must be one the broker certificate names (`IP:192.168.X.1` from the table network, `DNS:mosquitto` inside Compose).
 - The API starts even if the broker is down or refuses the login, and retries every second until it gets in. Same after a connection loss — no restart needed.
@@ -263,7 +264,7 @@ The body is the Actuator command of [`../docs/ARCHITECTURE.md`](../docs/ARCHITEC
 - [x] `POST /api/v1/alerts` + schema validation
 - [ ] Service tokens on `POST /api/v1/alerts`
 - [x] MQTT subscriber: Sentinel telemetry → WebSocket
-- [ ] MQTT subscriber: Sentinel Alerts → normalizer
+- [x] MQTT subscriber: Sentinel Alerts → normalizer
 - [x] DB writer (telemetry + Alert history)
 - [x] `GET /api/v1/history` for the time-scrubber
 - [x] Incidents: `GET /api/v1/incidents` and their replay

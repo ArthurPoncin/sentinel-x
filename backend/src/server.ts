@@ -153,7 +153,7 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
     whileRunning(app, () => {
       const client = connectBroker(mqtt)
       broker = client
-      startMqttIngress(telemetry, client)
+      startMqttIngress({ telemetry, alerts }, client)
       commands = createCommandRelay(client)
       return () => client.endAsync(true)
     })
