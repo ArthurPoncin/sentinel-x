@@ -16,6 +16,11 @@ export function gasAlert(overrides: Partial<Common> = {}): Alert {
   return { ...common, kind: 'gas', detail: {}, ...overrides }
 }
 
+// Someone in front of the Sentinel's PIR.
+export function presenceAlert(overrides: Partial<Common> = {}): Alert {
+  return { ...common, alert_id: 'pir-1', kind: 'presence', detail: {}, ...overrides }
+}
+
 // An intruder seen by the vision service.
 export function intrusionAlert(overrides: Partial<Common> = {}): Alert {
   return {
