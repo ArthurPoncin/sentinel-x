@@ -11,9 +11,9 @@ Local defense = 5 min: **minute 1** intro, **minute 2** teaser projection (60s),
 | # | Beat (~time) | Action on the table | What the jury sees | Proves |
 |---|---|---|---|---|
 | 0 | 0:00 | Outpost nominal | Twin green, charts flat, camera clear, `Status: nominal` | Baseline, stable flux |
-| 1 | 0:00–0:40 | Gas near the air probe (unlit lighter) | ESP32 raises `gas` warning→critical, **buzzer/siren fires locally**, Twin box glows red, charts spike, `Status: critical` | Autonomous Alarm + telemetry → Twin |
-| 2 | 0:40–1:20 | Someone steps into the camera view and moves | AI Worker vision → `intrusion` Alert; **intruder marker appears on the Twin perimeter and tracks their position** | Live vision, camera(Pi)→Worker→API→Twin |
-| 3 | 1:20–1:50 | Lift / shake the box | `tamper` Alert; Twin box shakes & flashes | Multi-modal defense (accelerometer) |
+| 1 | 0:00–0:40 | Gas near the air probe (unlit lighter) | ESP32 raises `gas` warning→critical, **buzzer fires locally**, Twin box glows red, charts spike, `Status: critical` | Autonomous Alarm + telemetry → Twin |
+| 2 | 0:40–1:20 | Someone steps into the camera view and moves | `vision` service → `intrusion` Alert; **intruder marker appears on the Twin perimeter and tracks their position** | Live vision, ZIF camera (Pi) → `vision` → API → Twin |
+| 3 | 1:20–1:50 | Loud clap next to the Sentinel | ESP32 raises `noise`; sound curve spikes, Twin ripples around the box | Multi-modal sensing (sound) |
 | 4 | 1:50–2:20 | Operator opens the **time-scrubber**, replays Tuesday's recorded Incident (**labelled REPLAY**) | The slow temp+air drift the model flagged *before* the critical threshold | Predictive intelligence (not a static threshold) |
 | 5 | 2:20–2:40 | Operator silences/tests the Alarm from the dashboard | Command → MQTTS → ESP32 reacts physically | Reactive control, full round-trip |
 | — | 2:40 | Return to nominal | Twin green again | Clean close |
@@ -46,8 +46,8 @@ The smallest end-to-end slice that proves the spine. **If only this works, the "
 - One live charts panel.
 
 ### Tier 1 — MVP *(all mandatory brief requirements)*
-- **Firmware:** all core probes (DHT, air, PIR, accelerometer), telemetry snapshots, **own threshold Alerts with hysteresis**, **autonomous Alarm** (buzzer), local LCD status.
-- **AI:** vision intrusion detection (≤640×480, <100ms) → `intrusion` Alert; predictive model (Isolation Forest on temp+air, **non-static**) → `predictive` Alert.
+- **Firmware:** all core probes (DHT, air, PIR, sound), telemetry snapshots, **own threshold Alerts with hysteresis**, **autonomous Alarm** (buzzer), local LCD status.
+- **AI:** vision person detection on the ZIF camera (≤640×480, <100ms; base `automaticdai/rpi-object-detection`) → `intrusion` Alert; predictive model (Isolation Forest on temp+air, **non-static**) → `predictive` Alert.
 - **Backend:** two-path ingress (MQTTS + `POST /api/v1/alerts`), Status engine, WebSocket, actuator command relay.
 - **Dashboard:** 3D Twin reacting to telemetry + Alerts, live charts, `Status`, camera feed, **reactive actuator control panel**.
 - **Infra:** Docker-Compose stack on the Pi, isolated Wi-Fi/Ethernet 3-node network + IP plan, MCO monitoring.
@@ -56,13 +56,9 @@ The smallest end-to-end slice that proves the spine. **If only this works, the "
 ### Tier 2 — Wow / stretch *(in this order, as time allows)*
 1. **Time-scrubber** replay (demo insurance + beat 4).
 2. **Intruder `x_norm` positioning** on the perimeter (vs. a simple zone that lights up).
-3. **Tamper** modality (accelerometer → Twin box shakes).
-4. **MP3 / spoken-siren Alarm** (strong teaser + beat 1 impact).
-5. **Fingerprint** operator access.
-6. **Joystick** operator console.
-7. Scenario mode (one-button scripted demo sequence).
+3. Scenario mode (one-button scripted demo sequence).
 
-> Parked entirely (not tied to the three threats): UV, light, color, soil moisture, pulse, line-follow, rain, ultrasonic.
+> Parked entirely (not tied to the three threats): UV, light, color, soil moisture, pulse, line-follow, rain, ultrasonic. Dropped (neither in the brief nor in our kit): accelerometer / tamper, fingerprint, joystick, MP3 speaker.
 
 ---
 

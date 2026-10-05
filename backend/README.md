@@ -1,6 +1,6 @@
 # backend/ — API (REST + WebSocket)
 
-**Node:** Command Post (Pi 5) · **Suggested:** Node.js (TypeScript) — cohesive with the dashboard
+**Node:** Command Post (Pi 4) · **Suggested:** Node.js (TypeScript) — cohesive with the dashboard
 
 The nervous system of the Command Post: ingests from two paths, persists history, computes `Status`, pushes real-time events to the dashboard / Digital Twin — and enforces authentication on every channel.
 

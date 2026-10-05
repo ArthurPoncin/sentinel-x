@@ -10,7 +10,7 @@ The face of Sentinel-X and our **"wow" centerpiece**. See [`../docs/DIGITAL-TWIN
 - Real-time environmental curves.
 - Logical box status.
 - Live camera feed — the annotated MJPEG stream served by the `vision` service.
-- Reactive control panel to trigger actuators (buzzer, speaker, LEDs) remotely — `POST /api/v1/commands`.
+- Reactive control panel to trigger actuators (buzzer, LEDs) remotely — `POST /api/v1/commands`.
 
 ## Security
 - **Operator login** screen; every view, the WebSocket (`wss://`) and the camera feed sit behind the session.
@@ -19,7 +19,7 @@ The face of Sentinel-X and our **"wow" centerpiece**. See [`../docs/DIGITAL-TWIN
 ## Our extra — the Digital Twin
 - Live 3D replica of the **Outpost** reacting to the real WebSocket event stream.
 - **Intruder marker** placed along the perimeter from the `intrusion` Alert's `x_norm`.
-- **Component pulse** on a `predictive` anomaly; box flashes on `tamper`.
+- **Component pulse** on a `predictive` anomaly; sound ripples on `noise`.
 - **`Status`** drives the twin's overall color (`nominal`/`elevated`/`critical`).
 - **Time-scrubber** replays a past Incident (grouped by `alert_id`) — demo insurance.
 - Scenario mode for the 3-min live demo + 60s teaser.
@@ -80,7 +80,7 @@ src/
 | `features/telemetry` | #21 gas curve, #11 every curve | `/` |
 | `features/status` · `features/alerts` | #11 Status badge, active Alerts | `/` |
 | `features/camera` · `features/actuators` | #14 camera feed, actuator panel | `/` |
-| `features/twin` | #20 3D Outpost, #12 scene mapper, #13 / #23 intrusion, tamper, pulse | `/twin` |
+| `features/twin` | #20 3D Outpost, #12 scene mapper, #13 / #23 intrusion, pulse | `/twin` |
 | `features/replay` | #15 time-scrubber, scenario mode (rebuilds state with `apply`) | `/twin` |
 
 ## Live feed — `features/live-feed`
@@ -105,6 +105,6 @@ const history = useLiveFeed((state) => state.history)                // every fr
 - [ ] Charts + Status + Alerts — #21, #11
 - [ ] Camera panel + actuator control panel — #14
 - [ ] 3D Outpost scene + data bindings — #20, #12
-- [ ] Intruder placement (`x_norm` → perimeter arc), tamper, pulse — #13, #23
+- [ ] Intruder placement (`x_norm` → perimeter arc), pulse — #13, #23
 - [ ] Time-scrubber + scenario mode — #15
 - [ ] CI: build + smoke render — #16
