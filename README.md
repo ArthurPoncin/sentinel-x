@@ -141,11 +141,20 @@ sentinel-x/
 ## 🚀 Getting started
 
 ```bash
-git clone git@github.com:ArthurPoncin/sentinel-x.git
+git clone https://github.com/ArthurPoncin/sentinel-x.git
 cd sentinel-x
 # each pillar has its own README with setup steps:
 #   firmware/  ai/  backend/  dashboard/  infra/  cyber/
 ```
+
+**On the Pi** — the whole Command Post, step by step in [`infra/README.md`](infra/README.md#run-the-command-post-on-the-pi):
+
+```bash
+infra/setup.sh X                 # once: CA, certificates, MQTT accounts, tokens, Operator password (X = table)
+docker compose up -d --build     # https://192.168.X.1/ and mqtts://192.168.X.1:8883
+```
+
+**On a laptop**, without hardware: the API on its mock feed and the dashboard — see [`dashboard/README.md`](dashboard/README.md).
 
 ---
 

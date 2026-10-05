@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+# Makes the Command Post's secrets in infra/secrets/ (never committed), once:
+#   - the team CA, and the certificates it signs for the broker and the reverse proxy;
+#   - one MQTT account per client (sentinel-01, api, predictive) and the broker's ACL;
+#   - one bearer token per AI service (vision, predictive);
+#   - the Operator's password hash.
+# Run it on the Pi, from the repo root, before the first `docker compose up`:
+#   infra/setup.sh <table number>          e.g. infra/setup.sh 4  → the Pi is 192.168.4.1
+# What exists already is kept: delete a file (sudo: some belong to the containers) to make it again.
+# OPERATOR_PASSWORD in the environment skips the prompt. EXTRA_SAN adds names to the proxy
+# certificate, e.g. EXTRA_SAN=IP:10.0.0.12 to reach the Pi on its Ethernet address too.
+set -euo pipefail
+
+table="${1:-}"
+if [[ ! "$table" =~ ^[0-9]{1,3}$ ]] || ((table > 254)); then
+  echo "Usage: infra/setup.sh <table number>   (the Pi is then 192.168.<table>.1)" >&2
+  exit 1
+fi
+pi_ip="192.168.${table}.1"
+
+cd "$(dirname "$0")"
+secrets="$PWD/secrets"
+mkdir -p "$secrets/mosquitto" "$secrets/caddy"
+chmod 700 "$secrets"
+
+MOSQUITTO_IMAGE=eclipse-mosquitto:2.0
+# Runs a command as root in a throwaway container, with the secrets mounted: to hash the MQTT
+# passwords and hand files over to the users the containers run as.
+in_container() {
+  docker run --rm -v "$secrets:/secrets" -v "$PWD/mosquitto/acl:/acl:ro" "$MOSQUITTO_IMAGE" sh -c "$1"
+}
+made() { echo "  made $1"; }
+kept() { echo "  kept $1 (already there)"; }
+
+echo "Team CA and certificates (Pi: $pi_ip)"
+if [[ ! -f "$secrets/ca.crt" ]]; then
+  openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 365 \
+    -subj "/CN=Sentinel-X Team CA" \
+    -addext "basicConstraints=critical,CA:true" -addext "keyUsage=critical,keyCertSign,cRLSign" \
+    -keyout "$secrets/ca.key" -out "$secrets/ca.crt" 2>/dev/null
+  chmod 600 "$secrets/ca.key"
+  made ca.crt
+else
+  kept ca.crt
+fi
+
+# certificate <dir> <common name> <subjectAltName>
+certificate() {
+  local dir="$1" name="$2" san="$3"
+  if [[ -f "$dir/$name.crt" ]]; then kept "$name.crt"; return; fi
+  openssl req -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -subj "/CN=$name" \
+    -keyout "$dir/$name.key" -out "$dir/$name.csr" 2>/dev/null
+  openssl x509 -req -in "$dir/$name.csr" -CA "$secrets/ca.crt" -CAkey "$secrets/ca.key" -CAcreateserial \
+    -days 365 -out "$dir/$name.crt" \
+    -extfile <(printf 'basicConstraints=CA:false\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=serverAuth\nsubjectAltName=%s\n' "$san") \
+    2>/dev/null
+  rm "$dir/$name.csr"
+  made "$name.crt ($san)"
+}
+# The ESP32 reaches the broker by IP, the api and predictive by its Compose name.
+certificate "$secrets/mosquitto" broker "IP:$pi_ip,DNS:mosquitto"
+# 127.0.0.1 and localhost: to check the stack from the Pi itself.
+certificate "$secrets/caddy" proxy "IP:$pi_ip,IP:127.0.0.1,DNS:localhost${EXTRA_SAN:+,$EXTRA_SAN}"
+
+echo "Credentials: MQTT accounts, service tokens, Operator password"
+# The api's MQTT password goes in both files: they are made together or not at all.
+if [[ -f "$secrets/mosquitto/passwd" && -f "$secrets/api.env" ]]; then
+  kept "passwd and api.env"
+elif [[ -f "$secrets/mosquitto/passwd" || -f "$secrets/api.env" ]]; then
+  echo "  Only one of secrets/mosquitto/passwd and secrets/api.env exists: delete it (sudo) and run again." >&2
+  exit 1
+else
+  if [[ -z "${OPERATOR_PASSWORD:-}" ]]; then
+    read -rsp "  Operator password (12 characters or more): " OPERATOR_PASSWORD; echo
+    read -rsp "  Again: " again; echo
+    [[ "$OPERATOR_PASSWORD" == "$again" ]] || { echo "  The two do not match." >&2; exit 1; }
+  fi
+  echo "  building the api image, to hash the password with the API's own code…"
+  docker build -q -t sentinel-x/api ../backend >/dev/null
+  hash="$(printf %s "$OPERATOR_PASSWORD" | docker run --rm -i sentinel-x/api node dist/hash-password.js)"
+
+  password() { openssl rand -hex 24; }
+  sentinel_password="$(password)"; api_password="$(password)"; predictive_password="$(password)"
+  vision_token="$(openssl rand -hex 32)"; predictive_token="$(openssl rand -hex 32)"
+
+  in_container "touch /secrets/mosquitto/passwd && chmod 600 /secrets/mosquitto/passwd \
+    && mosquitto_passwd -b /secrets/mosquitto/passwd sentinel-01 '$sentinel_password' \
+    && mosquitto_passwd -b /secrets/mosquitto/passwd api '$api_password' \
+    && mosquitto_passwd -b /secrets/mosquitto/passwd predictive '$predictive_password'" 2>/dev/null
+
+  cat > "$secrets/api.env" <<API
+# Read by the api service (docker-compose.yml). Made by infra/setup.sh.
+MQTT_PASSWORD=$api_password
+OPERATOR_PASSWORD_HASH=$hash
+VISION_TOKEN=$vision_token
+PREDICTIVE_TOKEN=$predictive_token
+API
+  chmod 600 "$secrets/api.env"
+
+  cat > "$secrets/handover.txt" <<HANDOVER
+# Sentinel-X — credentials to hand over, out of band. Never commit, never paste in a chat.
+
+Firmware (ESP32):  broker mqtts://$pi_ip:8883, user sentinel-01, password $sentinel_password
+                   verify the broker with the CA certificate infra/secrets/ca.crt
+Vision (AI):       POST http://api:8080/api/v1/alerts, from the Compose network
+                   Authorization: Bearer $vision_token
+Predictive (AI):   broker mqtts://mosquitto:8883, user predictive, password $predictive_password
+                   POST http://api:8080/api/v1/alerts with Authorization: Bearer $predictive_token
+HANDOVER
+  made "passwd (sentinel-01, api, predictive), api.env, handover.txt"
+fi
+
+[[ -f "$secrets/handover.txt" ]] && chmod 600 "$secrets/handover.txt"
+
+# The ACL, from infra/mosquitto/acl, each run. The broker runs as 1883 and the reverse proxy as
+# 65534: each reads its own files, nobody else.
+in_container "cp /acl /secrets/mosquitto/acl && chown -R 1883:1883 /secrets/mosquitto && chmod 600 /secrets/mosquitto/* \
+  && chown -R 65534:65534 /secrets/caddy && chmod 600 /secrets/caddy/proxy.key && chmod 644 /secrets/caddy/proxy.crt \
+  && chmod 644 /secrets/mosquitto/broker.crt"
+
+echo
+echo "Done. Next: docker compose up -d --build   (from the repo root)"
+echo "Then open https://$pi_ip/ from the Operator laptop, after importing infra/secrets/ca.crt as a trusted CA."
+echo "Hand over infra/secrets/handover.txt to the firmware and AI teams, out of band."

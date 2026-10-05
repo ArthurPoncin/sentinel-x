@@ -1,0 +1,45 @@
+# reverse-proxy: the Command Post's only HTTPS entry point (published on 443).
+# TLS with the team CA's certificate (infra/setup.sh), then the API and its live feed, the
+# dashboard for everything else. /health is not routed: it stays on the internal network.
+{
+	admin off
+	auto_https off
+	persist_config off
+}
+
+# 8443 in the container: running unprivileged, it cannot bind 443 itself.
+:8443 {
+	tls /certs/proxy.crt /certs/proxy.key {
+		protocols tls1.2
+	}
+
+	encode gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		-Server
+	}
+
+	# The API checks the Operator session itself, and the Origin of /ws against this Host.
+	handle /api/* {
+		reverse_proxy api:8080
+	}
+	handle /ws {
+		reverse_proxy api:8080
+	}
+
+	# The annotated camera feed, once the vision service serves it: Operator session required.
+	# handle /camera/* {
+	# 	forward_auth api:8080 {
+	# 		uri /api/v1/auth/check
+	# 	}
+	# 	reverse_proxy vision:8000
+	# }
+
+	handle {
+		reverse_proxy dashboard:8080
+	}
+}
