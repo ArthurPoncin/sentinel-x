@@ -38,6 +38,23 @@ npm test
 | `PORT` | `8080` | Listen port |
 | `MOCK_FEED` | `false` | `true` plays a scripted gas leak in a loop: `nominal` → `elevated` → `critical` → `nominal` |
 | `MOCK_FEED_INTERVAL_MS` | `1000` | Delay between two mock telemetry snapshots |
+| `MQTT_URL` | — | Broker to subscribe to, e.g. `mqtts://mosquitto:8883`. Unset: no MQTT ingress. Only `mqtts://` is accepted |
+| `MQTT_USERNAME` | `api` | MQTT user |
+| `MQTT_PASSWORD` | — | Its password. Required with `MQTT_URL`; never committed |
+| `MQTT_CA_FILE` | — | Path of the team CA certificate (PEM). Required with `MQTT_URL` |
+
+## Sentinel telemetry — MQTTS
+With `MQTT_URL` set, the API logs in to the broker over TLS, checks its certificate against the team CA and nothing else, and subscribes to `sentinel/+/telemetry`. Every snapshot a Sentinel publishes there goes out as a `telemetry` frame on `/ws`.
+
+```bash
+MQTT_URL=mqtts://192.168.X.1:8883 MQTT_PASSWORD=… MQTT_CA_FILE=/path/to/team-ca.crt npm run dev
+```
+
+- The payload is the Telemetry snapshot of [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#telemetry-reading-snapshot--sentinelidtelemetry), validated strictly: every Reading present, no unknown field, `ts` in ISO 8601 UTC.
+- `sentinel` is taken from the topic. Whatever the payload says there is overwritten, and it may be left out.
+- A payload that does not pass is dropped and logged with the reason (`MQTT: dropped a message on sentinel/sentinel-01/telemetry: … → at readings.air`); the subscription carries on.
+- The host in `MQTT_URL` must be one the broker certificate names (`IP:192.168.X.1` from the table network, `DNS:mosquitto` inside Compose).
+- The API starts even if the broker is down or refuses the login, and retries every second until it gets in. Same after a connection loss — no restart needed.
 
 ## Live feed — `/ws`
 Every connected client receives the same frames: `telemetry`, `alert` and `status`. On connect, a client first gets the current `Status`, then the latest telemetry snapshot if there is one — the UI never starts blank.
@@ -80,7 +97,9 @@ Post the same `alert_id` with `"state": "cleared"` to end the Alert. Posting `ra
 ## TODO
 - [x] `POST /api/v1/alerts` + schema validation
 - [ ] Service tokens on `POST /api/v1/alerts`
-- [ ] MQTT subscriber → normalizer → DB writer
+- [x] MQTT subscriber: Sentinel telemetry → WebSocket
+- [ ] MQTT subscriber: Sentinel Alerts → normalizer
+- [ ] DB writer (telemetry + Alert history)
 - [x] Status engine
 - [ ] Operator login + session middleware + `GET /api/v1/auth/check`
 - [x] WebSocket event bus
