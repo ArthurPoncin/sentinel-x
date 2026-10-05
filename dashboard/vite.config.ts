@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url'
+import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { loadEnv, searchForWorkspaceRoot } from 'vite'
 import { defineConfig } from 'vitest/config'
@@ -7,15 +8,18 @@ const contract = fileURLToPath(new URL('../backend/src/contract.ts', import.meta
 
 export default defineConfig(({ mode }) => {
   // Where the Command Post API runs: the mock on this machine by default, the Pi for the real thing.
-  const { BACKEND_URL = 'http://127.0.0.1:8080' } = loadEnv(mode, process.cwd(), '')
-  // Same origin as in production behind the reverse proxy: the app always talks to its own /ws and /api.
+  const { BACKEND_URL = 'http://127.0.0.1:8080', CAMERA_URL } = loadEnv(mode, process.cwd(), '')
+  // Same origin as in production behind the reverse proxy: the app always talks to its own /ws,
+  // /api and /camera.
   const proxy = {
     '/ws': { target: BACKEND_URL, ws: true },
     '/api': { target: BACKEND_URL },
+    // The vision service's MJPEG stream, when one runs: the camera panel says "offline" otherwise.
+    ...(CAMERA_URL && { '/camera': { target: CAMERA_URL, rewrite: (path: string) => path.replace(/^\/camera\/?/, '/') } }),
   }
 
   return {
-    plugins: [react()],
+    plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
         '@sentinel-x/contract': contract,

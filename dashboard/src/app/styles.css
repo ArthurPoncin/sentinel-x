@@ -1,73 +1,91 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+@custom-variant dark (&:is(.dark *));
+
+/* A control-room screen: dark only, so it reads the same on the projector and the Operator laptop. */
 :root {
   color-scheme: dark;
-  --bg: #0b0f14;
-  --surface: #131a22;
-  --border: #233040;
-  --text: #d8e1ea;
-  --muted: #7d8b99;
+  --radius: 0.625rem;
+  --background: oklch(0.16 0.012 250);
+  --foreground: oklch(0.93 0.01 250);
+  --card: oklch(0.2 0.014 250);
+  --card-foreground: oklch(0.93 0.01 250);
+  --popover: oklch(0.22 0.014 250);
+  --popover-foreground: oklch(0.93 0.01 250);
+  --primary: oklch(0.93 0.01 250);
+  --primary-foreground: oklch(0.2 0.014 250);
+  --secondary: oklch(0.27 0.014 250);
+  --secondary-foreground: oklch(0.93 0.01 250);
+  --muted: oklch(0.27 0.014 250);
+  --muted-foreground: oklch(0.68 0.02 250);
+  --accent: oklch(0.27 0.014 250);
+  --accent-foreground: oklch(0.93 0.01 250);
+  --destructive: oklch(0.65 0.22 25);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.55 0.02 250);
+
   /* --nominal, --elevated and --critical, the Status colors, are not set here: they are defined once, in
      shared/config/status-colors.ts, and main.tsx hands them over. */
+
+  /* One color per Reading, kept across every chart. */
+  --chart-1: oklch(0.72 0.17 40);
+  --chart-2: oklch(0.72 0.13 230);
+  --chart-3: oklch(0.8 0.16 75);
+  --chart-4: oklch(0.72 0.16 300);
+  --chart-5: oklch(0.76 0.16 160);
+
   /* What is laid over the Twin fades as long as the scene under it: FADE_SECONDS, in features/twin. */
   --fade: 0.8s;
-  font-family: system-ui, sans-serif;
-  background: var(--bg);
-  color: var(--text);
 }
 
-body {
-  margin: 0;
+@theme inline {
+  --font-sans: 'Geist Variable', system-ui, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-nominal: var(--nominal);
+  --color-elevated: var(--elevated);
+  --color-critical: var(--critical);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
-.topbar {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  padding: 0.75rem 1.25rem;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
 }
 
-.brand {
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-
-.topbar nav {
-  display: flex;
-  gap: 1rem;
-  flex: 1;
-}
-
-.topbar a {
-  color: var(--muted);
-  text-decoration: none;
-}
-
-.topbar a.active {
-  color: var(--text);
-}
-
-main {
-  padding: 1.25rem;
-}
-
-.connection::before {
-  content: '●';
-  margin-right: 0.4rem;
-}
-
-.connection[data-connection='open']::before {
-  color: var(--nominal);
-}
-
-.connection[data-connection='connecting']::before {
-  color: var(--elevated);
-}
-
-.connection[data-connection='closed']::before {
-  color: var(--critical);
-}
-
+/* Status and severity as text color, wherever a data attribute carries them. */
 [data-status='nominal'],
 [data-severity='info'] {
   color: var(--nominal);
@@ -81,30 +99,6 @@ main {
 [data-status='critical'],
 [data-severity='critical'] {
   color: var(--critical);
-}
-
-.inspector {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 0.5rem 1.5rem;
-  max-width: 40rem;
-  padding: 1rem 1.25rem;
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  background: var(--surface);
-}
-
-.inspector dt {
-  color: var(--muted);
-}
-
-.inspector dd {
-  margin: 0;
-}
-
-.inspector ul {
-  margin: 0;
-  padding-left: 1rem;
 }
 
 /* A route that renders a .stage takes the whole window under the top bar; the others keep the padded page. */
@@ -136,7 +130,7 @@ main {
   position: absolute;
   left: 1.25rem;
   bottom: 1rem;
-  color: var(--muted);
+  color: var(--muted-foreground);
   pointer-events: none;
   transition: filter var(--fade);
 }
@@ -172,9 +166,9 @@ main {
   margin: 0;
   /* As much on the left as the letter-spacing leaves after the last letter: the text stays centred. */
   padding: 0.6em 1.4em 0.6em 1.75em;
-  border: 1px solid var(--muted);
+  border: 1px solid var(--muted-foreground);
   background: rgb(0 0 0 / 65%);
-  color: var(--text);
+  color: var(--foreground);
   font-size: clamp(1rem, 2.2vw, 1.75rem);
   letter-spacing: 0.35em;
   text-transform: uppercase;
