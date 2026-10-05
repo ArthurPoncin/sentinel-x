@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isPasswordHash } from './auth.js'
 import type { ServerConfig } from './server.js'
 
 export interface Config extends Omit<ServerConfig, 'history'> {
@@ -34,6 +35,12 @@ const EnvSchema = z.object({
   // Bearer tokens of the AI services on POST /api/v1/alerts. Unset: that service cannot post.
   VISION_TOKEN: ServiceTokenSchema.optional(),
   PREDICTIVE_TOKEN: ServiceTokenSchema.optional(),
+  // `off` lets anyone in without logging in: development only.
+  OPERATOR_AUTH: z.enum(['on', 'off']).default('on'),
+  OPERATOR_PASSWORD_HASH: z
+    .string()
+    .refine(isPasswordHash, 'Expected the output of `npm run hash-password`: scrypt:<salt>:<key>')
+    .optional(),
 })
 
 // Read only when MQTT_URL is set: it turns MQTT on, and the rest comes with it.
@@ -60,11 +67,28 @@ function mqttConfig(env: Record<string, string | undefined>): Config['mqtt'] {
 }
 
 export function loadConfig(env: Record<string, string | undefined>): Config {
-  const { HOST, PORT, MOCK_FEED, MOCK_FEED_INTERVAL_MS, HISTORY_FILE, CORS_ORIGINS, VISION_TOKEN, PREDICTIVE_TOKEN } =
-    read(EnvSchema, env)
+  const {
+    HOST,
+    PORT,
+    MOCK_FEED,
+    MOCK_FEED_INTERVAL_MS,
+    HISTORY_FILE,
+    CORS_ORIGINS,
+    VISION_TOKEN,
+    PREDICTIVE_TOKEN,
+    OPERATOR_AUTH,
+    OPERATOR_PASSWORD_HASH,
+  } = read(EnvSchema, env)
   // The token names the source: two services sharing one could post as each other.
   if (VISION_TOKEN !== undefined && VISION_TOKEN === PREDICTIVE_TOKEN) {
     throw new Error('Invalid configuration:\nVISION_TOKEN and PREDICTIVE_TOKEN must differ: one token per service')
+  }
+  // No way in without a password: refuse to start rather than run open.
+  if (OPERATOR_AUTH === 'on' && OPERATOR_PASSWORD_HASH === undefined) {
+    throw new Error(
+      'Invalid configuration:\nOPERATOR_PASSWORD_HASH is required: `npm run hash-password` makes one ' +
+        '(OPERATOR_AUTH=off runs without login, for development only)',
+    )
   }
   return {
     host: HOST,
@@ -74,5 +98,6 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     historyFile: HISTORY_FILE,
     corsOrigins: CORS_ORIGINS,
     serviceTokens: { vision: VISION_TOKEN, predictive: PREDICTIVE_TOKEN },
+    operatorAuth: OPERATOR_AUTH === 'on' && OPERATOR_PASSWORD_HASH ? { passwordHash: OPERATOR_PASSWORD_HASH } : false,
   }
 }

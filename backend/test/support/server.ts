@@ -18,8 +18,8 @@ function tokenFor(body: unknown): string {
 }
 
 // Starts the API on a free port and closes it when the calling test ends.
-// Every feed is off unless the test turns it on, the history starts empty, in memory, and both AI
-// services hold their TOKEN.
+// Every feed is off unless the test turns it on, the history starts empty, in memory, both AI
+// services hold their TOKEN, and no Operator login is asked for unless the test sets a password.
 export async function startServer(config: Partial<ServerConfig> = {}) {
   const server = await buildServer({
     mockFeed: false,
@@ -27,6 +27,7 @@ export async function startServer(config: Partial<ServerConfig> = {}) {
     history: createMemoryHistory(),
     corsOrigins: [],
     serviceTokens: TOKEN,
+    operatorAuth: false,
     ...config,
   })
   onTestFinished(() => server.close())
@@ -46,7 +47,9 @@ export async function startServer(config: Partial<ServerConfig> = {}) {
 
   return {
     hub: server.hub,
-    connect: () => connectClient(`ws://127.0.0.1:${port}/ws`),
+    // As a browser would open it, when the test gives an Origin or a Cookie header.
+    connect: (headers: Record<string, string> = {}) => connectClient(`ws://127.0.0.1:${port}/ws`, headers),
+    origin: `http://127.0.0.1:${port}`,
     post,
     // As the service the Alert claims to come from, unless the test names the token.
     postAlert: (alert: unknown, token = tokenFor(alert)) => post(JSON.stringify(alert), `Bearer ${token}`),
