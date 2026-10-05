@@ -10,7 +10,7 @@ The face of Sentinel-X and our **"wow" centerpiece**. See [`../docs/DIGITAL-TWIN
 - Real-time environmental curves.
 - Logical box status.
 - Live camera feed — the annotated MJPEG stream served by the `vision` service.
-- Reactive control panel to trigger actuators (buzzer, LEDs) remotely — `POST /api/v1/commands`.
+- Reactive control panel to trigger the actuator (buzzer) remotely — `POST /api/v1/commands`.
 
 ## Security
 - **Operator login** screen; every view, the WebSocket (`wss://`) and the camera feed sit behind the session.

@@ -2,7 +2,7 @@
 
 ## Topology — Option A "Embedded centralization"
 
-We implement the brief's **Option A**: the Local Server ("PC Serveur Local") is a **Raspberry Pi 4 fixed inside the Sentinel-X Enclosure**. It runs the whole containerized stack — web front-end and API — *and* the vision AI, on the **ZIF camera** (Raspberry Pi camera module) on its CSI port. The ESP32 joins the Pi's Wi-Fi. A laptop is only the Operator's browser. See [`../GLOSSARY.md`](../GLOSSARY.md) for the canonical terms.
+We implement the brief's **Option A**: the Local Server ("PC Serveur Local") is a **Raspberry Pi 4 fixed inside the Sentinel-X Enclosure**. It runs the whole containerized stack — web front-end and API — *and* the vision AI, on the **ZIF camera** (Joy-IT RB-Camera-JT, OV5647 5 MP) on its CSI port. The ESP32 joins the Pi's Wi-Fi. A laptop is only the Operator's browser. See [`../GLOSSARY.md`](../GLOSSARY.md) for the canonical terms.
 
 | Node | Hardware | Role |
 |---|---|---|
@@ -18,8 +18,8 @@ The Sentinel and the Command Post live in the same 3D-printed **Enclosure** (see
 
 - **ESP32 instead of ESP8266.** Same family and toolchain (Arduino/PlatformIO), strictly more capable: RAM headroom for the mandatory TLS handshake (tight on an ESP8266) and several ADC inputs (the ESP8266 has a single 0–1 V analog input, awkward for the MQ-2). An ESP-01S is on hand if the ESP8266 label is required.
 - **Raspberry Pi 4 instead of a Pi 5.** The brief specifies a Pi 5 (4 GB) for Option A; we have a Pi 4. Inference is slower, hence the lightweight vision model and the Monday benchmark.
-- **ZIF camera instead of a USB webcam.** The brief says USB webcam; we use the Raspberry Pi camera module on the Pi's CSI port (ZIF ribbon). Same role, captured with Picamera2.
-- **LCD instead of the OLED.** The brief lists a 0.96" OLED I2C; our status display is a 16×128 px LCD.
+- **ZIF camera instead of a USB webcam.** The brief says USB webcam; we use a Joy-IT RB-Camera-JT (OV5647, 5 MP, Pi camera v1 compatible) on the Pi's CSI port (ZIF ribbon). Same role, captured with Picamera2.
+- **LCD instead of the OLED.** The brief lists a 0.96" OLED I2C; our status display is a 1.8" 160×128 px color LCD (ST7735S, SPI), sold for the micro:bit.
 
 ```mermaid
 flowchart LR
@@ -28,9 +28,9 @@ flowchart LR
             DHT["DHT22 · temp/humidity"]
             MQ2["MQ-2 · gas"]
             PIR["PIR HC-SR501 · presence"]
-            SND["Sound sensor · noise"]
-            LCD["LCD 16x128 · IP / Status"]
-            ALARM["Alarm · buzzer + LEDs"]
+            SND["CZN-15E · sound"]
+            LCD["LCD 1.8in 160x128 · IP / Status"]
+            ALARM["Alarm · buzzer"]
         end
         subgraph cp["🖥️ Command Post · Raspberry Pi 4 (Wi-Fi AP)"]
             CAM["ZIF camera (CSI)"]
@@ -79,7 +79,7 @@ Each node owns the Alerts it can decide **alone**, so the Sentinel stays autonom
 |---|---|---|
 | `gas`, `thermal` | **Sentinel (ESP32)** | Threshold with hysteresis; fires the **Alarm locally and immediately** |
 | `presence` | **Sentinel** | PIR digital |
-| `noise` | **Sentinel** | Sound level above a threshold, with hysteresis |
+| `noise` | **Sentinel** | Share of the cycle with sound above the sensor's threshold, with hysteresis |
 | `intrusion` | **Command Post · `vision`** | TFLite person detection on the ZIF camera |
 | `predictive` | **Command Post · `predictive`** | Isolation Forest on temp+air drift |
 | *(Status)* | **Command Post · `api`** | Not an Alert — aggregates all active Alerts into the Outpost `Status` |
@@ -187,9 +187,9 @@ The **single unified Alert schema**, emitted by the Sentinel and by the AI servi
 {
   "cmd_id": "c9f8e7",
   "sentinel": "sentinel-01",
-  "actuator": "buzzer",       // buzzer | led
+  "actuator": "buzzer",       // buzzer (the only actuator)
   "action": "on",             // on | off | pattern
-  "params": { "pattern": "siren", "led": "red" },
+  "params": { "pattern": "siren" },
   "ts": "2026-10-05T14:23:10Z"
 }
 ```

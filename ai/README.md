@@ -6,7 +6,7 @@ Two jobs, both on the Pi (the brief's Option A): **see** (intrusion on the ZIF c
 
 ## Vision — intrusion detection
 - **Base:** [`automaticdai/rpi-object-detection`](https://github.com/automaticdai/rpi-object-detection) (MIT) — lightweight Python + OpenCV, built for the Pi. We reuse `src/object-detection-tflite` (EfficientDet-Lite0 or SSD MobileNet, COCO labels) and keep only the `person` class; `src/motion-detection` (OpenCV) is the fallback. Keep its license notice in the copied code.
-- Capture the **ZIF camera** (Raspberry Pi camera module on the CSI port) with **Picamera2**, which the repo already supports — OpenCV's `VideoCapture` can't read a CSI camera directly. In the container: the camera device nodes (`/dev/video*`, `/dev/media*`) passed with `devices:` — never `privileged` — and Picamera2 from the Raspberry Pi apt repo.
+- Capture the **ZIF camera** (Joy-IT RB-Camera-JT, OV5647, on the CSI port) with **Picamera2**, which the repo already supports — OpenCV's `VideoCapture` can't read a CSI camera directly. In the container: the camera device nodes (`/dev/video*`, `/dev/media*`) passed with `devices:` — never `privileged` — and Picamera2 from the Raspberry Pi apt repo.
 - Resize/throttle frames (**≤ 640x480**, target **< 100 ms/frame**).
 - Emit an `intrusion` Alert with **`x_norm`** (normalized horizontal position 0→1) so the 3D twin can place the intruder along the perimeter.
 - `vision` is the only process that opens the camera, so it also **serves the camera feed** to the dashboard (MJPEG, detections drawn), through the reverse proxy behind the Operator session.

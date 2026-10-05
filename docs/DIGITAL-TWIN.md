@@ -9,11 +9,11 @@ A **live 3D replica** of the Sentinel-X outpost rendered in the dashboard (Three
 | Temperature / humidity (DHT) | Sentinel | Heat shimmer / color grade on the box; thermal gauge |
 | Gas (`air`) | Sentinel | Box glows red, particle haze scales with the reading |
 | Presence (`pir`) | Sentinel | Perimeter zone flashes amber |
-| Noise (`sound`) | Sentinel | Sound-wave ripples around the box, scaled to the level |
+| Noise (`sound`) | Sentinel | Sound-wave ripples around the box, scaled to `sound` (share of the cycle that was loud) |
 | Intrusion (vision) | Command Post (`vision`) | **Intruder marker** placed along the perimeter arc from `x_norm` |
 | Predictive drift | Command Post (`predictive`) | The drifting **component pulses orange** *before* the critical threshold |
 | `Status` (nominal/elevated/critical) | Command Post | The scene's overall color grade |
-| Alarm state (buzzer/LED) | Sentinel | Twin mirrors the physical box (LED color, buzzer ring) |
+| Alarm state (buzzer) | Sentinel | Twin mirrors the physical box (buzzer ring) |
 
 ## Signature features
 
