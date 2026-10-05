@@ -4,7 +4,17 @@ import fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import type { MqttClient } from 'mqtt'
 import { z } from 'zod'
 import { createAlertPipeline, normalizeAlert } from './alerts.js'
-import { type Service, type ServiceTokens, serviceOf } from './auth.js'
+import {
+  cookieOf,
+  createSessions,
+  isAllowedOrigin,
+  SESSION_COOKIE,
+  type Service,
+  type ServiceTokens,
+  serviceOf,
+  sessionCookie,
+  verifyPassword,
+} from './auth.js'
 import { type CommandRelay, createCommandRelay } from './commands.js'
 import {
   type AlertKind,
@@ -15,6 +25,7 @@ import {
   HistoryQuerySchema,
   IncidentParamsSchema,
   type Incidents,
+  LoginSchema,
 } from './contract.js'
 import type { HistoryRepository } from './history.js'
 import { createHub, type Hub } from './hub.js'
@@ -45,9 +56,17 @@ export interface ServerConfig {
   corsOrigins: string[]
   // The bearer token of each AI service on POST /api/v1/alerts. A service without one cannot post.
   serviceTokens: ServiceTokens
+  // The Operator's password hash: a session is required on every other endpoint and on /ws.
+  // `false` lets anyone in, for development only.
+  operatorAuth: false | { passwordHash: string }
 }
 
 const ALERT_BODY_LIMIT = 16 * 1024
+const LOGIN_BODY_LIMIT = 1024
+
+// What answers without an Operator session: Docker's healthcheck, the way to log in and to
+// check a session, and the AI services' entry point, which takes their tokens instead.
+const OPEN_ROUTES = new Set(['/health', '/api/v1/auth/login', '/api/v1/auth/check', '/api/v1/alerts'])
 // A command is a handful of short fields, and the broker takes no packet above 4096 bytes.
 const COMMAND_BODY_LIMIT = 1024
 
@@ -83,6 +102,43 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
 
   // The connection to the broker, once the server runs with one.
   let broker: MqttClient | undefined
+
+  const sessions = createSessions()
+  const hasSession = (request: FastifyRequest) =>
+    !config.operatorAuth || sessions.isOpen(cookieOf(request.headers.cookie, SESSION_COOKIE))
+
+  // Every request, the WebSocket upgrade included, before anything else is read.
+  app.addHook('onRequest', async (request, reply) => {
+    const route = request.routeOptions.url
+    if (route === '/ws') {
+      const host = request.headers['x-forwarded-host'] ?? request.headers.host
+      if (!isAllowedOrigin(request.headers.origin, Array.isArray(host) ? host[0] : host, config.corsOrigins)) {
+        return refuse(reply, 403, 'Forbidden', 'This origin may not open the feed')
+      }
+    }
+    if (route !== undefined && OPEN_ROUTES.has(route)) return
+    if (!hasSession(request)) return refuse(reply, 401, 'Unauthorized', 'An Operator session is required')
+  })
+
+  app.post('/api/v1/auth/login', { bodyLimit: LOGIN_BODY_LIMIT }, async (request, reply) => {
+    const parsed = LoginSchema.safeParse(request.body)
+    if (!parsed.success) return refuse(reply, 400, 'Bad Request', z.prettifyError(parsed.error))
+    if (!config.operatorAuth) return reply.code(204).send()
+
+    if (!(await verifyPassword(parsed.data.password, config.operatorAuth.passwordHash))) {
+      return refuse(reply, 401, 'Unauthorized', 'Wrong password')
+    }
+    return reply.code(204).header('set-cookie', sessionCookie(sessions.open())).send()
+  })
+
+  // Forward-auth for the reverse proxy in front of the camera feed, and the front's way to know
+  // whether to show the login screen.
+  app.get('/api/v1/auth/check', (request, reply) => reply.code(hasSession(request) ? 204 : 401).send())
+
+  app.post('/api/v1/auth/logout', (request, reply) => {
+    sessions.close(cookieOf(request.headers.cookie, SESSION_COOKIE))
+    return reply.code(204).header('set-cookie', sessionCookie('', 0)).send()
+  })
 
   // For Docker's healthcheck, on the internal network: the reverse proxy only routes /api and /ws.
   app.get('/health', (_request, reply) => {

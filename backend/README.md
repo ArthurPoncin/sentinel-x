@@ -28,11 +28,11 @@ Node ≥ 22.
 
 ```bash
 npm install
-MOCK_FEED=true HISTORY_FILE=:memory: npm run dev   # live feed on ws://127.0.0.1:8080/ws, no hardware needed
+OPERATOR_AUTH=off MOCK_FEED=true HISTORY_FILE=:memory: npm run dev   # live feed on ws://127.0.0.1:8080/ws, no hardware, no login
 npm test
 ```
 
-All the configuration comes from environment variables. `npm run dev` and `npm start` also read them from `backend/.env` if there is one: copy [`.env.example`](.env.example) and fill it in. A variable set in the environment wins over the file. `.env` holds the broker password: it is never committed. A value the API cannot make sense of stops it at start, naming the variable.
+All the configuration comes from environment variables. `npm run dev` and `npm start` also read them from `backend/.env` if there is one: copy [`.env.example`](.env.example) and fill it in. A variable set in the environment wins over the file. `.env` holds the broker password, the service tokens and the Operator's password hash: it is never committed. A value the API cannot make sense of stops it at start, naming the variable.
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -47,6 +47,8 @@ All the configuration comes from environment variables. `npm run dev` and `npm s
 | `MQTT_CA_FILE` | — | Path of the team CA certificate (PEM). Required with `MQTT_URL` |
 | `VISION_TOKEN` | — | Bearer token of the `vision` service on `POST /api/v1/alerts`, 32 characters or more. Unset: `vision` cannot post. Never committed |
 | `PREDICTIVE_TOKEN` | — | Same for the `predictive` service; must differ from `VISION_TOKEN` |
+| `OPERATOR_PASSWORD_HASH` | — | The Operator's password hash, from `npm run -s hash-password`. **Required** unless `OPERATOR_AUTH=off`. Never committed |
+| `OPERATOR_AUTH` | `on` | `off` lets anyone in without logging in: development only |
 | `HISTORY_FILE` | `data/history.sqlite` | SQLite file of the history, created with its directory if missing. `:memory:` keeps it in the process only |
 
 ## Docker
@@ -81,9 +83,28 @@ The schema is in [`src/contract.ts`](src/contract.ts): `HealthSchema`.
 ## CORS
 The dashboard and the Twin call their own origin: the reverse proxy on the Pi, the Vite proxy in dev. That needs no CORS, so by default the API allows no other origin.
 
-A front-end served elsewhere — the Twin on its own port, the dashboard without the Vite proxy — is let in by adding its origin to `CORS_ORIGINS`: scheme, host and port, no path (`http://localhost:5173`, `https://192.168.X.1`). Only `GET` and `POST`, cookies allowed for the Operator session to come. `*` is refused.
+A front-end served elsewhere — the Twin on its own port, the dashboard without the Vite proxy — is let in by adding its origin to `CORS_ORIGINS`: scheme, host and port, no path (`http://localhost:5173`, `https://192.168.X.1`). Only `GET` and `POST`, cookies allowed for the Operator session. `*` is refused.
 
-CORS does not apply to the WebSocket: `/ws` will check the `Origin` with the Operator session.
+CORS does not apply to the WebSocket: `/ws` checks the `Origin` itself — see [Operator session](#operator-session).
+
+## Operator session
+Every endpoint and the `/ws` feed need the Operator's session, except `GET /health`, the two below and `POST /api/v1/alerts` (service tokens). Without one: `401`, and the WebSocket upgrade is turned down.
+
+```bash
+npm run -s hash-password   # asks for the password (12 characters or more), prints OPERATOR_PASSWORD_HASH
+curl -i -X POST https://192.168.X.1/api/v1/auth/login -H 'content-type: application/json' -d '{"password": "…"}'
+```
+
+| Endpoint | Answers |
+|---|---|
+| `POST /api/v1/auth/login` | `{ "password": "…" }` → `204` and the session cookie · `401` wrong password · `400` any other body |
+| `GET /api/v1/auth/check` | `204` with a session, `401` without: forward-auth for the camera feed behind the reverse proxy, and the front's way to know whether to show its login screen |
+| `POST /api/v1/auth/logout` | `204`: the session is closed and the cookie cleared |
+
+- One Operator, one password, kept as an scrypt hash in `OPERATOR_PASSWORD_HASH`: the API never sees it in clear except at login. Without a hash, the API refuses to start.
+- The cookie, `sx_session`, is `HttpOnly; Secure; SameSite=Strict`, for 12 hours. Sessions live in the API: a restart logs the Operator out.
+- `/ws` also checks the `Origin` of the page opening it: the API's own origin as the browser reached it (`Host`, or `X-Forwarded-Host` from the reverse proxy) or one in `CORS_ORIGINS`; any other gets `403`, session or not. A client that is not a browser sends no `Origin` and only needs the session.
+- `OPERATOR_AUTH=off` lets anyone in without logging in — every endpoint and `/ws` answer, `auth/check` says `204`. For development on a laptop only.
 
 ## Mock feed
 `MOCK_FEED=true` plays a scripted scenario in a loop, one tick every `MOCK_FEED_INTERVAL_MS`, for the front-ends to work without a Sentinel, a broker or the AI services. Each tick is a telemetry snapshot, plus the Alerts the producers would send on it. They go through the same pipelines as the real ones: paired by `alert_id`, recorded in the history, broadcast, `Status` recomputed. Switching to the live feed changes nothing on the front.
@@ -192,7 +213,6 @@ curl 'http://127.0.0.1:8080/api/v1/history?from=2026-10-05T14:20:00Z&to=2026-10-
 - The storage sits behind the `HistoryRepository` interface of [`src/history.ts`](src/history.ts) (`append`, `query(range)`): SQLite in production, in memory for the tests, both held to the same test suite.
 - Node prints `ExperimentalWarning: SQLite is an experimental feature` once at start: the API uses Node's built-in `node:sqlite`, so nothing native to compile on the Pi.
 
-> No Operator session yet: whoever reaches the API can read the history.
 
 ## Incidents — `GET /api/v1/incidents`
 What the time-scrubber offers to replay. An Incident opens on the first `raised` Alert and closes on the `cleared` that leaves no Alert raised. Incidents are built from the history on every request, never stored: whatever the history holds, the Incidents follow.
@@ -250,7 +270,6 @@ curl http://127.0.0.1:8080/api/v1/incidents/1
 - The schemas are in [`src/contract.ts`](src/contract.ts): `IncidentsSchema`, `IncidentReplaySchema`, `IncidentSchema`.
 - The mock feed makes three Incidents per loop, like a real Outpost would.
 
-> No Operator session yet: whoever reaches the API can list and replay the Incidents.
 
 ## Actuator commands — `POST /api/v1/commands`
 The Operator's way to the Alarm. The API stamps the command with a `cmd_id` and a `ts`, then publishes it on `command/<sentinel>/actuator`, over the same MQTTS connection the telemetry comes in on.
@@ -282,7 +301,7 @@ The body is the Actuator command of [`../docs/ARCHITECTURE.md`](../docs/ARCHITEC
 - A command is for now. One the broker did not take is refused and never sent later, even once the broker is back: the Operator sends it again.
 - A refused command is never published.
 
-> No Operator session and no rate limit yet: whoever reaches the API can send a command.
+> No rate limit yet: an Operator can send commands as fast as they like.
 
 ## TODO
 - [x] `POST /api/v1/alerts` + schema validation
@@ -293,9 +312,9 @@ The body is the Actuator command of [`../docs/ARCHITECTURE.md`](../docs/ARCHITEC
 - [x] `GET /api/v1/history` for the time-scrubber
 - [x] Incidents: `GET /api/v1/incidents` and their replay
 - [x] Status engine
-- [ ] Operator login + session middleware + `GET /api/v1/auth/check`
+- [x] Operator login + session middleware + `GET /api/v1/auth/check`
 - [x] WebSocket event bus
-- [ ] Session + `Origin` check on the WebSocket upgrade
+- [x] Session + `Origin` check on the WebSocket upgrade
 - [x] `POST /api/v1/commands` → MQTT publish
 - [ ] Rate limiting
 - [x] `.env.example` (broker URL, history file, CORS origins, password placeholder — no secrets committed)
