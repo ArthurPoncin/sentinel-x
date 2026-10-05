@@ -8,7 +8,7 @@ const marker: Frame = {
   payload: {
     sentinel: 'sentinel-01',
     ts: '2026-10-05T14:23:00Z',
-    readings: { temp: 31.2, humidity: 44, air: 180, pir: false, sound: 1350 },
+    readings: { temp: 31.2, humidity: 44, air: 180, pir: false, sound: 0.02 },
   },
 }
 
