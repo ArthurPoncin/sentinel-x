@@ -3,11 +3,13 @@ import fastify, { type FastifyInstance, type FastifyReply } from 'fastify'
 import { z } from 'zod'
 import { createAlertPipeline, normalizeAlert } from './alerts.js'
 import { type CommandRelay, createCommandRelay } from './commands.js'
-import { type AlertKind, type AlertSource, CommandRequestSchema } from './contract.js'
+import { type AlertKind, type AlertSource, CommandRequestSchema, type History, HistoryQuerySchema } from './contract.js'
+import type { HistoryRepository } from './history.js'
 import { createHub, type Hub } from './hub.js'
 import { startMockFeed } from './mock-feed.js'
 import { connectBroker, type MqttConfig } from './mqtt.js'
 import { startMqttIngress } from './mqtt-ingress.js'
+import { createTelemetryPipeline } from './telemetry.js'
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -20,6 +22,8 @@ export interface ServerConfig {
   mockFeed: false | { intervalMs: number }
   // The broker shared with the Sentinels; `false` leaves it out: no telemetry in, no command out.
   mqtt: false | MqttConfig
+  // Where the telemetry and Alerts that come in are kept, for GET /api/v1/history.
+  history: HistoryRepository
 }
 
 const ALERT_BODY_LIMIT = 16 * 1024
@@ -49,7 +53,8 @@ function whileRunning(app: FastifyInstance, start: () => () => void | Promise<vo
 export async function buildServer(config: ServerConfig): Promise<FastifyInstance> {
   const app = fastify()
   const hub = createHub()
-  const alerts = createAlertPipeline(hub)
+  const alerts = createAlertPipeline(hub, config.history)
+  const telemetry = createTelemetryPipeline(hub, config.history)
   app.decorate('hub', hub)
   await app.register(websocket)
 
@@ -70,6 +75,14 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
 
     alerts.accept(alert)
     return reply.code(202).send()
+  })
+
+  app.get('/api/v1/history', (request, reply) => {
+    const parsed = HistoryQuerySchema.safeParse(request.query)
+    if (!parsed.success) return refuse(reply, 400, 'Bad Request', z.prettifyError(parsed.error))
+
+    const history: History = { records: config.history.query(parsed.data) }
+    return reply.send(history)
   })
 
   // The way out to the Sentinels, once the server runs with a broker.
@@ -97,7 +110,7 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
     const broker = config.mqtt
     whileRunning(app, () => {
       const client = connectBroker(broker)
-      startMqttIngress(hub, client)
+      startMqttIngress(telemetry, client)
       commands = createCommandRelay(client)
       return () => client.endAsync(true)
     })
