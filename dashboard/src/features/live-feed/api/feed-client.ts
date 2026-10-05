@@ -38,22 +38,28 @@ export function connectFeed(url: string, emit: (event: FeedEvent) => void, optio
 
   const open = () => {
     emit({ type: 'connection', state: 'connecting' })
-    socket = new WebSocket(url)
-    socket.onopen = () => {
-      delay = initialDelayMs
-      emit({ type: 'connection', state: 'open' })
-    }
-    socket.onmessage = ({ data }) => {
-      const parsed = parseFrame(data)
-      if (parsed.success) emit(parsed.frame)
-      else onMalformed?.(data, parsed.reason)
-    }
-    // A failed attempt closes too, so this is the one place that schedules the next one.
-    socket.onclose = () => {
-      if (stopped) return
+    const current = new WebSocket(url)
+    socket = current
+    let down = false
+    // The one place that schedules the next attempt, once per socket. Browsers follow a failed
+    // attempt's `error` with a `close`, but Node's WebSocket (undici) fires only `error`.
+    const onDown = () => {
+      if (stopped || down) return
+      down = true
       emit({ type: 'connection', state: 'closed' })
       retry = setTimeout(open, delay)
       delay = Math.min(delay * 2, maxDelayMs)
+    }
+    current.onerror = onDown
+    current.onclose = onDown
+    current.onopen = () => {
+      delay = initialDelayMs
+      emit({ type: 'connection', state: 'open' })
+    }
+    current.onmessage = ({ data }) => {
+      const parsed = parseFrame(data)
+      if (parsed.success) emit(parsed.frame)
+      else onMalformed?.(data, parsed.reason)
     }
   }
 
