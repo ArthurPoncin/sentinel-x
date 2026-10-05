@@ -8,12 +8,26 @@ export interface Config extends Omit<ServerConfig, 'history'> {
   historyFile: string
 }
 
+// An origin as browsers send it: scheme, host and port, no path, no trailing slash.
+const OriginSchema = z
+  .url({ protocol: /^https?$/, error: 'Expected an http:// or https:// origin' })
+  .refine(
+    (url) => !URL.canParse(url) || new URL(url).origin === url,
+    'Expected an origin alone: no path, no trailing slash',
+  )
+
 const EnvSchema = z.object({
   HOST: z.string().min(1).default('127.0.0.1'),
   PORT: z.coerce.number().int().min(0).max(65535).default(8080),
   MOCK_FEED: z.enum(['true', 'false']).default('false'),
   MOCK_FEED_INTERVAL_MS: z.coerce.number().int().positive().default(1000),
   HISTORY_FILE: z.string().min(1).default('data/history.sqlite'),
+  // Comma-separated. None by default: the front-ends reach the API through their own origin.
+  CORS_ORIGINS: z
+    .string()
+    .default('')
+    .transform((list) => list.split(',').map((origin) => origin.trim()).filter((origin) => origin !== ''))
+    .pipe(z.array(OriginSchema)),
 })
 
 // Read only when MQTT_URL is set: it turns MQTT on, and the rest comes with it.
@@ -40,12 +54,13 @@ function mqttConfig(env: Record<string, string | undefined>): Config['mqtt'] {
 }
 
 export function loadConfig(env: Record<string, string | undefined>): Config {
-  const { HOST, PORT, MOCK_FEED, MOCK_FEED_INTERVAL_MS, HISTORY_FILE } = read(EnvSchema, env)
+  const { HOST, PORT, MOCK_FEED, MOCK_FEED_INTERVAL_MS, HISTORY_FILE, CORS_ORIGINS } = read(EnvSchema, env)
   return {
     host: HOST,
     port: PORT,
     mockFeed: MOCK_FEED === 'true' ? { intervalMs: MOCK_FEED_INTERVAL_MS } : false,
     mqtt: mqttConfig(env),
     historyFile: HISTORY_FILE,
+    corsOrigins: CORS_ORIGINS,
   }
 }
