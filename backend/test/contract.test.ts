@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FrameSchema } from '../src/contract.js'
+import { AlertSchema, FrameSchema } from '../src/contract.js'
 
 // The examples of docs/ARCHITECTURE.md, verbatim.
 const telemetry = {
@@ -14,11 +14,71 @@ const telemetry = {
   },
 }
 
+const alert = {
+  alert_id: 'a1b2c3d4',
+  sentinel: 'sentinel-01',
+  source: 'esp32',
+  kind: 'gas',
+  severity: 'warning',
+  state: 'raised',
+  value: 420,
+  detail: {},
+  ts: '2026-10-05T14:23:05Z',
+}
+
+const detailOf = {
+  intrusion: { x_norm: 0.42, confidence: 0.88, bbox: [120, 80, 60, 180] },
+  predictive: { anomaly_score: 0.91, drivers: ['temp_slope', 'air_slope'] },
+  tamper: { magnitude: 1.4, axis: 'y' },
+}
+
 describe('contract', () => {
   it('accepts the documented telemetry frame', () => {
     const frame = { type: 'telemetry', payload: telemetry }
 
     expect(FrameSchema.parse(frame)).toEqual(frame)
+  })
+
+  it('accepts the documented alert frame', () => {
+    const frame = { type: 'alert', payload: alert }
+
+    expect(FrameSchema.parse(frame)).toEqual(frame)
+  })
+
+  it.each(Object.entries(detailOf))('accepts the documented detail of a %s Alert', (kind, detail) => {
+    expect(AlertSchema.parse({ ...alert, kind, detail })).toEqual({ ...alert, kind, detail })
+  })
+
+  it('accepts an Alert without a triggering value', () => {
+    const { value: _value, ...withoutValue } = alert
+
+    expect(AlertSchema.parse(withoutValue)).toEqual(withoutValue)
+  })
+
+  it('rejects an Alert carrying the detail of another kind', () => {
+    expect(AlertSchema.safeParse({ ...alert, kind: 'gas', detail: detailOf.tamper }).success).toBe(false)
+    expect(AlertSchema.safeParse({ ...alert, kind: 'intrusion', detail: {} }).success).toBe(false)
+  })
+
+  it('rejects an intruder placed outside the frame', () => {
+    const detail = { ...detailOf.intrusion, x_norm: 1.2 }
+
+    expect(AlertSchema.safeParse({ ...alert, kind: 'intrusion', detail }).success).toBe(false)
+  })
+
+  it.each([
+    ['kind', 'flood'],
+    ['source', 'drone'],
+    ['severity', 'elevated'],
+    ['state', 'acknowledged'],
+  ])('rejects an Alert whose %s is %s', (field, value) => {
+    expect(AlertSchema.safeParse({ ...alert, [field]: value }).success).toBe(false)
+  })
+
+  it('rejects an Alert without an alert_id', () => {
+    const { alert_id: _id, ...withoutId } = alert
+
+    expect(AlertSchema.safeParse(withoutId).success).toBe(false)
   })
 
   it('accepts the documented status frame', () => {
