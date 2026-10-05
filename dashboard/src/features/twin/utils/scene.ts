@@ -1,9 +1,13 @@
+import { STATUS_COLORS } from '@/shared/config/status-colors'
 import type { Alert, StatusLevel, Telemetry } from '@/shared/contract'
 import { gasLevel } from './gas-level'
 
 // What the Twin reads of the live feed: the fields of the live-feed state it needs, by shape, so
 // the route hands them over without the twin feature importing live-feed.
 export interface TwinState {
+  // The feed's connection as it is now, and whether it has been open at least once.
+  connection: 'connecting' | 'open' | 'closed'
+  connectedOnce: boolean
   status: StatusLevel
   latestTelemetry: Telemetry | null
   activeAlerts: readonly Alert[]
@@ -14,8 +18,10 @@ export interface StatusGrade {
   level: StatusLevel
   // The sky behind the Outpost.
   background: string
-  // The light that fills the scene.
+  // The light from the front and above: neutral when nominal, the Status's color otherwise.
   light: string
+  // The light from behind, on the edges: the studio's cold one when nominal, the Status's color otherwise.
+  rim: string
   // The ring that marks the perimeter.
   perimeter: string
 }
@@ -36,16 +42,34 @@ export interface SceneProps {
   pulses: readonly string[]
   // Where the last raised of the active `intrusion` Alerts places the intruder, 0 = left, 1 = right.
   intruder: { x_norm: number } | null
+  // The feed was open and no longer is: the scene shows what it last knew, not the Outpost as it is now.
+  signalLost: boolean
 }
 
 // Dark anodized metal: the Enclosure's body when the air is calm.
 export const CALM_COLOR = '#2c343e'
-export const GAS_COLOR = '#ff4d4f'
+export const GAS_COLOR = STATUS_COLORS.critical
+// The studio's own light, when nothing is wrong: white from the front, cold from behind. Color is kept for
+// the Status.
+export const NEUTRAL_LIGHT = '#ffffff'
+export const NEUTRAL_RIM = '#9dbcff'
+
+// A Status that is not nominal colors every light: the whole model is lit in it, whatever side it is seen from.
+function inStatusColor(level: Exclude<StatusLevel, 'nominal'>, background: string): StatusGrade {
+  const color = STATUS_COLORS[level]
+  return { level, background, light: color, rim: color, perimeter: color }
+}
 
 export const STATUS_GRADES: Readonly<Record<StatusLevel, StatusGrade>> = {
-  nominal: { level: 'nominal', background: '#0b0f14', light: '#ffffff', perimeter: '#3ecf8e' },
-  elevated: { level: 'elevated', background: '#16110a', light: '#ffe2b0', perimeter: '#f5a623' },
-  critical: { level: 'critical', background: '#1a0a0b', light: '#ffc2c2', perimeter: '#ff4d4f' },
+  nominal: {
+    level: 'nominal',
+    background: '#0b0f14',
+    light: NEUTRAL_LIGHT,
+    rim: NEUTRAL_RIM,
+    perimeter: STATUS_COLORS.nominal,
+  },
+  elevated: inStatusColor('elevated', '#16110a'),
+  critical: inStatusColor('critical', '#1a0a0b'),
 }
 
 function channels(color: string): number[] {
@@ -89,5 +113,8 @@ export function toScene(state: TwinState): SceneProps {
     status,
     pulses: [...pulses],
     intruder,
+    // Not open is not enough: before the first connection, and while that one is still being tried,
+    // there is no signal to have lost. After it, a retry in progress is still a signal lost.
+    signalLost: state.connectedOnce && state.connection !== 'open',
   }
 }

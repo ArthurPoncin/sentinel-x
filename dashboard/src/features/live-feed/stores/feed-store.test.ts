@@ -39,6 +39,7 @@ function gas(alertId: string, severity: Severity, state: AlertState): Extract<Fr
 
 const opened: FeedEvent = { type: 'connection', state: 'open' }
 const dropped: FeedEvent = { type: 'connection', state: 'closed' }
+const retrying: FeedEvent = { type: 'connection', state: 'connecting' }
 
 const replay = (events: FeedEvent[]) => events.reduce(apply, initialFeedState)
 
@@ -59,6 +60,18 @@ describe('apply', () => {
     expect(state.connection).toBe('open')
     expect(state.status).toBe('elevated')
     expect(state.latestTelemetry).toEqual(snapshot.payload)
+  })
+
+  it('has not connected once until the feed opens, however many attempts fail', () => {
+    expect(initialFeedState.connectedOnce).toBe(false)
+    expect(replay([dropped, retrying, dropped]).connectedOnce).toBe(false)
+  })
+
+  it('remembers that it connected once, through every close and retry after that', () => {
+    expect(replay([opened]).connectedOnce).toBe(true)
+    expect(replay([opened, dropped])).toMatchObject({ connection: 'closed', connectedOnce: true })
+    expect(replay([opened, dropped, retrying])).toMatchObject({ connection: 'connecting', connectedOnce: true })
+    expect(replay([opened, dropped, retrying, opened])).toMatchObject({ connection: 'open', connectedOnce: true })
   })
 
   it('follows the latest telemetry snapshot', () => {

@@ -6,6 +6,9 @@ export const HISTORY_LIMIT = 1000
 
 export interface FeedState {
   connection: ConnectionState
+  // Whether the feed has been open at least once. From then on, a feed that is not open has lost its
+  // signal; until then, it is still looking for it.
+  connectedOnce: boolean
   // Computed by the Command Post from its active Alerts; we only follow it.
   status: StatusLevel
   latestTelemetry: Telemetry | null
@@ -17,6 +20,7 @@ export interface FeedState {
 
 export const initialFeedState: FeedState = {
   connection: 'connecting',
+  connectedOnce: false,
   status: 'nominal',
   latestTelemetry: null,
   activeAlerts: [],
@@ -42,7 +46,7 @@ export function apply(state: FeedState, event: FeedEvent): FeedState {
       // A new connection starts over from the backend's snapshot: the Alerts we held may have
       // cleared while we were away, and we would never hear of it.
       return event.state === 'open'
-        ? { ...state, connection: 'open', activeAlerts: [] }
+        ? { ...state, connection: 'open', connectedOnce: true, activeAlerts: [] }
         : { ...state, connection: event.state }
     case 'telemetry':
       return { ...state, latestTelemetry: event.payload, history: record(state.history, event) }

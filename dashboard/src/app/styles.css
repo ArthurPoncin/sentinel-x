@@ -5,9 +5,10 @@
   --border: #233040;
   --text: #d8e1ea;
   --muted: #7d8b99;
-  --nominal: #3ecf8e;
-  --elevated: #f5a623;
-  --critical: #ff4d4f;
+  /* --nominal, --elevated and --critical, the Status colors, are not set here: they are defined once, in
+     shared/config/status-colors.ts, and main.tsx hands them over. */
+  /* What is laid over the Twin fades as long as the scene under it: FADE_SECONDS, in features/twin. */
+  --fade: 0.8s;
   font-family: system-ui, sans-serif;
   background: var(--bg);
   color: var(--text);
@@ -137,6 +138,12 @@ main {
   bottom: 1rem;
   color: var(--muted);
   pointer-events: none;
+  transition: filter var(--fade);
+}
+
+/* What the caption says is what was last received: it loses its colors with the scene. */
+.stage-caption[data-stale='true'] {
+  filter: grayscale(1);
 }
 
 .stage-caption h1 {
@@ -151,5 +158,37 @@ main {
 }
 
 .twin-scene {
+  position: relative;
   height: 100%;
+}
+
+/* Over the scene, on the ground in front of the Outpost: clear of the Enclosure, and of the stage's caption
+   under it. Hidden, not removed, so that it fades both ways. */
+.twin-signal {
+  position: absolute;
+  bottom: max(12%, 5rem);
+  left: 50%;
+  translate: -50% 0;
+  margin: 0;
+  /* As much on the left as the letter-spacing leaves after the last letter: the text stays centred. */
+  padding: 0.6em 1.4em 0.6em 1.75em;
+  border: 1px solid var(--muted);
+  background: rgb(0 0 0 / 65%);
+  color: var(--text);
+  font-size: clamp(1rem, 2.2vw, 1.75rem);
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--fade),
+    visibility 0s var(--fade);
+}
+
+.twin-signal[data-lost='true'] {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
 }
