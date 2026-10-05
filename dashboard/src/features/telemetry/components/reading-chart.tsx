@@ -31,19 +31,19 @@ export function ReadingChart({ title, description, series, lines, domain = ['aut
         <CardTitle>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
-      <CardContent className="flex-1">
+      <CardContent className="px-2 pt-2 sm:px-6">
         {series.length === 0 ? (
-          <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-            Waiting for the first Readings…
+          <div className="flex h-[220px] items-center justify-center text-sm text-muted-foreground">
+            En attente des premières mesures…
           </div>
         ) : (
-          <ChartContainer config={config} className="aspect-auto h-48 w-full">
+          <ChartContainer config={config} className="aspect-auto h-[220px] w-full">
             <AreaChart data={series as ReadingPoint[]} margin={{ left: 0, right: 8, top: 4 }}>
               <defs>
                 {lines.map(({ key }) => (
                   <linearGradient key={key} id={`fill-${key}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={`var(--color-${key})`} stopOpacity={0.45} />
-                    <stop offset="95%" stopColor={`var(--color-${key})`} stopOpacity={0.02} />
+                    <stop offset="5%" stopColor={`var(--color-${key})`} stopOpacity={0.8} />
+                    <stop offset="95%" stopColor={`var(--color-${key})`} stopOpacity={0.1} />
                   </linearGradient>
                 ))}
               </defs>
@@ -56,9 +56,10 @@ export function ReadingChart({ title, description, series, lines, domain = ['aut
                 tickFormatter={clock}
                 tickLine={false}
                 axisLine={false}
+                tickMargin={8}
                 minTickGap={48}
               />
-              <YAxis domain={domain} tickLine={false} axisLine={false} width={40} />
+              <YAxis domain={domain} tickLine={false} axisLine={false} tickMargin={8} width={40} />
               <ChartTooltip
                 content={<ChartTooltipContent indicator="line" labelFormatter={(_, [point]) => clock(point?.payload.time)} />}
               />

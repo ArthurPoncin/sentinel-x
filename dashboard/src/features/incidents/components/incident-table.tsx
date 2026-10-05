@@ -1,65 +1,65 @@
+import { CircleCheck, Loader } from 'lucide-react'
 import { useMemo } from 'react'
+import { LevelBadge } from '@/shared/components/level-badge'
 import type { Incident } from '@/shared/contract'
 import { clock, duration } from '@/shared/lib/format'
 import { KIND_LABEL, SEVERITY_LABEL } from '@/shared/lib/labels'
-import { toneOfSeverity, toneSurface } from '@/shared/lib/tone'
+import { toneOfSeverity } from '@/shared/lib/tone'
 import { Badge } from '@/shared/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/ui/table'
 import { latestFirst } from '../utils/summary'
 
-const SHOWN = 8
+const SHOWN = 20
 
-// The latest Incidents: when, how long, what it involved and how bad it got.
-export function IncidentTable({ incidents, className }: { incidents: readonly Incident[] | null; className?: string }) {
+// The latest Incidents: when, how long, what they involved and how bad they got. A bare table:
+// the page frames it.
+export function IncidentTable({ incidents }: { incidents: readonly Incident[] | null }) {
   const rows = useMemo(() => latestFirst(incidents ?? [], SHOWN), [incidents])
 
+  if (rows.length === 0) {
+    return <p className="py-10 text-center text-sm text-muted-foreground">Aucun incident enregistré.</p>
+  }
+
   return (
-    <Card className={className}>
-      <CardHeader>
-        <CardTitle>Latest Incidents</CardTitle>
-        <CardDescription>From the first Alert until every Alert cleared</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {rows.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">No Incident recorded yet.</p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>#</TableHead>
-                <TableHead>Started</TableHead>
-                <TableHead>Involved</TableHead>
-                <TableHead>Peak</TableHead>
-                <TableHead className="text-right">Outcome</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((incident) => (
-                <TableRow key={incident.incident_id}>
-                  <TableCell className="text-muted-foreground tabular-nums">{incident.incident_id}</TableCell>
-                  <TableCell className="tabular-nums">{clock(incident.start)}</TableCell>
-                  <TableCell className="max-w-48 truncate">{incident.kinds.map((kind) => KIND_LABEL[kind]).join(', ')}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={toneSurface[toneOfSeverity[incident.peak]]}>
-                      {SEVERITY_LABEL[incident.peak]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {incident.end === null ? (
-                      <span className="text-critical">Under way</span>
-                    ) : (
-                      <span className="text-nominal">
-                        Neutralized in {duration(Date.parse(incident.end) - Date.parse(incident.start))}
-                      </span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
+    <div className="overflow-hidden rounded-lg border">
+      <Table>
+        <TableHeader className="bg-muted">
+          <TableRow>
+            <TableHead className="pl-4">N°</TableHead>
+            <TableHead>Début</TableHead>
+            <TableHead>Alertes en cause</TableHead>
+            <TableHead>Pic</TableHead>
+            <TableHead className="pr-4 text-right">Issue</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((incident) => (
+            <TableRow key={incident.incident_id}>
+              <TableCell className="pl-4 text-muted-foreground tabular-nums">{incident.incident_id}</TableCell>
+              <TableCell className="tabular-nums">{clock(incident.start)}</TableCell>
+              <TableCell className="max-w-80 truncate">{incident.kinds.map((kind) => KIND_LABEL[kind]).join(', ')}</TableCell>
+              <TableCell>
+                <LevelBadge tone={toneOfSeverity[incident.peak]}>{SEVERITY_LABEL[incident.peak]}</LevelBadge>
+              </TableCell>
+              <TableCell className="pr-4 text-right">
+                <Badge variant="outline" className="text-muted-foreground">
+                  {incident.end === null ? (
+                    <>
+                      <Loader />
+                      En cours
+                    </>
+                  ) : (
+                    <>
+                      <CircleCheck className="fill-nominal text-background" />
+                      Neutralisé en {duration(Date.parse(incident.end) - Date.parse(incident.start))}
+                    </>
+                  )}
+                </Badge>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   )
 }

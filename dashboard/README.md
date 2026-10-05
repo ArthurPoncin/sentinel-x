@@ -67,8 +67,8 @@ src/
 │   │   ├── hooks/           # useLiveFeed(selector)
 │   │   ├── components/      # LiveFeedProvider, ConnectionIndicator
 │   │   └── index.ts         # the feature's public API
-│   ├── auth/                # AuthGate (login screen until a session exists), SignOutButton
-│   ├── status/              # StatusPanel, StatusBadge — the Status the backend computes
+│   ├── auth/                # AuthGate (login screen until a session exists), useSignOut()
+│   ├── status/              # StatusCard, StatusBadge — the Status the backend computes
 │   ├── telemetry/           # #21 #11 — ReadingTiles, Gas / Climate / Sound charts, toSeries()
 │   ├── alerts/              # #11 — ActiveAlerts, AlertLog, AlertToasts
 │   ├── incidents/           # ThreatOverview, IncidentTable, useIncidents() on GET /api/v1/incidents
@@ -99,7 +99,9 @@ src/
     ├── contract/            # re-exports backend/src/contract.ts — never redeclare a schema
     ├── config/              # feedUrl() · captureMode() · STATUS_COLORS
     ├── api/                 # getJson / postJson on the app's own origin
-    ├── lib/                 # cn(), labels, Status/severity colors, time formats
+    ├── lib/                 # cn(), French labels, Status/severity colors, fr-FR formats
+    ├── components/          # LevelBadge: the outline badge with a colored dot
+    ├── hooks/               # use-mobile (shadcn sidebar)
     └── ui/                  # shadcn/ui components (components.json points the CLI here)
 ```
 
@@ -110,7 +112,9 @@ src/
 - Logic goes in pure functions next to their tests (`*.test.ts`), so it is tested without a browser; components stay thin.
 - Imports use the `@/` alias for `src/`.
 
-- UI building blocks come from shadcn/ui: `npx shadcn@latest add <component>` writes them to `src/shared/ui/`. Colors are tokens in `app/styles.css` (dark only); `nominal` / `elevated` / `critical` are Tailwind colors too (`text-critical`, `bg-nominal/10`…).
+- UI building blocks come from shadcn/ui: `npx shadcn@latest add <component>` writes them to `src/shared/ui/` (check that its imports say `@/shared/lib/utils`). Icons are lucide-react, shadcn's icon library. The theme is shadcn's neutral one, dark only, in `app/styles.css`; `nominal` / `elevated` / `critical` are Tailwind colors too (`text-critical`, `bg-nominal`…), kept to dots and figures.
+- The UI text is in French (the Operator and the jury are); code, comments and docs stay in English. Labels shared by several features live in `shared/lib/labels.ts`.
+- `app/` holds the shell: the shadcn sidebar (`app-sidebar.tsx`) and the header with the connection and the Status (`layout.tsx`).
 
 **Features to come**
 
@@ -273,15 +277,14 @@ const history = useLiveFeed((state) => state.history)
 
 | Panel | Feature | Data |
 |---|---|---|
-| Outpost Status, top-bar badge | `status` | `status` frames; "Connecting…" / "Signal lost" while the feed is down |
+| Outpost Status card, header badge | `status` | `status` frames; "Connexion…" / "Signal perdu" while the feed is down |
 | Reading tiles (with the change over 30 s) | `telemetry` | latest `telemetry` frame |
 | Gas, temperature & humidity, noise curves (last 5 min) | `telemetry` | `telemetry` frames of the live history |
 | Camera, intruder marker at `x_norm` | `camera` | `GET /camera` (MJPEG), active `intrusion` Alert |
 | Active Alerts, toast on each new or escalated Alert | `alerts` | active Alerts |
 | Alarm control (siren, buzzer off, red/green LED, LEDs off) | `actuators` | `POST /api/v1/commands`; the request is checked against the contract before it leaves |
 | Threats: Incidents, neutralized, under way, mean time to nominal, Incidents per kind | `incidents` | `GET /api/v1/incidents`, fetched again after each Alert and every 15 s |
-| Latest Incidents | `incidents` | same |
-| Alert log | `alerts` | `alert` frames of the live history |
+| Alert log / Incidents tabs | `alerts` · `incidents` | `alert` frames of the live history · `GET /api/v1/incidents` |
 
 ## TODO
 - [x] App shell + live feed (WebSocket client, store, hook) — #10

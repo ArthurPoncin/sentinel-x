@@ -26,8 +26,8 @@ const frame = (alert: Alert): Frame => ({ type: 'alert', payload: alert })
 
 describe('describeAlert', () => {
   it('says what the Alert is about from its kind', () => {
-    expect(describeAlert(intruder(0.4))).toBe('Person seen, 88 % confidence')
-    expect(describeAlert(gas('g', 'warning'))).toBe('Air Reading at 420')
+    expect(describeAlert(intruder(0.4))).toBe('Personne détectée, confiance 88 %')
+    expect(describeAlert(gas('g', 'warning'))).toBe('Mesure de gaz à 420')
     expect(
       describeAlert({
         ...gas('p', 'warning'),
@@ -35,7 +35,7 @@ describe('describeAlert', () => {
         kind: 'predictive',
         detail: { anomaly_score: 0.91, drivers: ['temp_slope', 'air_slope'] },
       }),
-    ).toBe('Anomaly score 0.91 on temp_slope, air_slope')
+    ).toBe("Score d'anomalie 0,91 sur temp_slope, air_slope")
   })
 })
 

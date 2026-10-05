@@ -4,9 +4,11 @@ import { ActiveAlerts, AlertLog, AlertToasts } from '@/features/alerts'
 import { CameraPanel } from '@/features/camera'
 import { IncidentTable, ThreatOverview, useIncidents } from '@/features/incidents'
 import { useLiveFeed } from '@/features/live-feed'
-import { StatusPanel } from '@/features/status'
+import { StatusCard } from '@/features/status'
 import { ClimateChart, GasChart, ReadingTiles, SoundChart, toSeries } from '@/features/telemetry'
 import type { Alert } from '@/shared/contract'
+import { Badge } from '@/shared/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/tabs'
 
 type Intrusion = Extract<Alert, { kind: 'intrusion' }>
 
@@ -28,30 +30,39 @@ export function OperatorRoute() {
   const { incidents, failed } = useIncidents(activeAlerts)
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-12">
+    <div className="flex flex-col gap-4 lg:gap-6">
       <AlertToasts alerts={activeAlerts} />
 
-      <StatusPanel
-        status={status}
-        feed={connection}
-        activeAlerts={activeAlerts.length}
-        className="md:col-span-2 xl:col-span-4"
-      />
-      <div className="grid grid-cols-2 gap-4 md:col-span-2 lg:grid-cols-4 xl:col-span-8">
+      <div className="grid grid-cols-1 gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs sm:grid-cols-2 xl:grid-cols-5">
+        <StatusCard status={status} feed={connection} activeAlerts={activeAlerts.length} />
         <ReadingTiles telemetry={telemetry} series={series} />
       </div>
 
-      <GasChart series={series} className="md:col-span-2 xl:col-span-7" />
-      <CameraPanel intrusion={intrusion} className="md:col-span-2 xl:col-span-5 xl:row-span-2" />
-      <ClimateChart series={series} className="xl:col-span-4" />
-      <SoundChart series={series} className="xl:col-span-3" />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
+        <GasChart series={series} className="lg:col-span-2" />
+        <CameraPanel intrusion={intrusion} />
+        <ClimateChart series={series} />
+        <SoundChart series={series} />
+        <ActuatorPanel sentinel={telemetry?.sentinel ?? null} />
+        <ActiveAlerts alerts={activeAlerts} />
+        <ThreatOverview incidents={incidents} failed={failed} className="lg:col-span-2" />
+      </div>
 
-      <ActiveAlerts alerts={activeAlerts} className="md:col-span-1 xl:col-span-4" />
-      <ActuatorPanel sentinel={telemetry?.sentinel ?? null} className="md:col-span-1 xl:col-span-3" />
-      <ThreatOverview incidents={incidents} failed={failed} className="md:col-span-2 xl:col-span-5" />
-
-      <AlertLog history={history} className="md:col-span-2 xl:col-span-7" />
-      <IncidentTable incidents={incidents} className="md:col-span-2 xl:col-span-5" />
+      <Tabs defaultValue="alerts" className="gap-4">
+        <TabsList>
+          <TabsTrigger value="alerts">Journal des alertes</TabsTrigger>
+          <TabsTrigger value="incidents">
+            Incidents
+            {incidents && incidents.length > 0 && <Badge variant="secondary">{incidents.length}</Badge>}
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="alerts">
+          <AlertLog history={history} />
+        </TabsContent>
+        <TabsContent value="incidents">
+          <IncidentTable incidents={incidents} />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

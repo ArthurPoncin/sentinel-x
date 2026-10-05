@@ -1,45 +1,40 @@
-import { Shield } from 'lucide-react'
-import { NavLink, Outlet } from 'react-router'
-import { SignOutButton } from '@/features/auth'
+import { Outlet, useLocation } from 'react-router'
 import { ConnectionIndicator, useLiveFeed } from '@/features/live-feed'
 import { StatusBadge } from '@/features/status'
-import { cn } from '@/shared/lib/utils'
+import { Separator } from '@/shared/ui/separator'
+import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/shared/ui/sidebar'
+import { AppSidebar, NAV } from './app-sidebar'
 
-const link = ({ isActive }: { isActive: boolean }) =>
-  cn(
-    'rounded-md px-3 py-1.5 text-sm transition-colors',
-    isActive ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground',
-  )
-
-export function Layout() {
+function SiteHeader() {
+  const { pathname } = useLocation()
   const status = useLiveFeed((state) => state.status)
+  const title = NAV.find((item) => item.to === pathname)?.title ?? 'Sentinel-X'
 
   return (
-    <div className="min-h-svh">
-      <header className="sticky top-0 z-10 border-b bg-background/85 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-4 px-4 lg:px-6">
-          <span className="flex items-center gap-2 font-semibold tracking-wider">
-            <Shield className="size-5 text-nominal" />
-            SENTINEL-X
-          </span>
-          <nav className="flex gap-1">
-            <NavLink to="/" end className={link}>
-              Operator
-            </NavLink>
-            <NavLink to="/twin" className={link}>
-              Digital Twin
-            </NavLink>
-          </nav>
-          <div className="ml-auto flex items-center gap-4">
-            <StatusBadge status={status} />
-            <ConnectionIndicator />
-            <SignOutButton />
-          </div>
+    <header className="flex h-12 shrink-0 items-center gap-2 border-b">
+      <div className="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
+        <SidebarTrigger className="-ml-1" />
+        <Separator orientation="vertical" className="mx-2 data-[orientation=vertical]:h-4" />
+        <h1 className="text-base font-medium">{title}</h1>
+        <div className="ml-auto flex items-center gap-4">
+          <ConnectionIndicator />
+          <StatusBadge status={status} />
         </div>
-      </header>
-      <main className="mx-auto max-w-[1600px] p-4 lg:p-6">
-        <Outlet />
-      </main>
-    </div>
+      </div>
+    </header>
+  )
+}
+
+export function Layout() {
+  return (
+    <SidebarProvider style={{ '--sidebar-width': '15rem' } as React.CSSProperties}>
+      <AppSidebar />
+      <SidebarInset>
+        <SiteHeader />
+        <div className="flex flex-1 flex-col p-4 lg:p-6">
+          <Outlet />
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }

@@ -11,11 +11,11 @@ export interface Preset {
 
 // The few actions the Operator needs in the demo. Pattern and LED names are the firmware's.
 export const PRESETS: readonly Preset[] = [
-  { id: 'siren', label: 'Sound the siren', command: { actuator: 'buzzer', action: 'pattern', params: { pattern: 'siren' } } },
-  { id: 'buzzer-off', label: 'Silence the buzzer', command: { actuator: 'buzzer', action: 'off' } },
-  { id: 'led-red', label: 'Red LED', command: { actuator: 'led', action: 'on', params: { led: 'red' } } },
-  { id: 'led-green', label: 'Green LED', command: { actuator: 'led', action: 'on', params: { led: 'green' } } },
-  { id: 'leds-off', label: 'LEDs off', command: { actuator: 'led', action: 'off' } },
+  { id: 'siren', label: 'Déclencher la sirène', command: { actuator: 'buzzer', action: 'pattern', params: { pattern: 'siren' } } },
+  { id: 'buzzer-off', label: 'Couper le buzzer', command: { actuator: 'buzzer', action: 'off' } },
+  { id: 'led-red', label: 'LED rouge', command: { actuator: 'led', action: 'on', params: { led: 'red' } } },
+  { id: 'led-green', label: 'LED verte', command: { actuator: 'led', action: 'on', params: { led: 'green' } } },
+  { id: 'leds-off', label: 'Éteindre les LED', command: { actuator: 'led', action: 'off' } },
 ]
 
 export type Built = { success: true; request: CommandRequest } | { success: false; reason: string }
@@ -23,25 +23,25 @@ export type Built = { success: true; request: CommandRequest } | { success: fals
 // The request for a preset, checked against the contract before it leaves: without a known
 // Sentinel, or with one the API would refuse, nothing is sent.
 export function buildCommand(sentinel: string | null, preset: Preset): Built {
-  if (sentinel === null) return { success: false, reason: 'No Sentinel heard from yet' }
+  if (sentinel === null) return { success: false, reason: 'Aucun Sentinel connecté pour le moment.' }
   const parsed = CommandRequestSchema.safeParse({ sentinel, ...preset.command })
   return parsed.success
     ? { success: true, request: parsed.data }
-    : { success: false, reason: `Not a valid command: ${parsed.error.issues[0]?.message ?? 'unknown reason'}` }
+    : { success: false, reason: `Commande invalide : ${parsed.error.issues[0]?.message ?? 'raison inconnue'}` }
 }
 
 // Why POST /api/v1/commands turned a command down, in the Operator's words.
 export function commandFailure(status: number): string {
   switch (status) {
     case 400:
-      return 'The Command Post refused the command as malformed.'
+      return 'Le poste de commande a refusé une commande mal formée.'
     case 401:
-      return 'The Operator session expired. Sign in again.'
+      return 'La session a expiré. Reconnectez-vous.'
     case 429:
-      return 'Too fast: two commands a second at most.'
+      return 'Trop rapide : deux commandes par seconde au maximum.'
     case 503:
-      return 'The broker is out of reach: the command did not reach the Sentinel.'
+      return "Le broker est injoignable : la commande n'a pas atteint le Sentinel."
     default:
-      return 'The Command Post did not answer.'
+      return 'Le poste de commande ne répond pas.'
   }
 }

@@ -1,5 +1,6 @@
 import { CameraOff, ScanEye } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { LevelBadge } from '@/shared/components/level-badge'
 import type { Alert } from '@/shared/contract'
 import { cn } from '@/shared/lib/utils'
 import { Badge } from '@/shared/ui/badge'
@@ -31,32 +32,24 @@ export function CameraPanel({ intrusion, className }: { intrusion: Intrusion | n
   return (
     <Card className={className}>
       <CardHeader>
-        <CardTitle>Camera</CardTitle>
-        <CardDescription>Vision AI, person detection</CardDescription>
+        <CardTitle>Caméra</CardTitle>
+        <CardDescription>Détection de personnes par l'IA vision</CardDescription>
         <CardAction>
           {feed === 'live' ? (
-            <Badge variant="outline" className="border-critical/40 text-critical">
-              <span className="size-1.5 animate-pulse rounded-full bg-critical" />
-              REC
-            </Badge>
+            <LevelBadge tone="nominal">En direct</LevelBadge>
           ) : (
             <Badge variant="outline" className="text-muted-foreground">
-              Offline
+              Hors ligne
             </Badge>
           )}
         </CardAction>
       </CardHeader>
       <CardContent>
-        <div
-          className={cn(
-            'relative aspect-4/3 overflow-hidden rounded-lg border bg-black/60',
-            intrusion && 'border-critical ring-2 ring-critical/60',
-          )}
-        >
+        <div className={cn('relative aspect-4/3 overflow-hidden rounded-lg border bg-muted/40', intrusion && 'border-critical')}>
           <img
             key={attempt}
             src={`${CAMERA_PATH}?attempt=${attempt}`}
-            alt="Live camera of the Outpost"
+            alt="Caméra de l'avant-poste en direct"
             className={cn('size-full object-cover', feed !== 'live' && 'invisible')}
             onLoad={() => setFeed('live')}
             onError={() => setFeed('down')}
@@ -64,21 +57,18 @@ export function CameraPanel({ intrusion, className }: { intrusion: Intrusion | n
 
           {feed !== 'live' && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
-              <CameraOff className="size-8" />
-              {feed === 'loading' ? 'Connecting to the camera…' : 'Camera feed unavailable, retrying…'}
+              <CameraOff className="size-6" />
+              {feed === 'loading' ? 'Connexion à la caméra…' : 'Flux caméra indisponible, nouvelle tentative…'}
             </div>
           )}
 
           {intrusion && (
             <>
-              <div
-                className="absolute inset-y-0 w-0.5 bg-critical shadow-[0_0_12px_var(--critical)] transition-[left] duration-700"
-                style={{ left: `${intrusion.detail.x_norm * 100}%` }}
-              />
-              <div className="absolute inset-x-0 top-0 flex items-center gap-2 bg-critical/85 px-3 py-1.5 text-sm font-semibold text-white">
-                <ScanEye className="size-4" />
-                Intruder detected · {Math.round(intrusion.detail.confidence * 100)} %
-              </div>
+              <div className="absolute inset-y-0 w-px bg-critical" style={{ left: `${intrusion.detail.x_norm * 100}%` }} />
+              <Badge className="absolute top-3 left-3 bg-background/90 text-foreground">
+                <ScanEye className="text-critical" />
+                Intrus détecté · {Math.round(intrusion.detail.confidence * 100)} %
+              </Badge>
             </>
           )}
         </div>

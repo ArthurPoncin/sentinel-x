@@ -16,5 +16,5 @@ export async function sendCommand(request: CommandRequest): Promise<Sent> {
   const parsed = CommandSchema.safeParse(await response.json().catch(() => null))
   return parsed.success
     ? { success: true, command: parsed.data }
-    : { success: false, message: 'The Command Post took the command but gave back something unexpected.' }
+    : { success: false, message: "Commande acceptée, mais la réponse du poste de commande est inattendue." }
 }

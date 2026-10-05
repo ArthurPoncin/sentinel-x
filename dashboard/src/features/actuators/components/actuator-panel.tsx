@@ -3,75 +3,70 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import type { Command } from '@/shared/contract'
 import { clock } from '@/shared/lib/format'
-import { cn } from '@/shared/lib/utils'
 import { Button } from '@/shared/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/card'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/shared/ui/card'
 import { sendCommand } from '../api/commands-client'
-import { buildCommand, type PresetId, PRESETS } from '../utils/commands'
+import { buildCommand, type Preset, type PresetId, PRESETS } from '../utils/commands'
 
-const LOOK: Record<PresetId, { icon: typeof Siren; className?: string }> = {
-  siren: { icon: Siren, className: 'border-critical/50 bg-critical/15 text-critical hover:bg-critical/25' },
-  'buzzer-off': { icon: BellOff },
-  'led-red': { icon: Lightbulb, className: 'text-critical' },
-  'led-green': { icon: Lightbulb, className: 'text-nominal' },
-  'leds-off': { icon: LightbulbOff },
+const ICON: Record<PresetId, typeof Siren> = {
+  siren: Siren,
+  'buzzer-off': BellOff,
+  'led-red': Lightbulb,
+  'led-green': Lightbulb,
+  'leds-off': LightbulbOff,
 }
 
-function describeCommand({ actuator, action, params }: Command): string {
-  const detail = params?.pattern ?? params?.led
-  return `${actuator} ${action}${detail ? ` (${detail})` : ''}`
-}
+const byId = (id: PresetId) => PRESETS.find((preset) => preset.id === id) as Preset
 
 // Drives the Sentinel's Alarm from afar: every press is a POST /api/v1/commands, and the panel
 // says whether the broker took it.
 export function ActuatorPanel({ sentinel, className }: { sentinel: string | null; className?: string }) {
   const [pending, setPending] = useState<PresetId | null>(null)
-  const [last, setLast] = useState<Command | null>(null)
+  const [last, setLast] = useState<{ label: string; command: Command } | null>(null)
 
-  const press = async (id: PresetId) => {
-    const preset = PRESETS.find((candidate) => candidate.id === id)
-    if (!preset) return
+  const press = async (preset: Preset) => {
     const built = buildCommand(sentinel, preset)
-    if (!built.success) return toast.error('Command not sent', { description: built.reason })
+    if (!built.success) return toast.error('Commande non envoyée', { description: built.reason })
 
-    setPending(id)
+    setPending(preset.id)
     const sent = await sendCommand(built.request)
     setPending(null)
-    if (!sent.success) return toast.error('Command not delivered', { description: sent.message })
-    setLast(sent.command)
-    toast.success(`${preset.label}: sent`, { description: `Taken by the broker for ${sent.command.sentinel}` })
+    if (!sent.success) return toast.error('Commande non transmise', { description: sent.message })
+    setLast({ label: preset.label, command: sent.command })
+    toast.success(preset.label, { description: `Commande transmise à ${sent.command.sentinel}` })
+  }
+
+  const button = (id: PresetId, variant: 'outline' | 'destructive' = 'outline', className?: string) => {
+    const preset = byId(id)
+    const Icon = ICON[id]
+    return (
+      <Button variant={variant} className={className} disabled={sentinel === null || pending !== null} onClick={() => press(preset)}>
+        <Icon />
+        {pending === id ? 'Envoi…' : preset.label}
+      </Button>
+    )
   }
 
   return (
     <Card className={className}>
       <CardHeader>
-        <CardTitle>Alarm control</CardTitle>
-        <CardDescription>{sentinel ? `Buzzer and LEDs of ${sentinel}` : 'Waiting for a Sentinel…'}</CardDescription>
+        <CardTitle>Commande de l'alarme</CardTitle>
+        <CardDescription>{sentinel ? `Buzzer et LED de ${sentinel}` : 'En attente du Sentinel…'}</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-3">
+      <CardContent className="grid gap-2">
+        {button('siren', 'destructive', 'w-full')}
+        {button('buzzer-off', 'outline', 'w-full')}
         <div className="grid grid-cols-2 gap-2">
-          {PRESETS.map(({ id, label }) => {
-            const { icon: Icon, className: look } = LOOK[id]
-            return (
-              <Button
-                key={id}
-                variant="outline"
-                className={cn('h-11 justify-start', id === 'siren' && 'col-span-2', look)}
-                disabled={sentinel === null || pending !== null}
-                onClick={() => press(id)}
-              >
-                <Icon />
-                {pending === id ? 'Sending…' : label}
-              </Button>
-            )
-          })}
+          {button('led-red')}
+          {button('led-green')}
         </div>
-        <p className="text-xs text-muted-foreground">
-          {last
-            ? `Last command: ${describeCommand(last)} at ${clock(last.ts)}, id ${last.cmd_id.slice(0, 8)}`
-            : 'No command sent from this screen yet.'}
-        </p>
+        {button('leds-off', 'outline', 'w-full')}
       </CardContent>
+      <CardFooter className="text-sm text-muted-foreground">
+        {last
+          ? `Dernière commande : ${last.label.toLowerCase()} à ${clock(last.command.ts)}`
+          : 'Aucune commande envoyée depuis cet écran.'}
+      </CardFooter>
     </Card>
   )
 }

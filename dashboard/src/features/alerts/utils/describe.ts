@@ -1,12 +1,7 @@
-import type { Alert, AlertSource, Severity } from '@/shared/contract'
+import type { Alert, Severity } from '@/shared/contract'
+import { decimal } from '@/shared/lib/format'
 
-export { KIND_LABEL, SEVERITY_LABEL } from '@/shared/lib/labels'
-
-export const SOURCE_LABEL: Record<AlertSource, string> = {
-  esp32: 'Sentinel',
-  vision: 'Vision AI',
-  predictive: 'Predictive AI',
-}
+export { KIND_LABEL, SEVERITY_LABEL, SOURCE_LABEL } from '@/shared/lib/labels'
 
 const SEVERITY_RANK: Record<Severity, number> = { info: 0, warning: 1, critical: 2 }
 
@@ -14,17 +9,17 @@ const SEVERITY_RANK: Record<Severity, number> = { info: 0, warning: 1, critical:
 export function describeAlert(alert: Alert): string {
   switch (alert.kind) {
     case 'intrusion':
-      return `Person seen, ${Math.round(alert.detail.confidence * 100)} % confidence`
+      return `Personne détectée, confiance ${Math.round(alert.detail.confidence * 100)} %`
     case 'predictive':
-      return `Anomaly score ${alert.detail.anomaly_score.toFixed(2)} on ${alert.detail.drivers.join(', ') || 'the Readings'}`
+      return `Score d'anomalie ${decimal(alert.detail.anomaly_score, 2)} sur ${alert.detail.drivers.join(', ') || 'les mesures'}`
     case 'gas':
-      return alert.value === undefined ? 'Gas Reading out of band' : `Air Reading at ${alert.value}`
+      return alert.value === undefined ? 'Gaz hors seuil' : `Mesure de gaz à ${alert.value}`
     case 'thermal':
-      return alert.value === undefined ? 'Temperature out of band' : `Temperature at ${alert.value} °C`
+      return alert.value === undefined ? 'Température hors seuil' : `Température à ${decimal(alert.value, 1)} °C`
     case 'noise':
-      return alert.value === undefined ? 'Loud sound' : `Sound ${Math.round(alert.value * 100)} % of the cycle`
+      return alert.value === undefined ? 'Bruit fort' : `Son sur ${Math.round(alert.value * 100)} % du cycle`
     case 'presence':
-      return 'Motion on the PIR'
+      return 'Mouvement détecté par le PIR'
   }
 }
 
