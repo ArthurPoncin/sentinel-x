@@ -30,5 +30,8 @@ export async function startServer(config: Partial<ServerConfig> = {}) {
     // Asks for the history with the query as given, so a test can also leave a bound out.
     getHistory: (query: Record<string, string>) =>
       fetch(`http://127.0.0.1:${port}/api/v1/history?${new URLSearchParams(query)}`),
+    getIncidents: () => fetch(`http://127.0.0.1:${port}/api/v1/incidents`),
+    // Takes the id as given, so a test can also ask for one that is not a number.
+    getIncident: (id: number | string) => fetch(`http://127.0.0.1:${port}/api/v1/incidents/${id}`),
   }
 }
