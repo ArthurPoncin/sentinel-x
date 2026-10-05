@@ -13,7 +13,7 @@ const EnvSchema = z.object({
   MOCK_FEED_INTERVAL_MS: z.coerce.number().int().positive().default(1000),
 })
 
-// Read only when MQTT_URL is set: it turns the MQTT ingress on, and the rest comes with it.
+// Read only when MQTT_URL is set: it turns MQTT on, and the rest comes with it.
 const MqttEnvSchema = z.object({
   // The broker has no plaintext listener: MQTTS or nothing.
   MQTT_URL: z.url({ protocol: /^mqtts$/, error: 'Expected an mqtts:// URL' }),

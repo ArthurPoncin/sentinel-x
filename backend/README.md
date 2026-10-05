@@ -38,7 +38,7 @@ npm test
 | `PORT` | `8080` | Listen port |
 | `MOCK_FEED` | `false` | `true` plays a scripted gas leak in a loop: `nominal` → `elevated` → `critical` → `nominal` |
 | `MOCK_FEED_INTERVAL_MS` | `1000` | Delay between two mock telemetry snapshots |
-| `MQTT_URL` | — | Broker to subscribe to, e.g. `mqtts://mosquitto:8883`. Unset: no MQTT ingress. Only `mqtts://` is accepted |
+| `MQTT_URL` | — | Broker shared with the Sentinels, e.g. `mqtts://mosquitto:8883`. Unset: no telemetry in, no command out. Only `mqtts://` is accepted |
 | `MQTT_USERNAME` | `api` | MQTT user |
 | `MQTT_PASSWORD` | — | Its password. Required with `MQTT_URL`; never committed |
 | `MQTT_CA_FILE` | — | Path of the team CA certificate (PEM). Required with `MQTT_URL` |
@@ -94,6 +94,38 @@ Post the same `alert_id` with `"state": "cleared"` to end the Alert. Posting `ra
 
 > No service token yet: the caller is the `source` it declares in the body. Once tokens are in, `source` comes from the token and the body's value is ignored.
 
+## Actuator commands — `POST /api/v1/commands`
+The Operator's way to the Alarm. The API stamps the command with a `cmd_id` and a `ts`, then publishes it on `command/<sentinel>/actuator`, over the same MQTTS connection the telemetry comes in on.
+
+```bash
+curl -i -X POST http://127.0.0.1:8080/api/v1/commands -H 'content-type: application/json' -d '{
+  "sentinel": "sentinel-01", "actuator": "led", "action": "pattern",
+  "params": { "pattern": "siren", "led": "red" }
+}'
+```
+
+The body is the Actuator command of [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#actuator-command--commandidactuator) without `cmd_id` and `ts`:
+
+| Field | Value |
+|---|---|
+| `sentinel` | The Sentinel to reach. It becomes a level of the topic: letters, digits, `-` and `_` only, 64 at most |
+| `actuator` | `buzzer`, `speaker` or `led` |
+| `action` | `on`, `off` or `pattern` |
+| `params` | Optional. `pattern` and `led`, each optional, 32 characters at most |
+
+| Response | When |
+|---|---|
+| `202` | The broker has the command. The body is the command as published, `cmd_id` (a UUID) and `ts` included: the Sentinel reads that same JSON on its topic |
+| `400` | Not a command — the `message` names each offending field. Unknown fields are rejected, `cmd_id` and `ts` among them |
+| `413` | Body above 1 KB |
+| `503` | No broker to relay to: `MQTT_URL` unset, broker away, or gone before it acknowledged |
+
+- Published at QoS 1, not retained: the `202` waits for the broker's acknowledgement. The QoS the Sentinel subscribes with decides the last hop.
+- A command is for now. One the broker did not take is refused and never sent later, even once the broker is back: the Operator sends it again.
+- A refused command is never published.
+
+> No Operator session and no rate limit yet: whoever reaches the API can send a command.
+
 ## TODO
 - [x] `POST /api/v1/alerts` + schema validation
 - [ ] Service tokens on `POST /api/v1/alerts`
@@ -104,6 +136,6 @@ Post the same `alert_id` with `"state": "cleared"` to end the Alert. Posting `ra
 - [ ] Operator login + session middleware + `GET /api/v1/auth/check`
 - [x] WebSocket event bus
 - [ ] Session + `Origin` check on the WebSocket upgrade
-- [ ] `POST /api/v1/commands` → MQTT publish
+- [x] `POST /api/v1/commands` → MQTT publish
 - [ ] Rate limiting
 - [ ] `.env.example` (broker URL, DB URL, token/password placeholders — no secrets committed)

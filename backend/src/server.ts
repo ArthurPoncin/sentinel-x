@@ -2,10 +2,12 @@ import websocket from '@fastify/websocket'
 import fastify, { type FastifyInstance, type FastifyReply } from 'fastify'
 import { z } from 'zod'
 import { createAlertPipeline, normalizeAlert } from './alerts.js'
-import type { AlertKind, AlertSource } from './contract.js'
+import { type CommandRelay, createCommandRelay } from './commands.js'
+import { type AlertKind, type AlertSource, CommandRequestSchema } from './contract.js'
 import { createHub, type Hub } from './hub.js'
 import { startMockFeed } from './mock-feed.js'
-import { type MqttConfig, startMqttIngress } from './mqtt-ingress.js'
+import { connectBroker, type MqttConfig } from './mqtt.js'
+import { startMqttIngress } from './mqtt-ingress.js'
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -16,11 +18,13 @@ declare module 'fastify' {
 export interface ServerConfig {
   // Plays the scripted scenario instead of waiting for a Sentinel; `false` turns it off.
   mockFeed: false | { intervalMs: number }
-  // The broker the Sentinels publish to; `false` leaves the MQTT ingress off.
+  // The broker shared with the Sentinels; `false` leaves it out: no telemetry in, no command out.
   mqtt: false | MqttConfig
 }
 
 const ALERT_BODY_LIMIT = 16 * 1024
+// A command is a handful of short fields, and the broker takes no packet above 4096 bytes.
+const COMMAND_BODY_LIMIT = 1024
 
 // The one kind each AI service may post. The Sentinel's kinds only come in over MQTT.
 const KIND_OF_SERVICE: Partial<Record<AlertSource, AlertKind>> = {
@@ -29,7 +33,7 @@ const KIND_OF_SERVICE: Partial<Record<AlertSource, AlertKind>> = {
 }
 
 // Same body as the errors Fastify raises on its own (malformed JSON, body too large…).
-function refuse(reply: FastifyReply, statusCode: 400 | 403, error: string, message: string) {
+function refuse(reply: FastifyReply, statusCode: 400 | 403 | 503, error: string, message: string) {
   return reply.code(statusCode).send({ statusCode, error, message })
 }
 
@@ -68,6 +72,22 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
     return reply.code(202).send()
   })
 
+  // The way out to the Sentinels, once the server runs with a broker.
+  let commands: CommandRelay | undefined
+
+  app.post('/api/v1/commands', { bodyLimit: COMMAND_BODY_LIMIT }, async (request, reply) => {
+    const parsed = CommandRequestSchema.safeParse(request.body)
+    if (!parsed.success) return refuse(reply, 400, 'Bad Request', z.prettifyError(parsed.error))
+
+    if (!commands) return refuse(reply, 503, 'Service Unavailable', 'No broker to relay the command to')
+    const relayed = await commands.relay(parsed.data)
+    if (!relayed.success) {
+      return refuse(reply, 503, 'Service Unavailable', `The command was not relayed: ${relayed.reason}`)
+    }
+
+    return reply.code(202).send(relayed.data)
+  })
+
   if (config.mockFeed) {
     const { intervalMs } = config.mockFeed
     whileRunning(app, () => startMockFeed(hub, intervalMs))
@@ -75,7 +95,12 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
 
   if (config.mqtt) {
     const broker = config.mqtt
-    whileRunning(app, () => startMqttIngress(hub, broker))
+    whileRunning(app, () => {
+      const client = connectBroker(broker)
+      startMqttIngress(hub, client)
+      commands = createCommandRelay(client)
+      return () => client.endAsync(true)
+    })
   }
 
   return app
