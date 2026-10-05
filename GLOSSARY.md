@@ -10,33 +10,33 @@ Autonomous cyber-physical surveillance system for AetherCorp's remote micro–po
 A protected site — one micro–power plant and its perimeter. The thing the Digital Twin is a model of.
 _Avoid_: site, plant, station.
 
+**Enclosure**:
+The 3D-printed (Fusion360), laser-engraved shell that houses the Sentinel **and** the Command Post — the physical Sentinel-X product shown in the demo and the teaser.
+_Avoid_: box, case, shell.
+
 **Sentinel**:
-The physical box in the field: an **ESP32** with the environmental and intrusion probes, a local display, and the Alarm hardware (buzzer + speaker), inside the 3D-printed shell. Carries the probes, not the camera.
+The sensing unit: an **ESP32** with the environmental and intrusion Probes, the OLED status display and the Alarm hardware (buzzer + speaker + LEDs). Lives in the Enclosure and joins the Command Post's Wi-Fi. Carries the Probes, not the camera.
 _Avoid_: box, edge node, device, module.
 
 **Sentinel-X**:
 The product name / the system as a whole. Not a single component.
 
 **Command Post**:
-The Local Server — a **Raspberry Pi 4** running the containerized stack (broker, DB, API) and serving the dashboard, acting as the Wi-Fi access point, with the CSI camera as one of its senses. The single logical server of the system.
+The Local Server ("PC Serveur Local") — a **Raspberry Pi 5** fixed inside the Enclosure (the brief's Option A). It is the Wi-Fi access point, runs the whole containerized stack (broker, DB, API, dashboard, vision and predictive AI) and owns the USB webcam. The single server of the system.
 _Avoid_: server, PC, base, local server.
 
-**AI Worker**:
-The laptop the Command Post delegates heavy inference to — vision and predictive — wired to it over Ethernet. Also the Operator's screen. An accelerator, never the server.
-_Avoid_: server, backend, GPU node.
-
 **Operator**:
-The human supervising the Outpost from the dashboard.
+The human supervising the Outpost from the dashboard, in a browser on a laptop joined to the table Wi-Fi. The laptop is a client only — nothing of the system runs on it.
 _Avoid_: user, admin, supervisor.
 
 ### Sensing
 
 **Probe**:
-A sensor carried by the Sentinel. Committed set: DHT (temperature/humidity), air/gas, PIR (presence), accelerometer (tamper), fingerprint (operator access).
+A sensor carried by the Sentinel. Committed set: DHT22 (temperature/humidity), MQ-2 (gas/smoke), PIR HC-SR501 (presence), accelerometer (tamper), fingerprint (operator access).
 _Avoid_: sensor, detector.
 
 **Tamper**:
-Physical interference with the Sentinel itself — the box being moved, shaken or opened — detected by the accelerometer. A threat in its own right, distinct from perimeter intrusion.
+Physical interference with the Enclosure itself — moved, shaken or opened — detected by the accelerometer. A threat in its own right, distinct from perimeter intrusion.
 _Avoid_: shock, vibration.
 
 **Reading**:

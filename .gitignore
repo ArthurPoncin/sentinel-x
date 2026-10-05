@@ -13,6 +13,9 @@ certs/
 credentials*
 id_rsa*
 *.priv
+secrets.h
+# Mosquitto password file (hashed, still a credential)
+passwd
 
 # === Python (ai/) ===
 __pycache__/
@@ -27,6 +30,7 @@ env/
 *.onnx
 *.weights
 *.h5
+*_ncnn_model/
 
 # === Node / JS (backend/, dashboard/) ===
 node_modules/
