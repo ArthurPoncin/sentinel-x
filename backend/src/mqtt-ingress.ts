@@ -1,8 +1,8 @@
 import type { MqttClient } from 'mqtt'
 import { z } from 'zod'
 import { type Telemetry, TelemetrySchema } from './contract.js'
-import type { Hub } from './hub.js'
 import { logLine } from './mqtt.js'
+import type { TelemetryPipeline } from './telemetry.js'
 
 const TELEMETRY_TOPICS = 'sentinel/+/telemetry'
 
@@ -31,8 +31,8 @@ export function readTelemetry(
 }
 
 // Subscribes to the Sentinels' telemetry each time the broker connection comes up, and
-// broadcasts every valid snapshot.
-export function startMqttIngress(hub: Pick<Hub, 'broadcast'>, client: MqttClient): void {
+// passes every valid snapshot on.
+export function startMqttIngress(telemetry: TelemetryPipeline, client: MqttClient): void {
   client.on('connect', () => {
     client.subscribe(TELEMETRY_TOPICS, (error) => {
       if (error) console.warn(logLine(`MQTT: cannot subscribe to ${TELEMETRY_TOPICS}: ${error.message}`))
@@ -40,8 +40,8 @@ export function startMqttIngress(hub: Pick<Hub, 'broadcast'>, client: MqttClient
   })
 
   client.on('message', (topic, payload) => {
-    const telemetry = readTelemetry(topic, payload)
-    if (telemetry.success) hub.broadcast({ type: 'telemetry', payload: telemetry.data })
-    else console.warn(logLine(`MQTT: dropped a message on ${topic}: ${telemetry.reason}`))
+    const snapshot = readTelemetry(topic, payload)
+    if (snapshot.success) telemetry.accept(snapshot.data)
+    else console.warn(logLine(`MQTT: dropped a message on ${topic}: ${snapshot.reason}`))
   })
 }
