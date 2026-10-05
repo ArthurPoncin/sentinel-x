@@ -40,7 +40,7 @@ npm test
 | `MOCK_FEED_INTERVAL_MS` | `1000` | Delay between two mock telemetry snapshots |
 
 ## Live feed — `/ws`
-Every connected client receives the same frames (`telemetry` and `status` today, `alert` next). On connect, a client first gets the current `Status`, then the latest telemetry snapshot if there is one — the UI never starts blank.
+Every connected client receives the same frames: `telemetry`, `alert` and `status`. On connect, a client first gets the current `Status`, then the latest telemetry snapshot if there is one — the UI never starts blank.
 
 The schemas (zod) and their TypeScript types live in [`src/contract.ts`](src/contract.ts). Front-ends import them instead of redeclaring them — add `"@sentinel-x/backend": "file:../backend"` to the front-end's dependencies and run `npm run build` here:
 
@@ -52,8 +52,34 @@ socket.onmessage = (event) => {
 }
 ```
 
+## Alert ingress — `POST /api/v1/alerts`
+The entry point of the `vision` and `predictive` services. The body is one Alert, as specified in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#alert--sentinelidalert-and-body-of-post-apiv1alerts):
+
+```bash
+curl -i -X POST http://127.0.0.1:8080/api/v1/alerts -H 'content-type: application/json' -d '{
+  "alert_id": "intruder-1", "sentinel": "sentinel-01", "source": "vision",
+  "kind": "intrusion", "severity": "critical", "state": "raised",
+  "detail": { "x_norm": 0.42, "confidence": 0.88, "bbox": [120, 80, 60, 180] },
+  "ts": "2026-10-05T14:23:05Z"
+}'
+```
+
+| Response | When |
+|---|---|
+| `202` | Accepted: every client gets the `alert` frame, then the `status` frame it leads to |
+| `400` | Not an Alert — the `message` names each offending field. Unknown fields are rejected, and `detail` must be the one of its `kind` (`{}` for `gas`, `thermal`, `presence`) |
+| `403` | A service posting a `kind` it does not own: `vision` → `intrusion`, `predictive` → `predictive`. The Sentinel's kinds only come in over MQTT |
+| `413` | Body above 16 KB |
+
+A refused body is never broadcast and never moves the `Status`.
+
+Post the same `alert_id` with `"state": "cleared"` to end the Alert. Posting `raised` again on an `alert_id` that is still raised updates that Alert (new `severity`, new `x_norm`…) instead of opening a second one. The `Status` is recomputed from the Alerts still raised and broadcast after every accepted Alert.
+
+> No service token yet: the caller is the `source` it declares in the body. Once tokens are in, `source` comes from the token and the body's value is ignored.
+
 ## TODO
-- [ ] `POST /api/v1/alerts` + token auth + schema validation
+- [x] `POST /api/v1/alerts` + schema validation
+- [ ] Service tokens on `POST /api/v1/alerts`
 - [ ] MQTT subscriber → normalizer → DB writer
 - [x] Status engine
 - [ ] Operator login + session middleware + `GET /api/v1/auth/check`
