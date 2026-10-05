@@ -1,15 +1,15 @@
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { type Frame, FrameSchema, type StatusLevel } from '../src/contract.js'
-import { buildServer } from '../src/server.js'
+import { buildServer, type ServerConfig } from '../src/server.js'
 import { connectClient } from './support/ws-client.js'
 
 type Server = Awaited<ReturnType<typeof buildServer>>
 
 const servers: Server[] = []
 
-async function startServer() {
-  const server = await buildServer()
+async function startServer(config: ServerConfig = { mockFeed: false }) {
+  const server = await buildServer(config)
   servers.push(server)
   await server.listen({ port: 0, host: '127.0.0.1' })
   const { port } = server.server.address() as AddressInfo
@@ -86,5 +86,30 @@ describe('live feed on /ws', () => {
     await vi.waitFor(() => expect(client.frames).toHaveLength(1))
     const greeting = FrameSchema.parse(client.frames[0])
     expect(greeting).toMatchObject({ type: 'status', payload: { status: 'nominal' } })
+  })
+})
+
+describe('mock feed toggle', () => {
+  it('streams the scripted scenario to clients when enabled', async () => {
+    const { connect } = await startServer({ mockFeed: { intervalMs: 1 } })
+
+    const client = await connect()
+
+    await vi.waitFor(() => {
+      // Parsing doubles as the check that everything on the wire honours the contract.
+      const frames = client.frames.map((frame) => FrameSchema.parse(frame))
+      const statuses = frames.flatMap((frame) => (frame.type === 'status' ? [frame.payload.status] : []))
+      expect(statuses.join(' → ')).toContain('elevated → critical → nominal')
+      expect(frames.filter((frame) => frame.type === 'telemetry').length).toBeGreaterThan(10)
+    })
+  })
+
+  it('sends nothing beyond the greeting when disabled', async () => {
+    const { connect } = await startServer({ mockFeed: false })
+
+    const client = await connect()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(client.frames).toHaveLength(1)
   })
 })
