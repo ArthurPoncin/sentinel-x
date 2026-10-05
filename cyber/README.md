@@ -19,7 +19,7 @@ The rules every workstream follows are in [`../docs/ARCHITECTURE.md` § Security
   - no `privileged: true`, never mount `/var/run/docker.sock`;
   - `cap_drop: [ALL]` (add back only what a service proves it needs), `security_opt: [no-new-privileges:true]`;
   - non-root `user:` in every container, `read_only: true` where possible;
-  - `db`, `api`, `dashboard`, `vision`, `predictive` on the internal network only; the webcam reaches `vision` via `devices:`.
+  - `db`, `api`, `dashboard`, `vision`, `predictive` on the internal network only; the camera reaches `vision` via `devices:`.
 - **Wi-Fi AP:** WPA2-PSK, CCMP/AES only, WPS off, long random passphrase (out of git). No NAT/bridge to another network.
 
 ## Operator laptop

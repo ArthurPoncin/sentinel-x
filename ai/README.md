@@ -1,21 +1,21 @@
 # ai/ — Local AI & Data
 
-**Node:** Command Post (Raspberry Pi 5) · **Language:** Python · **Runs as:** `vision` and `predictive` containers in the Pi's Docker-Compose stack
+**Node:** Command Post (Raspberry Pi 4) · **Language:** Python · **Runs as:** `vision` and `predictive` containers in the Pi's Docker-Compose stack
 
-Two jobs, both on the Pi (the brief's Option A): **see** (intrusion on the USB webcam) and **predict** (correlation-based maintenance). Results are posted to the API as Alerts.
+Two jobs, both on the Pi (the brief's Option A): **see** (intrusion on the ZIF camera) and **predict** (correlation-based maintenance). Results are posted to the API as Alerts.
 
 ## Vision — intrusion detection
-- Capture the **USB webcam** plugged into the Pi (`/dev/video0`, passed to the container with `devices:` — never `privileged`).
+- **Base:** [`automaticdai/rpi-object-detection`](https://github.com/automaticdai/rpi-object-detection) (MIT) — lightweight Python + OpenCV, built for the Pi. We reuse `src/object-detection-tflite` (EfficientDet-Lite0 or SSD MobileNet, COCO labels) and keep only the `person` class; `src/motion-detection` (OpenCV) is the fallback. Keep its license notice in the copied code.
+- Capture the **ZIF camera** (Raspberry Pi camera module on the CSI port) with **Picamera2**, which the repo already supports — OpenCV's `VideoCapture` can't read a CSI camera directly. In the container: the camera device nodes (`/dev/video*`, `/dev/media*`) passed with `devices:` — never `privileged` — and Picamera2 from the Raspberry Pi apt repo.
 - Resize/throttle frames (**≤ 640x480**, target **< 100 ms/frame**).
-- Detect a suspicious human presence (YOLOv8-tiny or OpenCV shape detection).
 - Emit an `intrusion` Alert with **`x_norm`** (normalized horizontal position 0→1) so the 3D twin can place the intruder along the perimeter.
-- `vision` is the only process that opens the webcam, so it also **serves the camera feed** to the dashboard (MJPEG, detections drawn), through the reverse proxy behind the Operator session.
+- `vision` is the only process that opens the camera, so it also **serves the camera feed** to the dashboard (MJPEG, detections drawn), through the reverse proxy behind the Operator session.
 
-### Performance on the Pi — benchmark Monday
-The main technical risk of Option A. Levers, in order:
-1. YOLOv8n exported to **NCNN**, model input **320** (capture stays 640x480).
-2. Infer every 2nd–3rd frame; keep the displayed stream at full rate.
-3. Fallback allowed by the brief: **OpenCV** motion detection (MOG2) + HOG person detector.
+### Performance on the Pi 4 — benchmark Monday
+The main technical risk of Option A, on a Pi 4 that is slower than the Pi 5 the brief assumes: TFLite detection on its CPU runs at a few frames per second. Levers, in order:
+1. EfficientDet-Lite0 at its native **320** input (capture stays 640x480); switch to SSD MobileNet if it benchmarks faster.
+2. Infer every 2nd–3rd frame, and only when the motion detector sees movement; keep the displayed stream at full rate.
+3. Fallback allowed by the brief: **OpenCV** motion detection alone.
 
 ## Predictive maintenance
 - **Live:** subscribe to `sentinel/+/telemetry` over MQTTS (`mosquitto:8883`, own `predictive` MQTT user, broker verified against the team CA) and score a sliding window in memory.
@@ -29,7 +29,7 @@ The main technical risk of Option A. Levers, in order:
 Both jobs → `POST /api/v1/alerts` over the **internal Docker network**, using the unified Alert schema in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#alert--sentinelidalert-and-body-of-post-apiv1alerts). Each service sends its own token (`Authorization: Bearer …`, from its `.env`) and may only post its own `kind` (`intrusion` / `predictive`).
 
 ## TODO
-- [ ] Webcam capture on the Pi + **latency benchmark (Monday)**
+- [ ] ZIF camera capture (Picamera2) on the Pi + **latency benchmark (Monday)**
 - [ ] Vision inference + `x_norm` extraction
 - [ ] Annotated MJPEG feed for the dashboard
 - [ ] Tuesday nominal-data capture session
@@ -37,4 +37,4 @@ Both jobs → `POST /api/v1/alerts` over the **internal Docker network**, using 
 - [ ] Feature engineering + train Isolation Forest
 - [ ] Alert POST client (with service token)
 
-> Model weights (`*.pt`, `*.onnx`, NCNN exports) are gitignored — share via a release or drive. Tokens live in `.env` (gitignored).
+> Model weights (`*.tflite`, `*.pt`, `*.onnx`) are gitignored — share via a release or drive. Tokens live in `.env` (gitignored).

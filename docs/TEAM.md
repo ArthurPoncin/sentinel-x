@@ -2,18 +2,18 @@
 
 5 people: **3 dev + 2 infra**. The **who-does-what split is still open** (decided together once we've brainstormed). What's stable is the set of workstreams and which node each runs on.
 
-Architecture: the brief's **Option A** — everything server-side runs on the Command Post (Raspberry Pi 5 inside the Enclosure). See [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+Architecture: the brief's **Option A** — everything server-side runs on the Command Post (Raspberry Pi 4 inside the Enclosure). See [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
 ## Workstreams
 
 ### Edge / IoT — `firmware/` (Sentinel, ESP32)
 - ESP32 firmware in C++ (PlatformIO).
-- Probes: DHT22 (temp/humidity), MQ-2 (gas), PIR HC-SR501 (presence), accelerometer (tamper), fingerprint (access).
-- OLED I2C status display, Alarm (buzzer + MP3 speaker + LEDs).
-- Owns its threshold/tamper Alerts (with hysteresis) + autonomous Alarm; publishes telemetry + Alerts over MQTTS (CA-verified, own credentials).
+- Probes: DHT22 (temp/humidity), MQ-2 (gas), PIR HC-SR501 (presence), sound sensor (noise).
+- LCD status display (16×128 px), Alarm (buzzer + LEDs).
+- Owns its threshold Alerts (`gas`, `thermal`, `presence`, `noise`, with hysteresis) + autonomous Alarm; publishes telemetry + Alerts over MQTTS (CA-verified, own credentials).
 
 ### AI / Data — `ai/` (Command Post, Pi)
-- **Vision:** intrusion detection on the Pi's USB webcam (YOLOv8n → NCNN, or OpenCV), ≤640x480, <100ms/frame → `intrusion` Alert with `x_norm`. **Benchmark on the Pi Monday** — it validates Option A.
+- **Vision:** person detection on the Pi's ZIF camera, built on [`automaticdai/rpi-object-detection`](https://github.com/automaticdai/rpi-object-detection) (TFLite + Picamera2; OpenCV motion detection as fallback), ≤640x480, <100ms/frame → `intrusion` Alert with `x_norm`. **Benchmark on the Pi Monday** — it validates Option A.
 - **Predictive:** Isolation Forest on live temp+air telemetry, subscribed over MQTTS (+ velocity features). **No static `if temp>40`.** → `predictive` Alert.
 - Both run as containers on the Pi and post to `POST /api/v1/alerts` with their service token.
 
@@ -25,7 +25,6 @@ Architecture: the brief's **Option A** — everything server-side runs on the Co
 ### Platform & Network — `infra/` (Command Post, Pi)
 - Docker-Compose stack: reverse proxy, Mosquitto, DB, API, dashboard, vision, predictive.
 - Isolated table network: Pi as WPA2 Wi-Fi AP + `192.168.X.0/24` IP plan.
-- Bonus if time allows: local MCO console (LCD + joystick on the Pi).
 
 ### Cyber — `cyber/` (transversal)
 - MQTTS/TLS + HTTPS/WSS, team CA, MQTT credentials + ACL, API tokens.

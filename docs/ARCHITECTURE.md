@@ -2,22 +2,24 @@
 
 ## Topology — Option A "Embedded centralization"
 
-We implement the brief's **Option A**: the Local Server ("PC Serveur Local") is a **Raspberry Pi 5 fixed inside the Sentinel-X Enclosure**. It runs the whole containerized stack *and* the vision AI, on the **USB webcam** plugged into it. The ESP32 joins the Pi's Wi-Fi. A laptop is only the Operator's browser. See [`../GLOSSARY.md`](../GLOSSARY.md) for the canonical terms.
+We implement the brief's **Option A**: the Local Server ("PC Serveur Local") is a **Raspberry Pi 4 fixed inside the Sentinel-X Enclosure**. It runs the whole containerized stack — web front-end and API — *and* the vision AI, on the **ZIF camera** (Raspberry Pi camera module) on its CSI port. The ESP32 joins the Pi's Wi-Fi. A laptop is only the Operator's browser. See [`../GLOSSARY.md`](../GLOSSARY.md) for the canonical terms.
 
 | Node | Hardware | Role |
 |---|---|---|
-| **Sentinel** | ESP32 + probes + OLED + Alarm | Senses, decides its own local Alerts, fires the Alarm autonomously |
-| **Command Post** | Raspberry Pi 5 (4 GB) + USB webcam | The single server: Wi-Fi AP, MQTT broker, DB, API, dashboard host, vision + predictive AI |
+| **Sentinel** | ESP32 + probes + LCD + Alarm | Senses, decides its own local Alerts, fires the Alarm autonomously |
+| **Command Post** | Raspberry Pi 4 + ZIF camera | The single server: Wi-Fi AP, MQTT broker, DB, API, dashboard host, vision + predictive AI |
 | *Operator laptop* | any laptop | Browser only — nothing of the system runs on it |
 
 The Sentinel and the Command Post live in the same 3D-printed **Enclosure** (see [Physical layout](#physical-layout-option-a)).
 
-> **Main technical risk — vision latency on the Pi.** Option A puts inference on the Pi. Benchmark it Monday (YOLOv8n → NCNN, model input 320, frame skipping; fallback OpenCV motion + HOG). Details in [`../ai/`](../ai/).
+> **Main technical risk — vision latency on the Pi 4.** Option A puts inference on the Pi. We start from a lightweight open-source base, [`automaticdai/rpi-object-detection`](https://github.com/automaticdai/rpi-object-detection) (TFLite EfficientDet-Lite0, `person` class only; fallback OpenCV motion detection). Benchmark it Monday. Details in [`../ai/`](../ai/).
 
 ### Deviations to validate with the coach (Monday)
 
 - **ESP32 instead of ESP8266.** Same family and toolchain (Arduino/PlatformIO), strictly more capable: RAM headroom for the mandatory TLS handshake (tight on an ESP8266) and several ADC inputs (the ESP8266 has a single 0–1 V analog input, awkward for the MQ-2). An ESP-01S is on hand if the ESP8266 label is required.
-- **Pi model.** The brief specifies a Pi 5 (4 GB) for Option A. If only a Pi 4 is available, validate it with the coach and re-run the vision benchmark.
+- **Raspberry Pi 4 instead of a Pi 5.** The brief specifies a Pi 5 (4 GB) for Option A; we have a Pi 4. Inference is slower, hence the lightweight vision model and the Monday benchmark.
+- **ZIF camera instead of a USB webcam.** The brief says USB webcam; we use the Raspberry Pi camera module on the Pi's CSI port (ZIF ribbon). Same role, captured with Picamera2.
+- **LCD instead of the OLED.** The brief lists a 0.96" OLED I2C; our status display is a 16×128 px LCD.
 
 ```mermaid
 flowchart LR
@@ -26,20 +28,19 @@ flowchart LR
             DHT["DHT22 · temp/humidity"]
             MQ2["MQ-2 · gas"]
             PIR["PIR HC-SR501 · presence"]
-            ACC["Accelerometer · tamper"]
-            FP["Fingerprint · access"]
-            OLED["OLED I2C · IP / Status"]
-            ALARM["Alarm · buzzer + MP3 speaker + LEDs"]
+            SND["Sound sensor · noise"]
+            LCD["LCD 16x128 · IP / Status"]
+            ALARM["Alarm · buzzer + LEDs"]
         end
-        subgraph cp["🖥️ Command Post · Raspberry Pi 5 (Wi-Fi AP)"]
-            CAM["USB webcam"]
+        subgraph cp["🖥️ Command Post · Raspberry Pi 4 (Wi-Fi AP)"]
+            CAM["ZIF camera (CSI)"]
             subgraph docker["Docker-Compose"]
                 PROXY["reverse-proxy · HTTPS/WSS :443"]
                 BROKER["mosquitto · MQTTS :8883"]
                 API["api · REST + WebSocket"]
                 DB[("db")]
                 DASH["dashboard · 3D Twin"]
-                VISION["vision · YOLOv8n / OpenCV"]
+                VISION["vision · TFLite person detection"]
                 PRED["predictive · Isolation Forest"]
             end
         end
@@ -65,10 +66,10 @@ flowchart LR
 
 The Enclosure (Fusion360, 3D-printed, laser-engraved) houses the Sentinel **and** the Command Post:
 
-- **Pi 5 + USB webcam** — active cooling and vents (the Pi runs hot under inference); webcam lens exposed at the front.
+- **Pi 4 + ZIF camera** — active cooling and vents (the Pi runs hot under inference); camera module on a short ribbon, lens exposed at the front.
 - **DHT22 and MQ-2 in a separate ventilated compartment**, away from the Pi and from each other (the MQ-2 has a heater). Otherwise the probes measure the Pi's own heat and the predictive model learns inference load as "thermal drift".
-- **OLED visible** through the shell, clean cable passthroughs, no visible wires (brief requirement).
-- **Power:** official 27 W USB-C supply for the Pi 5.
+- **LCD visible** through the shell, clean cable passthroughs, no visible wires (brief requirement).
+- **Power:** official 15 W USB-C supply (5.1 V / 3 A) for the Pi 4.
 
 ## Alert ownership — who decides what
 
@@ -78,8 +79,8 @@ Each node owns the Alerts it can decide **alone**, so the Sentinel stays autonom
 |---|---|---|
 | `gas`, `thermal` | **Sentinel (ESP32)** | Threshold with hysteresis; fires the **Alarm locally and immediately** |
 | `presence` | **Sentinel** | PIR digital |
-| `tamper` | **Sentinel** | Accelerometer shock/tilt |
-| `intrusion` | **Command Post · `vision`** | YOLO / OpenCV on the USB webcam |
+| `noise` | **Sentinel** | Sound level above a threshold, with hysteresis |
+| `intrusion` | **Command Post · `vision`** | TFLite person detection on the ZIF camera |
 | `predictive` | **Command Post · `predictive`** | Isolation Forest on temp+air drift |
 | *(Status)* | **Command Post · `api`** | Not an Alert — aggregates all active Alerts into the Outpost `Status` |
 
@@ -120,7 +121,7 @@ One publish per cycle (~1–2 s), all current Readings share one timestamp.
     "humidity": 44.0,      // %
     "air": 180,            // gas sensor raw/ppm
     "pir": false,          // presence
-    "accel": { "x": 0.01, "y": -0.02, "z": 0.98 }  // g
+    "sound": 1350          // sound level, raw ADC (0–4095)
   }
 }
 ```
@@ -134,7 +135,7 @@ The **single unified Alert schema**, emitted by the Sentinel and by the AI servi
   "alert_id": "a1b2c3d4",     // stable id; pairs a raised with its later cleared
   "sentinel": "sentinel-01",  // the api takes it from the MQTT topic, not from the body
   "source": "esp32",          // esp32 | vision | predictive — set by the api from the authenticated channel
-  "kind": "gas",              // gas | thermal | presence | tamper | intrusion | predictive
+  "kind": "gas",              // gas | thermal | presence | noise | intrusion | predictive
   "severity": "warning",      // info | warning | critical
   "state": "raised",          // raised | cleared  — the transition (an Alert is a change of state)
   "value": 420,               // triggering measurement (kind-dependent, optional)
@@ -151,9 +152,6 @@ The **single unified Alert schema**, emitted by the Sentinel and by the AI servi
 
 // predictive — the learned-model output, not a static threshold
 "detail": { "anomaly_score": 0.91, "drivers": ["temp_slope", "air_slope"] }
-
-// tamper
-"detail": { "magnitude": 1.4, "axis": "y" }
 ```
 
 > An **Incident** spans from the first `raised` Alert until every open Alert has `cleared`. `alert_id` is how the time-scrubber groups and replays it.
@@ -181,7 +179,7 @@ The **single unified Alert schema**, emitted by the Sentinel and by the AI servi
 {
   "cmd_id": "c9f8e7",
   "sentinel": "sentinel-01",
-  "actuator": "buzzer",       // buzzer | speaker | led
+  "actuator": "buzzer",       // buzzer | led
   "action": "on",             // on | off | pattern
   "params": { "pattern": "siren", "led": "red" },
   "ts": "2026-10-05T14:23:10Z"
@@ -292,9 +290,7 @@ This plan is the basis of the network schema deliverable (engineering report) �
 | `api` | REST + WebSocket, Alert pipeline, `Status`, auth | — |
 | `db` | Telemetry + Alert history (time-scrubber, predictive training) | — |
 | `dashboard` | Web app + 3D Digital Twin (rendered in the Operator's browser) | — |
-| `vision` | Intrusion detection on the USB webcam (`/dev/video0` via `devices:`); serves the annotated camera feed | — |
+| `vision` | Person detection on the ZIF camera (Picamera2, camera device nodes via `devices:`); serves the annotated camera feed | — |
 | `predictive` | Isolation Forest on live telemetry (MQTTS subscriber); trains on DB history (read-only DB user) | — |
 
 `docker compose up` brings the whole Command Post online. Hardening rules for every service (non-root, no `privileged`, `cap_drop: ALL`…) are in [`../cyber/`](../cyber/).
-
-> **Bonus (if time allows):** a local MCO console on the Pi — LCD + joystick on its GPIO. See [`../infra/`](../infra/#bonus--local-mco-console).

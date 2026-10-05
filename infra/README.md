@@ -1,6 +1,6 @@
 # infra/ — Platform & Network
 
-**Node:** Command Post (Raspberry Pi 5, inside the Enclosure)
+**Node:** Command Post (Raspberry Pi 4, inside the Enclosure)
 
 Orchestrates the whole server stack on the Pi and owns the isolated table network.
 
@@ -51,7 +51,5 @@ max_packet_size 4096
 
 > Deliverable: the **network schema** for the engineering report.
 
-## Bonus — local MCO console
-Only if time allows: an **LCD + joystick wired directly to the Pi's GPIO**, showing CPU/RAM/temperature, container health and MQTT message rate / log volume, the joystick cycling screens.
-- The Pi has **no analog input**: an analog joystick needs an ADC (ADS1115 over I2C, or MCP3008 over SPI) — or use a digital (switch) joystick.
-- The brief lists MCO monitoring under the Cyber pillar: if this bonus is dropped, at least show `docker stats` and the log rotation in the engineering report.
+## MCO monitoring
+No local console on the Pi (the joystick is dropped). The brief lists MCO monitoring under the Cyber pillar: show `docker stats` (CPU/RAM), container health, the MQTT message rate and the log rotation in the engineering report.

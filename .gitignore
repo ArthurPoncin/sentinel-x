@@ -26,6 +26,7 @@ env/
 *.egg-info/
 .ipynb_checkpoints/
 # AI model weights (large binaries — share via release/drive, not git)
+*.tflite
 *.pt
 *.onnx
 *.weights

@@ -15,14 +15,14 @@ The 3D-printed (Fusion360), laser-engraved shell that houses the Sentinel **and*
 _Avoid_: box, case, shell.
 
 **Sentinel**:
-The sensing unit: an **ESP32** with the environmental and intrusion Probes, the OLED status display and the Alarm hardware (buzzer + speaker + LEDs). Lives in the Enclosure and joins the Command Post's Wi-Fi. Carries the Probes, not the camera.
+The sensing unit: an **ESP32** with the environmental and intrusion Probes, the LCD status display and the Alarm hardware (buzzer + LEDs). Lives in the Enclosure and joins the Command Post's Wi-Fi. Carries the Probes, not the camera.
 _Avoid_: box, edge node, device, module.
 
 **Sentinel-X**:
 The product name / the system as a whole. Not a single component.
 
 **Command Post**:
-The Local Server ("PC Serveur Local") — a **Raspberry Pi 5** fixed inside the Enclosure (the brief's Option A). It is the Wi-Fi access point, runs the whole containerized stack (broker, DB, API, dashboard, vision and predictive AI) and owns the USB webcam. The single server of the system.
+The Local Server ("PC Serveur Local") — a **Raspberry Pi 4** fixed inside the Enclosure (the brief's Option A). It is the Wi-Fi access point, runs the whole containerized stack (broker, DB, API, dashboard, vision and predictive AI) and owns the ZIF camera (Raspberry Pi camera module on its CSI port). The single server of the system.
 _Avoid_: server, PC, base, local server.
 
 **Operator**:
@@ -32,12 +32,8 @@ _Avoid_: user, admin, supervisor.
 ### Sensing
 
 **Probe**:
-A sensor carried by the Sentinel. Committed set: DHT22 (temperature/humidity), MQ-2 (gas/smoke), PIR HC-SR501 (presence), accelerometer (tamper), fingerprint (operator access).
+A sensor carried by the Sentinel. Committed set: DHT22 (temperature/humidity), MQ-2 (gas/smoke), PIR HC-SR501 (presence), sound sensor (noise level).
 _Avoid_: sensor, detector.
-
-**Tamper**:
-Physical interference with the Enclosure itself — moved, shaken or opened — detected by the accelerometer. A threat in its own right, distinct from perimeter intrusion.
-_Avoid_: shock, vibration.
 
 **Reading**:
 A single periodic measurement from a Probe at a point in time (e.g. temperature = 31.2 °C at t).
@@ -50,7 +46,7 @@ A *change of state* in something under surveillance: a Probe crossing into warni
 _Avoid_: event, notification, warning.
 
 **Alarm**:
-The *physical response* emitted by the Sentinel — buzzer, status LEDs, and spoken/siren audio via the speaker. The reaction, not the information.
+The *physical response* emitted by the Sentinel — the buzzer and the status LEDs. The reaction, not the information.
 _Avoid_: alert, notification.
 
 **Incident**:

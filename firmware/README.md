@@ -2,19 +2,19 @@
 
 **Node:** Sentinel · **MCU:** ESP32 · **Language:** C++ (PlatformIO)
 
-Firmware for the Sentinel: reads the probes, drives the OLED and the Alarm, **decides its own local Alerts**, and streams secure telemetry to the Command Post (the Pi in the same Enclosure).
+Firmware for the Sentinel: reads the probes, drives the LCD and the Alarm, **decides its own local Alerts**, and streams secure telemetry to the Command Post (the Pi in the same Enclosure).
 
 ## Hardware (committed core)
 - **MCU:** ESP32 (Wi-Fi 2.4 GHz to the Pi's access point) — ESP8266 deviation justified in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#deviations-to-validate-with-the-coach-monday)
-- **Probes:** DHT22 (temp/humidity), MQ-2 (gas — 5 V heater; its analog output needs a divider to stay under 3.3 V), PIR HC-SR501 (presence), accelerometer (tamper), fingerprint (operator access)
-- **Display:** OLED I2C 0.96" (Wi-Fi/IP, Status, active Alerts) — visible through the Enclosure
-- **Alarm:** buzzer + speaker via MP3/audio amp (siren / spoken alert) + status LEDs
+- **Probes:** DHT22 (temp/humidity), MQ-2 (gas — 5 V heater; its analog output needs a divider to stay under 3.3 V), PIR HC-SR501 (presence), sound sensor (analog noise level). Analog probes go on ADC1 pins: ADC2 is unusable while Wi-Fi is on.
+- **Display:** LCD 16×128 px (Wi-Fi/IP, Status, active Alerts) — visible through the Enclosure
+- **Alarm:** buzzer (siren pattern) + status LEDs
 
 ## Responsibilities
 - Cadenced probe sampling → one **telemetry snapshot** per cycle, published over **MQTTS**.
-- **Own its Alerts** (`gas`, `thermal`, `presence`, `tamper`) with threshold **hysteresis** — one Alert per transition, no flapping.
+- **Own its Alerts** (`gas`, `thermal`, `presence`, `noise`) with threshold **hysteresis** — one Alert per transition, no flapping.
 - **Fire the Alarm locally and immediately** on a critical condition — even if the Command Post is down (this is what makes the Sentinel *autonomous*).
-- Subscribe to actuator commands (buzzer / speaker / LED) from the API.
+- Subscribe to actuator commands (buzzer / LED) from the API.
 
 ## Security
 - MQTTS on port 8883 only; **broker certificate verified against the team CA** (`setCACert`) — never `setInsecure()`.
@@ -27,7 +27,7 @@ Telemetry, Alert and command schemas + topics: [`../docs/ARCHITECTURE.md`](../do
 - [ ] Breadboard wiring diagram
 - [ ] Probe read loop + calibration (MQ-2 warm-up!)
 - [ ] Telemetry snapshot + Alert state machine (hysteresis)
-- [ ] Autonomous Alarm path (buzzer/MP3 on critical, Pi-independent)
+- [ ] Autonomous Alarm path (buzzer on critical, Pi-independent)
 - [ ] MQTTS connection with team CA cert + MQTT credentials
 - [ ] Actuator command handling
 
