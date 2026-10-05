@@ -101,9 +101,27 @@ export const CommandSchema = z.strictObject({
 })
 export type Command = z.infer<typeof CommandSchema>
 
+const TelemetryFrameSchema = z.strictObject({ type: z.literal('telemetry'), payload: TelemetrySchema })
+const AlertFrameSchema = z.strictObject({ type: z.literal('alert'), payload: AlertSchema })
+
 export const FrameSchema = z.discriminatedUnion('type', [
-  z.strictObject({ type: z.literal('telemetry'), payload: TelemetrySchema }),
-  z.strictObject({ type: z.literal('alert'), payload: AlertSchema }),
+  TelemetryFrameSchema,
+  AlertFrameSchema,
   z.strictObject({ type: z.literal('status'), payload: StatusSchema }),
 ])
 export type Frame = z.infer<typeof FrameSchema>
+
+// What the history keeps: the telemetry and Alert frames, as they went out live. The Status is
+// not kept: it follows from the Alerts.
+export const HistoryRecordSchema = z.discriminatedUnion('type', [TelemetryFrameSchema, AlertFrameSchema])
+export type HistoryRecord = z.infer<typeof HistoryRecordSchema>
+
+// Query of GET /api/v1/history: from and to are both included.
+export const HistoryQuerySchema = z
+  .object({ from: z.iso.datetime(), to: z.iso.datetime() })
+  .refine(({ from, to }) => Date.parse(from) <= Date.parse(to), { error: '`from` comes after `to`', path: ['to'] })
+export type HistoryQuery = z.infer<typeof HistoryQuerySchema>
+
+// Body of GET /api/v1/history: the records of the range, oldest first.
+export const HistorySchema = z.strictObject({ records: z.array(HistoryRecordSchema) })
+export type History = z.infer<typeof HistorySchema>
