@@ -12,17 +12,19 @@ export async function startServer(config: Partial<ServerConfig> = {}) {
   const { port } = server.server.address() as AddressInfo
 
   // Posts the body as is, so a test can also send what is not JSON.
-  const post = (body: string) =>
-    fetch(`http://127.0.0.1:${port}/api/v1/alerts`, {
+  const postTo = (path: string, body: string) =>
+    fetch(`http://127.0.0.1:${port}${path}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body,
     })
+  const post = (body: string) => postTo('/api/v1/alerts', body)
 
   return {
     hub: server.hub,
     connect: () => connectClient(`ws://127.0.0.1:${port}/ws`),
     post,
     postAlert: (alert: unknown) => post(JSON.stringify(alert)),
+    postCommand: (command: unknown) => postTo('/api/v1/commands', JSON.stringify(command)),
   }
 }
