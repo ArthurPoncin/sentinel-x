@@ -172,6 +172,8 @@ The **single unified Alert schema**, emitted by the Sentinel and by the AI servi
 | `POST /api/v1/commands` | Actuator command (schema below, without `cmd_id`/`ts` — the `api` adds them) → `202` |
 | `wss://<pi>/ws` | Live feed (frames below). Session checked on upgrade, `Origin` checked. |
 | `GET /api/v1/history?from=…&to=…` | Telemetry + Alert history of a time range, oldest first (time-scrubber) — see [`../backend/`](../backend/README.md#history--get-apiv1history). Session required |
+| `GET /api/v1/incidents` | The Incidents, oldest first, with their start and end (`null` while one goes on) — see [`../backend/`](../backend/README.md#incidents--get-apiv1incidents). Session required |
+| `GET /api/v1/incidents/:incident_id` | One Incident and its telemetry + Alerts, oldest first, for the Twin to replay — see [`../backend/`](../backend/README.md#replay--get-apiv1incidentsincident_id). Session required |
 | camera feed | Session required |
 
 ### Actuator command — `command/<id>/actuator`

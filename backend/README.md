@@ -130,6 +130,64 @@ curl 'http://127.0.0.1:8080/api/v1/history?from=2026-10-05T14:20:00Z&to=2026-10-
 
 > No Operator session yet: whoever reaches the API can read the history.
 
+## Incidents — `GET /api/v1/incidents`
+What the time-scrubber offers to replay. An Incident opens on the first `raised` Alert and closes on the `cleared` that leaves no Alert raised. Incidents are built from the history on every request, never stored: whatever the history holds, the Incidents follow.
+
+```bash
+curl http://127.0.0.1:8080/api/v1/incidents
+```
+
+```jsonc
+{
+  "incidents": [
+    {
+      "incident_id": 1,
+      "start": "2026-10-05T14:23:00Z",   // ts of the Alert that opened it
+      "end": "2026-10-05T14:23:50Z",     // ts of the cleared that closed it, null while it goes on
+      "ongoing": false,                  // true until every Alert is cleared
+      "alerts": 8,                       // raised and cleared alike
+      "kinds": ["gas", "presence"],      // in the order they first came
+      "peak": "critical"                 // the highest severity it reached
+    }
+  ]
+}
+```
+
+- Oldest first, numbered from 1 in the order they started. The numbers hold as long as no Alert comes in dated before the latest Incident.
+- Alerts pair by `alert_id`, as for the `Status`: an Alert raised again on the same `alert_id` (warning → critical → warning) needs one `cleared`, and it stays one Alert to close. Alerts of every Sentinel and every source count.
+- The reference scenario — gas nominal → warning → critical → warning → nominal, and the PIR detecting someone twice meanwhile — is 8 Alerts and 1 Incident.
+- A `cleared` with no Incident going on opens nothing and closes nothing.
+- Nothing ever raised gives `{ "incidents": [] }`.
+
+## Replay — `GET /api/v1/incidents/:incident_id`
+What the Twin replays of one Incident.
+
+```bash
+curl http://127.0.0.1:8080/api/v1/incidents/1
+```
+
+```jsonc
+{
+  "incident": { "incident_id": 1, "start": "…", "end": "…", "ongoing": false, /* as in the list */ },
+  "records": [
+    { "type": "alert",     "payload": { /* alert object */ } },
+    { "type": "telemetry", "payload": { /* telemetry snapshot */ } }
+  ]
+}
+```
+
+| Response | When |
+|---|---|
+| `200` | The Incident, then its Alerts and the telemetry from its `start` to its `end`, both included, oldest first — the same frames, in the same order, as `GET /api/v1/history`. An Incident going on runs up to its latest record |
+| `400` | `incident_id` is not a whole number from 1 |
+| `404` | No Incident has this number |
+
+- Only the Incident's own Alerts are in: when it opens on the instant the one before closed, or closes on the instant the next opens, their Alerts are left out. The telemetry of those instants stays in.
+- The schemas are in [`src/contract.ts`](src/contract.ts): `IncidentsSchema`, `IncidentReplaySchema`, `IncidentSchema`.
+- The mock feed is not recorded, so it makes no Incident.
+
+> No Operator session yet: whoever reaches the API can list and replay the Incidents.
+
 ## Actuator commands — `POST /api/v1/commands`
 The Operator's way to the Alarm. The API stamps the command with a `cmd_id` and a `ts`, then publishes it on `command/<sentinel>/actuator`, over the same MQTTS connection the telemetry comes in on.
 
@@ -169,6 +227,7 @@ The body is the Actuator command of [`../docs/ARCHITECTURE.md`](../docs/ARCHITEC
 - [ ] MQTT subscriber: Sentinel Alerts → normalizer
 - [x] DB writer (telemetry + Alert history)
 - [x] `GET /api/v1/history` for the time-scrubber
+- [x] Incidents: `GET /api/v1/incidents` and their replay
 - [x] Status engine
 - [ ] Operator login + session middleware + `GET /api/v1/auth/check`
 - [x] WebSocket event bus
