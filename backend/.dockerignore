@@ -1,0 +1,8 @@
+# Only package*.json, the tsconfigs and src/ go into the image.
+node_modules
+dist
+data
+test
+.env
+.env.*
+*.log
