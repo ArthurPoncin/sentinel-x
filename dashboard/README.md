@@ -34,7 +34,7 @@ cd backend && npm install && OPERATOR_AUTH=off MOCK_FEED=true HISTORY_FILE=:memo
 # terminal 2 — the app on http://localhost:5173 (/ and /twin)
 cd dashboard && npm install && npm run dev
 
-npm test            # store, feed client, config, gas level
+npm test            # store, feed client, config, gas level, scene mapper
 npm run build       # typecheck + production bundle in dist/
 ```
 
@@ -61,9 +61,9 @@ src/
 │   │   ├── hooks/           # useLiveFeed(selector)
 │   │   ├── components/      # LiveFeedProvider, ConnectionIndicator, FeedInspector
 │   │   └── index.ts         # the feature's public API
-│   └── twin/                # #20 — the 3D Outpost
-│       ├── components/      # OutpostTwin: the react-three-fiber scene
-│       ├── utils/           # gasLevel(air): how far the gas Reading is from calm, 0–1
+│   └── twin/                # #20, #12 — the 3D Outpost
+│       ├── components/      # OutpostTwin: the react-three-fiber scene, drawn from SceneProps
+│       ├── utils/           # toScene(state): the scene's props, pure · gasLevel(air): 0–1
 │       └── index.ts
 └── shared/
     ├── contract/            # re-exports backend/src/contract.ts — never redeclare a schema
@@ -84,7 +84,7 @@ src/
 | `features/telemetry` | #21 gas curve, #11 every curve | `/` |
 | `features/status` · `features/alerts` | #11 Status badge, active Alerts | `/` |
 | `features/camera` · `features/actuators` | #14 camera feed, actuator panel | `/` |
-| `features/twin` (started) | #12 scene mapper, #13 / #23 intrusion, pulse | `/twin` |
+| `features/twin` (started) | #13 / #23 intrusion, pulse | `/twin` |
 | `features/replay` | #15 time-scrubber, scenario mode (rebuilds state with `apply`) | `/twin` |
 
 ## Live feed — `features/live-feed`
@@ -106,15 +106,21 @@ const history = useLiveFeed((state) => state.history)                // every fr
 ## Digital Twin — `features/twin`
 
 ```tsx
-import { OutpostTwin } from '@/features/twin'
+import { OutpostTwin, toScene } from '@/features/twin'
 
-const air = useLiveFeed((state) => state.latestTelemetry?.readings.air ?? null)
-<OutpostTwin air={air} />
+const status = useLiveFeed((state) => state.status)
+const latestTelemetry = useLiveFeed((state) => state.latestTelemetry)
+const activeAlerts = useLiveFeed((state) => state.activeAlerts)
+const scene = useMemo(() => toScene({ status, latestTelemetry, activeAlerts }), [status, latestTelemetry, activeAlerts])
+<OutpostTwin scene={scene} />
 ```
 
+- `toScene(state)` turns the live state into what the scene shows, and is all the scene reads: pure, tested without WebGL. It gives the Enclosure's color and glow (gas), the Status's color grade, the drivers to pulse (active `predictive` Alerts) and where the intruder stands (last active `intrusion`'s `x_norm`). The pulse and the intruder are not drawn yet (#13).
+- The `Status` grades the whole scene — sky, light, perimeter ring: green `nominal`, amber `elevated`, red `critical`. It follows the Command Post's Status, never the readings.
 - The Enclosure goes from grey to red as `readings.air` rises, and lights the ground around it. It follows the telemetry, not the Alerts: it moves before any `gas` Alert is raised.
 - `gasLevel(air)` gives the share of the way from calm to critical, 0–1. Its two bounds, `CALM_AIR` (200) and `CRITICAL_AIR` (620), are those of the mock feed: tune them to the MQ-2's calibration when the Sentinel sends its own Readings.
-- The feature takes its data as props: `app/routes/twin.tsx` reads the feed and hands it over.
+- Colors and glow ease toward the scene's: a snapshot a second fades in, it does not jump.
+- The feature takes its data as props: `app/routes/twin.tsx` reads the feed, maps it with `toScene` and hands it over. `TwinState` asks for the live-feed state's fields by shape, so a replayed state (time-scrubber) feeds it the same way.
 
 ## TODO
 - [x] App shell + live feed (WebSocket client, store, hook) — #10
@@ -122,7 +128,7 @@ const air = useLiveFeed((state) => state.latestTelemetry?.readings.air ?? null)
 - [ ] Charts + Status + Alerts — #21, #11
 - [ ] Camera panel + actuator control panel — #14
 - [x] 3D Outpost whose Enclosure reacts to gas — #20
-- [ ] Scene mapper + Status color — #12
+- [x] Scene mapper + Status color — #12
 - [ ] Intruder placement (`x_norm` → perimeter arc), pulse — #13, #23
 - [ ] Time-scrubber + scenario mode — #15
 - [ ] CI: build + smoke render — #16
