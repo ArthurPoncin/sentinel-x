@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AlertSchema, FrameSchema } from '../src/contract.js'
+import { AlertSchema, CommandRequestSchema, CommandSchema, FrameSchema } from '../src/contract.js'
 
 // The examples of docs/ARCHITECTURE.md, verbatim.
 const telemetry = {
@@ -30,6 +30,15 @@ const detailOf = {
   intrusion: { x_norm: 0.42, confidence: 0.88, bbox: [120, 80, 60, 180] },
   predictive: { anomaly_score: 0.91, drivers: ['temp_slope', 'air_slope'] },
   tamper: { magnitude: 1.4, axis: 'y' },
+}
+
+const command = {
+  cmd_id: 'c9f8e7',
+  sentinel: 'sentinel-01',
+  actuator: 'buzzer',
+  action: 'on',
+  params: { pattern: 'siren', led: 'red' },
+  ts: '2026-10-05T14:23:10Z',
 }
 
 describe('contract', () => {
@@ -114,5 +123,44 @@ describe('contract', () => {
 
   it('rejects an unknown frame type', () => {
     expect(FrameSchema.safeParse({ type: 'heartbeat', payload: {} }).success).toBe(false)
+  })
+
+  it('accepts the documented actuator command', () => {
+    expect(CommandSchema.parse(command)).toEqual(command)
+  })
+
+  it('accepts a command without params, or with only some of them', () => {
+    const { params: _params, ...bare } = command
+
+    expect(CommandSchema.parse(bare)).toEqual(bare)
+    expect(CommandSchema.parse({ ...bare, params: { led: 'red' } })).toEqual({ ...bare, params: { led: 'red' } })
+  })
+
+  it.each([
+    ['actuator', 'laser'],
+    ['action', 'toggle'],
+    ['ts', '05/10/2026 14:23'],
+    ['params', { volume: 11 }],
+  ])('rejects a command whose %s is %j', (field, value) => {
+    expect(CommandSchema.safeParse({ ...command, [field]: value }).success).toBe(false)
+  })
+
+  it.each(['cmd_id', 'sentinel', 'actuator', 'action', 'ts'])('rejects a command without its %s', (field) => {
+    expect(CommandSchema.safeParse({ ...command, [field]: undefined }).success).toBe(false)
+  })
+
+  it.each(['sentinel-01/actuator', '+', '#', 'sentinel 01', ''])(
+    'rejects a command for "%s", which is not one topic level',
+    (sentinel) => {
+      expect(CommandSchema.safeParse({ ...command, sentinel }).success).toBe(false)
+    },
+  )
+
+  it('takes the request of the Operator without cmd_id and ts, and refuses it with either', () => {
+    const { cmd_id, ts, ...request } = command
+
+    expect(CommandRequestSchema.parse(request)).toEqual(request)
+    expect(CommandRequestSchema.safeParse({ ...request, cmd_id }).success).toBe(false)
+    expect(CommandRequestSchema.safeParse({ ...request, ts }).success).toBe(false)
   })
 })

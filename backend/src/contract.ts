@@ -72,6 +72,35 @@ export const StatusSchema = z.strictObject({
 })
 export type Status = z.infer<typeof StatusSchema>
 
+export const ActuatorSchema = z.enum(['buzzer', 'speaker', 'led'])
+export type Actuator = z.infer<typeof ActuatorSchema>
+
+export const CommandActionSchema = z.enum(['on', 'off', 'pattern'])
+export type CommandAction = z.infer<typeof CommandActionSchema>
+
+// What the Operator sends to POST /api/v1/commands.
+export const CommandRequestSchema = z.strictObject({
+  // Becomes one level of the topic, command/<sentinel>/actuator: no separator, no wildcard.
+  sentinel: z.string().regex(/^[\w-]{1,64}$/),
+  actuator: ActuatorSchema,
+  action: CommandActionSchema,
+  params: z
+    .strictObject({
+      pattern: z.string().min(1).max(32).optional(),
+      led: z.string().min(1).max(32).optional(),
+    })
+    .optional(),
+})
+export type CommandRequest = z.infer<typeof CommandRequestSchema>
+
+// What the Sentinel reads on command/<id>/actuator: the request, stamped by the api.
+export const CommandSchema = z.strictObject({
+  cmd_id: z.string().min(1),
+  ...CommandRequestSchema.shape,
+  ts: z.iso.datetime(),
+})
+export type Command = z.infer<typeof CommandSchema>
+
 export const FrameSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('telemetry'), payload: TelemetrySchema }),
   z.strictObject({ type: z.literal('alert'), payload: AlertSchema }),
