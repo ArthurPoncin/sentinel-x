@@ -14,7 +14,10 @@ export const TelemetrySchema = z.strictObject({
 })
 export type Telemetry = z.infer<typeof TelemetrySchema>
 
-export const StatusLevelSchema = z.enum(['nominal', 'elevated', 'critical'])
+export const SeveritySchema = z.enum(['info', 'warning', 'critical'])
+export type Severity = z.infer<typeof SeveritySchema>
+
+export const StatusLevelSchema =z.enum(['nominal', 'elevated', 'critical'])
 export type StatusLevel = z.infer<typeof StatusLevelSchema>
 
 export const StatusSchema = z.strictObject({
