@@ -1,9 +1,11 @@
 import { z } from 'zod'
 import type { ServerConfig } from './server.js'
 
-export interface Config extends ServerConfig {
+export interface Config extends Omit<ServerConfig, 'history'> {
   host: string
   port: number
+  // SQLite file of the history, or `:memory:` to keep it in the process only.
+  historyFile: string
 }
 
 const EnvSchema = z.object({
@@ -11,6 +13,7 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().int().min(0).max(65535).default(8080),
   MOCK_FEED: z.enum(['true', 'false']).default('false'),
   MOCK_FEED_INTERVAL_MS: z.coerce.number().int().positive().default(1000),
+  HISTORY_FILE: z.string().min(1).default('data/history.sqlite'),
 })
 
 // Read only when MQTT_URL is set: it turns MQTT on, and the rest comes with it.
@@ -37,11 +40,12 @@ function mqttConfig(env: Record<string, string | undefined>): Config['mqtt'] {
 }
 
 export function loadConfig(env: Record<string, string | undefined>): Config {
-  const { HOST, PORT, MOCK_FEED, MOCK_FEED_INTERVAL_MS } = read(EnvSchema, env)
+  const { HOST, PORT, MOCK_FEED, MOCK_FEED_INTERVAL_MS, HISTORY_FILE } = read(EnvSchema, env)
   return {
     host: HOST,
     port: PORT,
     mockFeed: MOCK_FEED === 'true' ? { intervalMs: MOCK_FEED_INTERVAL_MS } : false,
     mqtt: mqttConfig(env),
+    historyFile: HISTORY_FILE,
   }
 }
