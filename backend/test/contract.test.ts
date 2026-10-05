@@ -10,7 +10,7 @@ const telemetry = {
     humidity: 44.0,
     air: 180,
     pir: false,
-    sound: 1350,
+    sound: 0.02,
   },
 }
 

@@ -9,7 +9,7 @@ import { gasAlert, intrusionAlert } from './support/alerts.js'
 function telemetry(ts: string, air = 180): HistoryRecord {
   return {
     type: 'telemetry',
-    payload: { sentinel: 'sentinel-01', ts, readings: { temp: 31.2, humidity: 44, air, pir: false, sound: 1350 } },
+    payload: { sentinel: 'sentinel-01', ts, readings: { temp: 31.2, humidity: 44, air, pir: false, sound: 0.02 } },
   }
 }
 

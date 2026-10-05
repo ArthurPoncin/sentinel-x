@@ -15,7 +15,7 @@ function snapshot(air = 180): Telemetry {
   return {
     sentinel: 'sentinel-01',
     ts: '2026-10-05T14:23:00Z',
-    readings: { temp: 31.2, humidity: 44, air, pir: false, sound: 1350 },
+    readings: { temp: 31.2, humidity: 44, air, pir: false, sound: 0.02 },
   }
 }
 
@@ -51,10 +51,10 @@ describe('Sentinel telemetry over MQTTS', () => {
     })
   })
 
-  it('subscribes to the telemetry of every Sentinel, and to nothing else', async () => {
+  it('subscribes to the telemetry and Alerts of every Sentinel, and to nothing else', async () => {
     const { broker } = await startOutpost()
 
-    expect(broker.subscriptions).toEqual(['sentinel/+/telemetry'])
+    await vi.waitFor(() => expect(broker.subscriptions).toEqual(['sentinel/+/telemetry', 'sentinel/+/alert']))
   })
 
   it('names the Sentinel after the topic, whatever the payload claims', async () => {

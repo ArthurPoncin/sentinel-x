@@ -28,8 +28,8 @@ The face of Sentinel-X and our **"wow" centerpiece**. See [`../docs/DIGITAL-TWIN
 Node ≥ 22. Start the mock feed first, then the app:
 
 ```bash
-# terminal 1 — the Command Post API playing its scripted gas leak
-cd backend && npm install && MOCK_FEED=true npm run dev
+# terminal 1 — the Command Post API playing its scripted scenario (gas leak, clap, intruder)
+cd backend && npm install && OPERATOR_AUTH=off MOCK_FEED=true HISTORY_FILE=:memory: npm run dev
 
 # terminal 2 — the app on http://localhost:5173 (/ and /twin)
 cd dashboard && npm install && npm run dev
@@ -101,7 +101,7 @@ const history = useLiveFeed((state) => state.history)                // every fr
 
 ## TODO
 - [x] App shell + live feed (WebSocket client, store, hook) — #10
-- [ ] Operator login (open point in #9)
+- [ ] Operator login screen: the API is ready (`POST /api/v1/auth/login`, `GET /api/v1/auth/check`, see [`../backend/README.md`](../backend/README.md#operator-session))
 - [ ] Charts + Status + Alerts — #21, #11
 - [ ] Camera panel + actuator control panel — #14
 - [ ] 3D Outpost scene + data bindings — #20, #12
