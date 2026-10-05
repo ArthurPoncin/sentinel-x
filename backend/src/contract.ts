@@ -125,3 +125,34 @@ export type HistoryQuery = z.infer<typeof HistoryQuerySchema>
 // Body of GET /api/v1/history: the records of the range, oldest first.
 export const HistorySchema = z.strictObject({ records: z.array(HistoryRecordSchema) })
 export type History = z.infer<typeof HistorySchema>
+
+// An Incident: from the first `raised` Alert until every Alert raised since is `cleared`. Built
+// from the history, never stored.
+export const IncidentSchema = z.strictObject({
+  // Numbered from 1 in the order they started.
+  incident_id: z.number().int().positive(),
+  // ts of the Alert that opened it.
+  start: z.iso.datetime(),
+  // ts of the `cleared` that closed it; null while it is still going on.
+  end: z.iso.datetime().nullable(),
+  ongoing: z.boolean(),
+  // How many Alerts it holds, raised and cleared alike.
+  alerts: z.number().int().positive(),
+  // The kinds of its Alerts, in the order they first came.
+  kinds: z.array(AlertKindSchema),
+  // The highest severity it reached.
+  peak: SeveritySchema,
+})
+export type Incident = z.infer<typeof IncidentSchema>
+
+// Body of GET /api/v1/incidents: every Incident, oldest first.
+export const IncidentsSchema = z.strictObject({ incidents: z.array(IncidentSchema) })
+export type Incidents = z.infer<typeof IncidentsSchema>
+
+// Path of GET /api/v1/incidents/:incident_id.
+export const IncidentParamsSchema = z.object({ incident_id: z.coerce.number().int().positive() })
+
+// Body of GET /api/v1/incidents/:incident_id: the Incident, and what the Twin replays of it — its
+// Alerts and the telemetry of its span, oldest first.
+export const IncidentReplaySchema = z.strictObject({ incident: IncidentSchema, records: z.array(HistoryRecordSchema) })
+export type IncidentReplay = z.infer<typeof IncidentReplaySchema>
