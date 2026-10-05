@@ -81,7 +81,10 @@ describe('mock feed toggle', () => {
       // Parsing doubles as the check that everything on the wire honours the contract.
       const frames = client.frames.map((frame) => FrameSchema.parse(frame))
       const statuses = frames.flatMap((frame) => (frame.type === 'status' ? [frame.payload.status] : []))
-      expect(statuses.join(' → ')).toContain('elevated → critical → nominal')
+      // Every Alert sends the Status it leads to, changed or not: keep the changes.
+      const changes = statuses.filter((status, index) => status !== statuses[index - 1])
+      expect(changes.join(' → ')).toContain('elevated → critical → elevated → nominal')
+      expect(frames.some((frame) => frame.type === 'alert' && frame.payload.kind === 'intrusion')).toBe(true)
       expect(frames.filter((frame) => frame.type === 'telemetry').length).toBeGreaterThan(10)
     })
   })

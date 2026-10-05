@@ -28,7 +28,7 @@ Node ≥ 22.
 
 ```bash
 npm install
-MOCK_FEED=true npm run dev   # live feed on ws://127.0.0.1:8080/ws, no hardware needed
+MOCK_FEED=true HISTORY_FILE=:memory: npm run dev   # live feed on ws://127.0.0.1:8080/ws, no hardware needed
 npm test
 ```
 
@@ -39,7 +39,7 @@ All the configuration comes from environment variables. `npm run dev` and `npm s
 | `HOST` | `127.0.0.1` | Listen address (`0.0.0.0` to serve other machines; the image sets it) |
 | `PORT` | `8080` | Listen port |
 | `CORS_ORIGINS` | — | Origins allowed to call the API from a browser, comma-separated, e.g. `https://192.168.X.1,http://localhost:5173`. Unset: none — see [CORS](#cors) |
-| `MOCK_FEED` | `false` | `true` plays a scripted gas leak in a loop: `nominal` → `elevated` → `critical` → `nominal` |
+| `MOCK_FEED` | `false` | `true` plays the scripted scenario in a loop — see [Mock feed](#mock-feed) |
 | `MOCK_FEED_INTERVAL_MS` | `1000` | Delay between two mock telemetry snapshots |
 | `MQTT_URL` | — | Broker shared with the Sentinels, e.g. `mqtts://mosquitto:8883`. Unset: no telemetry in, no command out. Only `mqtts://` is accepted |
 | `MQTT_USERNAME` | `api` | MQTT user |
@@ -82,6 +82,25 @@ The dashboard and the Twin call their own origin: the reverse proxy on the Pi, t
 A front-end served elsewhere — the Twin on its own port, the dashboard without the Vite proxy — is let in by adding its origin to `CORS_ORIGINS`: scheme, host and port, no path (`http://localhost:5173`, `https://192.168.X.1`). Only `GET` and `POST`, cookies allowed for the Operator session to come. `*` is refused.
 
 CORS does not apply to the WebSocket: `/ws` will check the `Origin` with the Operator session.
+
+## Mock feed
+`MOCK_FEED=true` plays a scripted scenario in a loop, one tick every `MOCK_FEED_INTERVAL_MS`, for the front-ends to work without a Sentinel, a broker or the AI services. Each tick is a telemetry snapshot, plus the Alerts the producers would send on it. They go through the same pipelines as the real ones: paired by `alert_id`, recorded in the history, broadcast, `Status` recomputed. Switching to the live feed changes nothing on the front.
+
+One loop, 40 ticks (40 s by default), every kind of Alert in it:
+
+| Ticks | What happens | `Status` |
+|---|---|---|
+| 0–5 | Calm: `air` ≈ 185, `temp` ≈ 31 °C, `sound` ≈ 0.03 | `nominal` |
+| 6–9 | `predictive` flags the drift (`anomaly_score`, `drivers`) before any threshold | `elevated` |
+| 10–14 | `gas` warning; someone walks past the PIR (`presence`) | `elevated` |
+| 15–19 | `gas` critical, `air` up to 840, then `thermal` at 38.5 °C; `pir: true` | `critical` |
+| 20–23 | `gas` back to warning, `thermal` cleared | `elevated` |
+| 24–27 | `gas` and `predictive` cleared: the leak's Incident closes (10 Alerts) | `nominal` |
+| 28–29 | A clap: `sound` 0.82, `noise` raised (`info`) then cleared | `nominal` |
+| 32–36 | An `intrusion` crossing the camera's field, `x_norm` 0.15 → 0.75, then gone | `critical` → `nominal` |
+
+- `alert_id`s are unique to each loop and each run (`mock-<run>-<loop>-<kind>`). The intruder keeps its `alert_id` while it moves: each new position is a `raised` that replaces the last.
+- Every frame validates against the contract, like those of the real producers.
 
 ## Sentinel telemetry and Alerts — MQTTS
 With `MQTT_URL` set, the API logs in to the broker over TLS, checks its certificate against the team CA and nothing else, and subscribes to `sentinel/+/telemetry` and `sentinel/+/alert`. Every snapshot a Sentinel publishes goes out as a `telemetry` frame on `/ws`. Every Alert goes through the same pipeline as those of `POST /api/v1/alerts`: paired by `alert_id`, recorded in the history, broadcast as an `alert` frame, then the `Status` it leads to.
@@ -136,7 +155,7 @@ Post the same `alert_id` with `"state": "cleared"` to end the Alert. Posting `ra
 > No service token yet: the caller is the `source` it declares in the body. Once tokens are in, `source` comes from the token and the body's value is ignored.
 
 ## History — `GET /api/v1/history`
-Feeds the time-scrubber. Every telemetry snapshot that comes in over MQTTS and every Alert the API accepts is written to an SQLite file (`HISTORY_FILE`) before it goes out on `/ws`. The mock feed is not recorded: nothing scripted ends up in the history.
+Feeds the time-scrubber. Every telemetry snapshot that comes in over MQTTS and every Alert the API accepts is written to an SQLite file (`HISTORY_FILE`) before it goes out on `/ws`. So is the [mock feed](#mock-feed), which goes through the same pipelines: run it on `HISTORY_FILE=:memory:` or a file of its own to keep it out of the real history.
 
 ```bash
 curl 'http://127.0.0.1:8080/api/v1/history?from=2026-10-05T14:20:00Z&to=2026-10-05T14:30:00Z'
@@ -224,7 +243,7 @@ curl http://127.0.0.1:8080/api/v1/incidents/1
 
 - Only the Incident's own Alerts are in: when it opens on the instant the one before closed, or closes on the instant the next opens, their Alerts are left out. The telemetry of those instants stays in.
 - The schemas are in [`src/contract.ts`](src/contract.ts): `IncidentsSchema`, `IncidentReplaySchema`, `IncidentSchema`.
-- The mock feed is not recorded, so it makes no Incident.
+- The mock feed makes three Incidents per loop, like a real Outpost would.
 
 > No Operator session yet: whoever reaches the API can list and replay the Incidents.
 

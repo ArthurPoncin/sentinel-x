@@ -28,8 +28,8 @@ The face of Sentinel-X and our **"wow" centerpiece**. See [`../docs/DIGITAL-TWIN
 Node ≥ 22. Start the mock feed first, then the app:
 
 ```bash
-# terminal 1 — the Command Post API playing its scripted gas leak
-cd backend && npm install && MOCK_FEED=true npm run dev
+# terminal 1 — the Command Post API playing its scripted scenario (gas leak, clap, intruder)
+cd backend && npm install && MOCK_FEED=true HISTORY_FILE=:memory: npm run dev
 
 # terminal 2 — the app on http://localhost:5173 (/ and /twin)
 cd dashboard && npm install && npm run dev
