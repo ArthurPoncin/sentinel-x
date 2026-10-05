@@ -9,7 +9,7 @@ export const TelemetrySchema = z.strictObject({
     humidity: z.number(),
     air: z.number(),
     pir: z.boolean(),
-    accel: z.strictObject({ x: z.number(), y: z.number(), z: z.number() }),
+    sound: z.number(),
   }),
 })
 export type Telemetry = z.infer<typeof TelemetrySchema>
@@ -20,7 +20,7 @@ export type Severity = z.infer<typeof SeveritySchema>
 export const AlertSourceSchema = z.enum(['esp32', 'vision', 'predictive'])
 export type AlertSource = z.infer<typeof AlertSourceSchema>
 
-export const AlertKindSchema = z.enum(['gas', 'thermal', 'presence', 'tamper', 'intrusion', 'predictive'])
+export const AlertKindSchema = z.enum(['gas', 'thermal', 'presence', 'noise', 'intrusion', 'predictive'])
 export type AlertKind = z.infer<typeof AlertKindSchema>
 
 export const AlertStateSchema = z.enum(['raised', 'cleared'])
@@ -49,7 +49,7 @@ export const AlertSchema = z.discriminatedUnion('kind', [
   alertOf('gas', NoDetailSchema),
   alertOf('thermal', NoDetailSchema),
   alertOf('presence', NoDetailSchema),
-  alertOf('tamper', z.strictObject({ magnitude: z.number(), axis: z.enum(['x', 'y', 'z']) })),
+  alertOf('noise', NoDetailSchema),
   alertOf(
     'intrusion',
     z.strictObject({
@@ -72,7 +72,7 @@ export const StatusSchema = z.strictObject({
 })
 export type Status = z.infer<typeof StatusSchema>
 
-export const ActuatorSchema = z.enum(['buzzer', 'speaker', 'led'])
+export const ActuatorSchema = z.enum(['buzzer', 'led'])
 export type Actuator = z.infer<typeof ActuatorSchema>
 
 export const CommandActionSchema = z.enum(['on', 'off', 'pattern'])

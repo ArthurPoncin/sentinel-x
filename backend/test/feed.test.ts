@@ -8,7 +8,7 @@ function telemetryFrame(air: number): Frame {
     payload: {
       sentinel: 'sentinel-01',
       ts: '2026-10-05T14:23:00Z',
-      readings: { temp: 31.2, humidity: 44, air, pir: false, accel: { x: 0.01, y: -0.02, z: 0.98 } },
+      readings: { temp: 31.2, humidity: 44, air, pir: false, sound: 1350 },
     },
   }
 }

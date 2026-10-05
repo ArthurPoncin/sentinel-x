@@ -11,7 +11,7 @@ function telemetry(air: number): Extract<Frame, { type: 'telemetry' }> {
     payload: {
       sentinel: 'sentinel-01',
       ts,
-      readings: { temp: 31.2, humidity: 44, air, pir: false, accel: { x: 0.01, y: -0.02, z: 0.98 } },
+      readings: { temp: 31.2, humidity: 44, air, pir: false, sound: 1350 },
     },
   }
 }
