@@ -156,3 +156,14 @@ export const IncidentParamsSchema = z.object({ incident_id: z.coerce.number().in
 // Alerts and the telemetry of its span, oldest first.
 export const IncidentReplaySchema = z.strictObject({ incident: IncidentSchema, records: z.array(HistoryRecordSchema) })
 export type IncidentReplay = z.infer<typeof IncidentReplaySchema>
+
+// The api's link to the broker: `off` when it runs without one (MQTT_URL unset).
+export const BrokerStateSchema = z.enum(['connected', 'disconnected', 'off'])
+export type BrokerState = z.infer<typeof BrokerStateSchema>
+
+// Body of GET /health: `degraded` while a broker is set but out of reach, with a 503.
+export const HealthSchema = z.strictObject({
+  status: z.enum(['ok', 'degraded']),
+  broker: BrokerStateSchema,
+})
+export type Health = z.infer<typeof HealthSchema>
