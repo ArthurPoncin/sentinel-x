@@ -4,15 +4,16 @@ A **live 3D replica** of the Sentinel-X outpost rendered in the dashboard (Three
 
 ## What maps to what
 
-| Real signal | Source pillar | Twin reaction |
+| Real signal (Alert `kind` / telemetry) | Source node | Twin reaction |
 |---|---|---|
-| Temperature / humidity (DHT22) | Edge | Heat shimmer / color grade on the box; thermal gauge |
-| Gas / smoke (MQ-2) | Edge | Box glows red, particle haze intensity scales with ppm |
-| Presence (PIR) | Edge | Perimeter zone flashes amber |
-| Webcam intrusion (YOLO) | AI | Animated **intruder marker** appears at detected position in the 3D perimeter |
-| Predictive anomaly (Isolation Forest) | AI | The drifting **component pulses orange** *before* the critical threshold |
-| Actuator state (buzzer/LED/OLED) | Edge | Twin mirrors the physical box state (LED color, buzzer ring) |
-| Secure link health (MQTTS) | Cyber/Infra | Connection "nerve" line green (encrypted) / red (down) |
+| Temperature / humidity (DHT) | Sentinel | Heat shimmer / color grade on the box; thermal gauge |
+| Gas (`air`) | Sentinel | Box glows red, particle haze scales with the reading |
+| Presence (`pir`) | Sentinel | Perimeter zone flashes amber |
+| Tamper (`accel`) | Sentinel | The box itself shakes / flashes red |
+| Intrusion (vision) | AI Worker | **Intruder marker** placed along the perimeter arc from `x_norm` |
+| Predictive drift | AI Worker | The drifting **component pulses orange** *before* the critical threshold |
+| `Status` (nominal/elevated/critical) | Command Post | The scene's overall color grade |
+| Alarm state (buzzer/MP3/LED) | Sentinel | Twin mirrors the physical box (LED color, siren ring) |
 
 ## Signature features
 

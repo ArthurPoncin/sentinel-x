@@ -1,25 +1,30 @@
 # ai/ — Local AI & Data
 
-**Owner:** Dev 2 · **Language:** Python
+**Node:** AI Worker (laptop) · **Language:** Python
 
-Standalone AI running on the Local Server. Two jobs: **see** (webcam intrusion detection) and **predict** (correlation-based maintenance anomalies).
+Heavy inference the Command Post (Pi 4) can't run itself. Two jobs: **see** (intrusion on the camera stream) and **predict** (correlation-based maintenance). Results are posted to the API as Alerts.
 
 ## Vision — intrusion detection
-- Capture the USB webcam feed directly on the Local Server.
-- Resize/throttle frames (**≤ 640x480**, target **< 100ms/frame**).
+- Pull the **CSI camera stream** from the Command Post over wired Ethernet (the camera is physically on the Pi).
+- Resize/throttle frames (**≤ 640x480**, target **< 100 ms/frame**).
 - Detect a suspicious human presence (YOLOv8-tiny or OpenCV shape detection).
-- Emit intrusion events (with position) to the API → spawns the intruder in the 3D twin.
+- Emit an `intrusion` Alert with **`x_norm`** (normalized horizontal position 0→1) so the 3D twin can place the intruder along the perimeter.
 
 ## Predictive maintenance
-- Analyze sensor time-series streamed from the ESP8266.
-- **No static thresholds** (`if temp>40` is forbidden). Use a learned model (Isolation Forest / Random Forest, scikit-learn).
-- Goal: catch a *correlation* — e.g. slow temp rise + micro gas deviation → predict an incident *before* the critical threshold.
+- Analyze the sensor time-series (telemetry from the Sentinel via the API/DB).
+- **No static thresholds** (`if temp>40` is forbidden). Isolation Forest on an enriched vector: `[temp, humidity, air]` **+ velocity features** `[Δtemp/dt, Δair/dt]` + rolling means.
+- Goal: catch the *correlation* — slow temp rise + micro air deviation → predict an incident **before** the critical threshold. Emits a `predictive` Alert with `anomaly_score`.
+- Train on **nominal data only**, captured Tuesday (2–4 h). No labelled incidents needed.
+
+## Output
+Both jobs → `HTTPS POST /api/v1/alerts` using the unified Alert schema in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#alert--sentinelidalert-and-body-of-post-apiv1alerts).
 
 ## TODO
-- [ ] Webcam capture + resize pipeline
-- [ ] Inference model + event emitter
-- [ ] Time-series ingestion from API/DB
-- [ ] Train anomaly model on captured sensor data
-- [ ] Latency check (< 100ms/frame)
+- [ ] Pull + decode the Pi camera stream (Ethernet)
+- [ ] Vision inference + `x_norm` extraction
+- [ ] Latency check (< 100 ms/frame)
+- [ ] Tuesday nominal-data capture session
+- [ ] Feature engineering + train Isolation Forest
+- [ ] Alert POST client
 
 > Model weights (`*.pt`, `*.onnx`) are gitignored — share via a release or drive.

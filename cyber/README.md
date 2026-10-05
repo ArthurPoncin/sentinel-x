@@ -3,13 +3,12 @@
 **Owner:** Infra 2 · transversal (everyone secures their own brick)
 
 ## Secure the flows (mandatory)
-- End-to-end encryption: **MQTT → MQTTS (TLS)**, HTTPS for the dashboard/API.
-- Team CA + certs for the ESP8266 ↔ broker link (coordinate with Infra 1 & Dev 1).
+- End-to-end encryption: **MQTT → MQTTS (TLS)** for the Sentinel↔Command Post link, **HTTPS** for the AI Worker → API and the dashboard.
+- Team CA + certs for the Sentinel (ESP32) to broker link (coordinate with Infra & firmware).
 
 ## System hardening
-- Close all non-required ports (UFW / iptables).
-- SSH: **asymmetric keys only**, no password auth.
-- Strict Docker daemon privilege isolation.
+- Harden the **Command Post (Pi)** — the main pentest target: close all non-required ports (UFW / iptables), SSH **keys only** (no passwords), strict Docker daemon privilege isolation.
+- **AI Worker (laptop) hygiene** before Thursday's pentest: it is on the attack subnet, so use a dedicated `sentinel` account and, Wednesday night, close personal sessions (`gh auth logout`, clear the SSH agent, sign out of the browser).
 
 ## Offensive audit (Thursday — cross-team pentest)
 - Authorized engagement against other tables in the workshop (and defending ours).
