@@ -1,61 +1,12 @@
 import { Canvas, useFrame } from '@react-three/fiber'
 import { useMemo, useRef, useState } from 'react'
-import {
-  type AmbientLight,
-  Color,
-  HalfFloatType,
-  MathUtils,
-  type MeshBasicMaterial,
-  type MeshStandardMaterial,
-  NeutralToneMapping,
-  type PointLight,
-  type SpotLight,
-} from 'three'
+import { type AmbientLight, Color, HalfFloatType, type MeshBasicMaterial, NeutralToneMapping, type SpotLight } from 'three'
 import { usePixelRatio } from '../hooks/use-pixel-ratio'
-import { GAS_COLOR, type SceneProps, type StatusGrade } from '../utils/scene'
+import { ease } from '../utils/easing'
+import type { SceneProps, StatusGrade } from '../utils/scene'
+import { Enclosure } from './enclosure'
 import { Halo } from './halo'
 import { OrbitCamera } from './orbit-camera'
-
-// How fast what is on screen eases toward the scene: a snapshot a second fades in, it does not jump.
-const EASE = 4
-
-// Eases `color` toward `target` over the frame, at the same pace as MathUtils.damp.
-function ease(color: Color, target: Color, delta: number) {
-  color.lerp(target, 1 - Math.exp(-EASE * delta))
-}
-
-function Enclosure({ color, glow }: SceneProps['enclosure']) {
-  const material = useRef<MeshStandardMaterial>(null)
-  const light = useRef<PointLight>(null)
-  const target = useMemo(() => new Color(color), [color])
-  // Set once: a color prop would be reapplied on every change and jump past the easing.
-  const [initial] = useState(color)
-  const shown = useRef(glow)
-
-  useFrame((_, delta) => {
-    shown.current = MathUtils.damp(shown.current, glow, EASE, delta)
-    if (material.current) {
-      ease(material.current.color, target, delta)
-      material.current.emissiveIntensity = shown.current * 0.6
-    }
-    if (light.current) light.current.intensity = shown.current * 8
-  })
-
-  return (
-    <group>
-      <mesh position={[0, 0.08, 0]} castShadow receiveShadow>
-        <boxGeometry args={[2, 0.16, 1.5]} />
-        <meshStandardMaterial color="#233040" roughness={0.8} />
-      </mesh>
-      <mesh position={[0, 0.66, 0]} castShadow receiveShadow>
-        <boxGeometry args={[1.6, 1, 1.1]} />
-        <meshStandardMaterial ref={material} color={initial} emissive={GAS_COLOR} emissiveIntensity={0} roughness={0.5} />
-      </mesh>
-      {/* What the gas throws on the ground around the Enclosure. */}
-      <pointLight ref={light} position={[0, 0.66, 0]} color={GAS_COLOR} intensity={0} distance={7} />
-    </group>
-  )
-}
 
 // The studio the Outpost stands in, and the Status's color grade over it: the light, the perimeter ring.
 // The lights stay put while the camera orbits, so the shadows do not sweep across the ground.
@@ -117,8 +68,8 @@ export interface OutpostTwinProps {
 }
 
 // The Outpost in 3D, lit like a product in a studio on a black background: the Status grades the light and
-// the perimeter ring, the Enclosure turns red as gas rises. It fills its parent: give that the size the Twin
-// should have on screen.
+// the perimeter ring, the Enclosure turns red as gas rises, shows the Status on its LCD and breathes it on
+// its LED ring. It fills its parent: give that the size the Twin should have on screen.
 export function OutpostTwin({ scene }: OutpostTwinProps) {
   const frame = useRef<HTMLDivElement>(null)
   const dpr = usePixelRatio(frame)

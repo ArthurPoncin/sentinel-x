@@ -6,8 +6,9 @@ import { autoOrbitSpeed, type CameraTouch } from '../utils/auto-orbit'
 
 // Seconds the automatic orbit takes to go once around the Outpost.
 const ORBIT_PERIOD = 80
-// The camera turns around this point and cannot be panned away from it, so the Outpost stays centred.
-const TARGET = [0, 0.5, 0] as const
+// The camera turns around this point, halfway up the Enclosure on its mast, and cannot be panned away
+// from it, so the Outpost stays centred.
+const TARGET = [0, 1.2, 0] as const
 // Close enough to read the Enclosure, far enough to still see the whole perimeter.
 const MIN_DISTANCE = 4
 const MAX_DISTANCE = 12

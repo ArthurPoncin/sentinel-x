@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Alert, StatusLevel } from '@/shared/contract'
 import { CALM_AIR, CRITICAL_AIR } from './gas-level'
-import { CALM_COLOR, GAS_COLOR, mix, STATUS_GRADES, type TwinState, toScene } from './scene'
+import { CALM_COLOR, GAS_COLOR, LCD_TEXT, mix, STATUS_GRADES, type TwinState, toScene } from './scene'
 
 const ts = '2026-10-05T14:23:00.000Z'
 
@@ -52,7 +52,12 @@ describe('mix', () => {
 describe('toScene', () => {
   it('shows a calm, nominal Outpost before anything is received', () => {
     expect(toScene(state())).toEqual({
-      enclosure: { color: CALM_COLOR, glow: 0 },
+      enclosure: {
+        color: CALM_COLOR,
+        glow: 0,
+        lcd: { text: 'NOMINAL', color: STATUS_GRADES.nominal.perimeter },
+        ring: { color: STATUS_GRADES.nominal.perimeter },
+      },
       status: STATUS_GRADES.nominal,
       pulses: [],
       intruder: null,
@@ -60,12 +65,33 @@ describe('toScene', () => {
   })
 
   it('turns the Enclosure red and makes it glow as gas rises', () => {
-    expect(toScene(withAir(CALM_AIR)).enclosure).toEqual({ color: CALM_COLOR, glow: 0 })
-    expect(toScene(withAir((CALM_AIR + CRITICAL_AIR) / 2)).enclosure).toEqual({
+    expect(toScene(withAir(CALM_AIR)).enclosure).toMatchObject({ color: CALM_COLOR, glow: 0 })
+    expect(toScene(withAir((CALM_AIR + CRITICAL_AIR) / 2)).enclosure).toMatchObject({
       color: mix(CALM_COLOR, GAS_COLOR, 0.5),
       glow: 0.5,
     })
-    expect(toScene(withAir(CRITICAL_AIR)).enclosure).toEqual({ color: GAS_COLOR, glow: 1 })
+    expect(toScene(withAir(CRITICAL_AIR)).enclosure).toMatchObject({ color: GAS_COLOR, glow: 1 })
+  })
+
+  it.each<StatusLevel>(['nominal', 'elevated', 'critical'])(
+    'shows the %s Status on the LCD and breathes the LED ring in its color',
+    (level) => {
+      const { lcd, ring } = toScene(state({ status: level })).enclosure
+
+      expect(lcd).toEqual({ text: LCD_TEXT[level], color: STATUS_GRADES[level].perimeter })
+      expect(ring).toEqual({ color: STATUS_GRADES[level].perimeter })
+    },
+  )
+
+  it('writes each Status its own way on the LCD, in capitals as the real one does', () => {
+    expect(LCD_TEXT).toEqual({ nominal: 'NOMINAL', elevated: 'ELEVATED', critical: 'CRITICAL' })
+  })
+
+  it('keeps the LCD and the LED ring on the Status, whatever the gas', () => {
+    const { lcd, ring } = toScene({ ...withAir(CRITICAL_AIR), status: 'nominal' }).enclosure
+
+    expect(lcd.text).toBe('NOMINAL')
+    expect(ring.color).toBe(STATUS_GRADES.nominal.perimeter)
   })
 
   it.each<StatusLevel>(['nominal', 'elevated', 'critical'])('grades the scene by the %s Status', (level) => {
