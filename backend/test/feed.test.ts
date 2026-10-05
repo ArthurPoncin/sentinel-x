@@ -1,6 +1,6 @@
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { Frame, StatusLevel } from '../src/contract.js'
+import { type Frame, FrameSchema, type StatusLevel } from '../src/contract.js'
 import { buildServer } from '../src/server.js'
 import { connectClient } from './support/ws-client.js'
 
@@ -65,5 +65,26 @@ describe('live feed on /ws', () => {
     await vi.waitFor(() => {
       expect(dashboard.frames.slice(-3)).toEqual([telemetryFrame(180), telemetryFrame(420), telemetryFrame(700)])
     })
+  })
+
+  it('greets a client joining mid-stream with the current Status and the latest telemetry', async () => {
+    const { hub, connect } = await startServer()
+    hub.broadcast(telemetryFrame(180))
+    hub.broadcast(statusFrame('critical'))
+    hub.broadcast(telemetryFrame(700))
+
+    const late = await connect()
+
+    await vi.waitFor(() => expect(late.frames).toEqual([statusFrame('critical'), telemetryFrame(700)]))
+  })
+
+  it('greets a client with a nominal Status while nothing has happened yet', async () => {
+    const { connect } = await startServer()
+
+    const client = await connect()
+
+    await vi.waitFor(() => expect(client.frames).toHaveLength(1))
+    const greeting = FrameSchema.parse(client.frames[0])
+    expect(greeting).toMatchObject({ type: 'status', payload: { status: 'nominal' } })
   })
 })
