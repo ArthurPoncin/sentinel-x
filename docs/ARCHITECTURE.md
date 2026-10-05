@@ -163,6 +163,11 @@ The **single unified Alert schema**, emitted by the Sentinel and by the AI servi
 - **Body:** one Alert object (schema above), validated strictly: unknown fields rejected, enums enforced, max 16 KB.
 - **Response:** `202 Accepted` (persisted, broadcast over WebSocket, `Status` recomputed) · `400` invalid · `401` missing/bad token · `403` `kind` not allowed for this token · `413` too large · `429` rate-limited.
 
+### `GET /health`
+
+- **Callers:** Docker's healthcheck, inside the `api` container. The reverse proxy does **not** route it: it routes `/api` and `/ws` only.
+- `200` `{ "status": "ok", "broker": "connected" | "off" }`, `503` `{ "status": "degraded", "broker": "disconnected" }` while the broker is out of reach — see [`../backend/`](../backend/README.md#health--get-health).
+
 ### Operator endpoints (through the reverse proxy, HTTPS/WSS)
 
 | Endpoint | Purpose |
