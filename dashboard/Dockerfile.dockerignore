@@ -1,0 +1,6 @@
+# The build context is the repo root: send only what the dashboard build reads.
+*
+!backend/src/contract.ts
+!dashboard/
+dashboard/node_modules
+dashboard/dist

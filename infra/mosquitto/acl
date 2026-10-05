@@ -1,0 +1,15 @@
+# Who may read and write what (docs/ARCHITECTURE.md, Security model). setup.sh copies it next to
+# the password file, readable by the broker only.
+
+user sentinel-01
+topic write sentinel/sentinel-01/telemetry
+topic write sentinel/sentinel-01/alert
+topic read command/sentinel-01/actuator
+
+user api
+topic read sentinel/+/telemetry
+topic read sentinel/+/alert
+topic write command/+/actuator
+
+user predictive
+topic read sentinel/+/telemetry
