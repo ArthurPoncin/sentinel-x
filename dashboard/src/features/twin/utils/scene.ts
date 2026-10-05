@@ -22,7 +22,7 @@ export interface StatusGrade {
   light: string
   // The light from behind, on the edges: the studio's cold one when nominal, the Status's color otherwise.
   rim: string
-  // The ring that marks the perimeter.
+  // The ring around the socle.
   perimeter: string
 }
 

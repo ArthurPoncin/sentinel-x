@@ -1,5 +1,5 @@
-import { Canvas, useFrame } from '@react-three/fiber'
-import { useRef, useState } from 'react'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { useEffect, useRef, useState } from 'react'
 import {
   type AmbientLight,
   type DirectionalLight,
@@ -12,11 +12,15 @@ import { useColorFade } from '../hooks/use-fade'
 import { usePixelRatio } from '../hooks/use-pixel-ratio'
 import { FIELD_OF_VIEW } from '../utils/framing'
 import type { SceneProps, StatusGrade } from '../utils/scene'
+import { SITE } from '../utils/site'
 import { Enclosure } from './enclosure'
 import { Halo } from './halo'
 import { OrbitCamera } from './orbit-camera'
+import { Perimeter } from './perimeter'
+import { PowerPlant } from './power-plant'
+import { Socle } from './socle'
 
-// The studio the Outpost stands in, and the Status's color grade over it: every light, the perimeter ring.
+// The studio the Outpost stands in, and the Status's color grade over it: every light, the ring around the socle.
 // A new Status fades in, from whatever is on screen when it comes. The lights stay put while the camera
 // orbits, so the shadows do not sweep across the ground.
 function Grade({ light, rim, perimeter }: StatusGrade) {
@@ -50,27 +54,38 @@ function Grade({ light, rim, perimeter }: StatusGrade) {
         decay={0}
         intensity={3}
         castShadow
-        shadow-mapSize={[1024, 1024]}
-        shadow-radius={5}
+        // Fine enough for the maquette's small volumes: a wider blur shows its grain on the off-white walls.
+        shadow-mapSize={[2048, 2048]}
+        shadow-radius={3}
         shadow-bias={-0.0004}
       />
       {/* Rim light: low and from behind, it draws the edges out of the black. Cold until a Status colors it. */}
       <directionalLight ref={back} color={initial.rim} position={[-5, 2.2, -4.5]} intensity={2.4} />
       {/* Just enough fill for the faces neither light reaches. */}
       <ambientLight ref={fill} color={initial.light} intensity={0.06} />
-      <group rotation={[-Math.PI / 2, 0, 0]}>
-        <mesh receiveShadow>
-          <circleGeometry args={[3.2, 96]} />
-          <meshStandardMaterial color="#1a2430" roughness={0.9} />
-        </mesh>
-        <mesh position={[0, 0, 0.005]}>
-          <ringGeometry args={[3.14, 3.2, 96]} />
-          {/* Unlit: it shows the Status whatever the light, and the halo takes it for a light of its own. */}
-          <meshBasicMaterial ref={ring} color={initial.perimeter} />
-        </mesh>
-      </group>
+      <mesh position={[0, 0.005, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[SITE.socle.radius - 0.06, SITE.socle.radius, 128]} />
+        {/* Unlit: it shows the Status whatever the light, and the halo takes it for a light of its own. */}
+        <meshBasicMaterial ref={ring} color={initial.perimeter} />
+      </mesh>
     </>
   )
+}
+
+// Nothing that casts a shadow moves and the lights stay put: the shadows are drawn once, not on every
+// frame. A slice that moves what casts one asks for them again with `gl.shadowMap.needsUpdate = true`.
+function StillShadows() {
+  const gl = useThree((state) => state.gl)
+
+  useEffect(() => {
+    gl.shadowMap.autoUpdate = false
+    gl.shadowMap.needsUpdate = true
+    return () => {
+      gl.shadowMap.autoUpdate = true
+    }
+  }, [gl])
+
+  return null
 }
 
 export interface OutpostTwinProps {
@@ -81,10 +96,11 @@ export interface OutpostTwinProps {
   wholeStage?: boolean
 }
 
-// The Outpost in 3D, lit like a product in a studio on a black background: the Status grades the light and
-// the perimeter ring, the Enclosure turns red as gas rises, shows the Status on its LCD and breathes it on
-// its LED ring. Without its signal it all turns grey and says so: what it shows is no longer live. It fills
-// its parent: give that the size the Twin should have on screen.
+// The Outpost in 3D: a maquette of the site on its socle, lit like a product in a studio on a black
+// background. The Status grades the light and the ring around the socle; the Enclosure, at the site's
+// entrance, turns red as gas rises, shows the Status on its LCD and breathes it on its LED ring. Without its
+// signal it all turns grey and says so: what it shows is no longer live. It fills its parent: give that the
+// size the Twin should have on screen.
 export function OutpostTwin({ scene, wholeStage = false }: OutpostTwinProps) {
   const frame = useRef<HTMLDivElement>(null)
   const dpr = usePixelRatio(frame)
@@ -102,7 +118,14 @@ export function OutpostTwin({ scene, wholeStage = false }: OutpostTwinProps) {
       >
         <color attach="background" args={['#000000']} />
         <Grade {...scene.status} />
-        <Enclosure {...scene.enclosure} />
+        <StillShadows />
+        <Socle />
+        <PowerPlant />
+        <Perimeter />
+        {/* Where the site plan stands it, turned the way its lens looks. */}
+        <group position={[SITE.enclosure.x, 0, SITE.enclosure.z]} rotation={[0, SITE.enclosure.heading, 0]}>
+          <Enclosure {...scene.enclosure} />
+        </group>
         <OrbitCamera wholeStage={wholeStage} />
         <Halo saturation={scene.signalLost ? 0 : 1} />
       </Canvas>
