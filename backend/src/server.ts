@@ -33,6 +33,7 @@ import { listIncidents, replayIncident } from './incidents.js'
 import { startMockFeed } from './mock-feed.js'
 import { connectBroker, type MqttConfig } from './mqtt.js'
 import { startMqttIngress } from './mqtt-ingress.js'
+import { createRateLimit, type RateLimit } from './rate-limit.js'
 import { createTelemetryPipeline } from './telemetry.js'
 
 declare module 'fastify' {
@@ -77,8 +78,17 @@ const KIND_OF_SERVICE: Record<Service, AlertKind> = {
 }
 
 // Same body as the errors Fastify raises on its own (malformed JSON, body too large…).
-function refuse(reply: FastifyReply, statusCode: 400 | 401 | 403 | 404 | 503, error: string, message: string) {
+function refuse(reply: FastifyReply, statusCode: 400 | 401 | 403 | 404 | 429 | 503, error: string, message: string) {
   return reply.code(statusCode).send({ statusCode, error, message })
+}
+
+// Counts the request against `limit`: false, with a 429 sent, when it is over.
+function withinLimit(limit: RateLimit, key: string, reply: FastifyReply): boolean {
+  const waitMs = limit.take(key)
+  if (waitMs === 0) return true
+  reply.header('retry-after', Math.ceil(waitMs / 1000))
+  refuse(reply, 429, 'Too Many Requests', `Too many requests, try again in ${Math.ceil(waitMs / 1000)} s`)
+  return false
 }
 
 // Runs a feed from the moment the server is ready until it closes. `start` returns what stops it.
@@ -103,6 +113,13 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
   // The connection to the broker, once the server runs with one.
   let broker: MqttClient | undefined
 
+  // As in docs/ARCHITECTURE.md: login 5/min per IP, commands 2/s, alerts 20/s per token.
+  const limits = {
+    login: createRateLimit(5, 60_000),
+    commands: createRateLimit(2, 1000),
+    alerts: createRateLimit(20, 1000),
+  }
+
   const sessions = createSessions()
   const hasSession = (request: FastifyRequest) =>
     !config.operatorAuth || sessions.isOpen(cookieOf(request.headers.cookie, SESSION_COOKIE))
@@ -121,6 +138,7 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
   })
 
   app.post('/api/v1/auth/login', { bodyLimit: LOGIN_BODY_LIMIT }, async (request, reply) => {
+    if (!withinLimit(limits.login, request.ip, reply)) return reply
     const parsed = LoginSchema.safeParse(request.body)
     if (!parsed.success) return refuse(reply, 400, 'Bad Request', z.prettifyError(parsed.error))
     if (!config.operatorAuth) return reply.code(204).send()
@@ -161,6 +179,7 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
         reply.header('www-authenticate', 'Bearer')
         return refuse(reply, 401, 'Unauthorized', 'A service token is required')
       }
+      if (!withinLimit(limits.alerts, request.service, reply)) return reply
     },
   }
 
@@ -206,6 +225,7 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
   let commands: CommandRelay | undefined
 
   app.post('/api/v1/commands', { bodyLimit: COMMAND_BODY_LIMIT }, async (request, reply) => {
+    if (!withinLimit(limits.commands, 'operator', reply)) return reply
     const parsed = CommandRequestSchema.safeParse(request.body)
     if (!parsed.success) return refuse(reply, 400, 'Bad Request', z.prettifyError(parsed.error))
 
