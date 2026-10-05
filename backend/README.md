@@ -23,12 +23,42 @@ Rules in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#security-model-bind
 ## Contract
 Schemas, topics, endpoints, Status derivation: [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#json-schemas-the-contract--lock-monday-change-only-by-team-agreement). Lock Monday with firmware (Sentinel) and AI.
 
+## Run it
+Node ≥ 22.
+
+```bash
+npm install
+MOCK_FEED=true npm run dev   # live feed on ws://127.0.0.1:8080/ws, no hardware needed
+npm test
+```
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `HOST` | `127.0.0.1` | Listen address (`0.0.0.0` to serve other machines) |
+| `PORT` | `8080` | Listen port |
+| `MOCK_FEED` | `false` | `true` plays a scripted gas leak in a loop: `nominal` → `elevated` → `critical` → `nominal` |
+| `MOCK_FEED_INTERVAL_MS` | `1000` | Delay between two mock telemetry snapshots |
+
+## Live feed — `/ws`
+Every connected client receives the same frames (`telemetry` and `status` today, `alert` next). On connect, a client first gets the current `Status`, then the latest telemetry snapshot if there is one — the UI never starts blank.
+
+The schemas (zod) and their TypeScript types live in [`src/contract.ts`](src/contract.ts). Front-ends import them instead of redeclaring them — add `"@sentinel-x/backend": "file:../backend"` to the front-end's dependencies and run `npm run build` here:
+
+```ts
+import { FrameSchema, type Frame } from '@sentinel-x/backend/contract'
+
+socket.onmessage = (event) => {
+  const frame: Frame = FrameSchema.parse(JSON.parse(event.data))
+}
+```
+
 ## TODO
 - [ ] `POST /api/v1/alerts` + token auth + schema validation
 - [ ] MQTT subscriber → normalizer → DB writer
-- [ ] Status engine
+- [x] Status engine
 - [ ] Operator login + session middleware + `GET /api/v1/auth/check`
-- [ ] WebSocket event bus (session-checked)
+- [x] WebSocket event bus
+- [ ] Session + `Origin` check on the WebSocket upgrade
 - [ ] `POST /api/v1/commands` → MQTT publish
 - [ ] Rate limiting
 - [ ] `.env.example` (broker URL, DB URL, token/password placeholders — no secrets committed)
