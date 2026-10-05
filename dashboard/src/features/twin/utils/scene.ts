@@ -22,10 +22,14 @@ export interface StatusGrade {
 
 export interface SceneProps {
   enclosure: {
-    // The Enclosure's color, from grey when calm to red at critical gas.
+    // The body's color, from dark anodized when calm to red at critical gas.
     color: string
     // How bright it glows and lights the ground around it, 0–1: the gas level.
     glow: number
+    // What the LCD band shows, the Status, and the color it shows it in.
+    lcd: { text: string; color: string }
+    // The color the LED ring breathes in: the Status's.
+    ring: { color: string }
   }
   status: StatusGrade
   // The signals an active `predictive` Alert says are drifting (its `drivers`), each once.
@@ -34,7 +38,8 @@ export interface SceneProps {
   intruder: { x_norm: number } | null
 }
 
-export const CALM_COLOR = '#8a99a8'
+// Dark anodized metal: the Enclosure's body when the air is calm.
+export const CALM_COLOR = '#2c343e'
 export const GAS_COLOR = '#ff4d4f'
 
 export const STATUS_GRADES: Readonly<Record<StatusLevel, StatusGrade>> = {
@@ -55,6 +60,13 @@ export function mix(from: string, to: string, share: number): string {
   return `#${mixed.map((channel) => channel.toString(16).padStart(2, '0')).join('')}`
 }
 
+// What the Enclosure's LCD reads for each Status, as the real one does.
+export const LCD_TEXT: Readonly<Record<StatusLevel, string>> = {
+  nominal: 'NOMINAL',
+  elevated: 'ELEVATED',
+  critical: 'CRITICAL',
+}
+
 // The live state as the scene shows it: pure, no WebGL, so it is tested without a render.
 export function toScene(state: TwinState): SceneProps {
   const glow = gasLevel(state.latestTelemetry?.readings.air ?? null)
@@ -65,9 +77,16 @@ export function toScene(state: TwinState): SceneProps {
     if (alert.kind === 'intrusion') intruder = { x_norm: alert.detail.x_norm }
   }
 
+  const status = STATUS_GRADES[state.status]
+
   return {
-    enclosure: { color: mix(CALM_COLOR, GAS_COLOR, glow), glow },
-    status: STATUS_GRADES[state.status],
+    enclosure: {
+      color: mix(CALM_COLOR, GAS_COLOR, glow),
+      glow,
+      lcd: { text: LCD_TEXT[state.status], color: status.perimeter },
+      ring: { color: status.perimeter },
+    },
+    status,
     pulses: [...pulses],
     intruder,
   }

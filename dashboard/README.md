@@ -117,9 +117,9 @@ const scene = useMemo(() => toScene({ status, latestTelemetry, activeAlerts }), 
 <OutpostTwin scene={scene} />
 ```
 
-- `toScene(state)` turns the live state into what the scene shows, and is all the scene reads: pure, tested without WebGL. It gives the Enclosure's color and glow (gas), the Status's color grade, the drivers to pulse (active `predictive` Alerts) and where the intruder stands (last active `intrusion`'s `x_norm`). The pulse and the intruder are not drawn yet (#13).
+- `toScene(state)` turns the live state into what the scene shows, and is all the scene reads: pure, tested without WebGL. It gives the Enclosure's color and glow (gas), what its LCD reads and the color its LED ring breathes in (the Status), the Status's color grade, the drivers to pulse (active `predictive` Alerts) and where the intruder stands (last active `intrusion`'s `x_norm`). The pulse and the intruder are not drawn yet (#13).
 - The `Status` grades the whole scene — light, perimeter ring: green `nominal`, amber `elevated`, red `critical`. It follows the Command Post's Status, never the readings. The sky stays black on the stage (#30): the grade's `background` is no longer drawn.
-- The Enclosure goes from grey to red as `readings.air` rises, and lights the ground around it. It follows the telemetry, not the Alerts: it moves before any `gas` Alert is raised.
+- The Enclosure goes from dark anodized to red as `readings.air` rises, and lights the ground around it. It follows the telemetry, not the Alerts: it moves before any `gas` Alert is raised.
 - `gasLevel(air)` gives the share of the way from calm to critical, 0–1. Its two bounds, `CALM_AIR` (200) and `CRITICAL_AIR` (620), are those of the mock feed: tune them to the MQ-2's calibration when the Sentinel sends its own Readings.
 - Colors and glow ease toward the scene's: a snapshot a second fades in, it does not jump.
 - The feature takes its data as props: `app/routes/twin.tsx` reads the feed, maps it with `toScene` and hands it over. `TwinState` asks for the live-feed state's fields by shape, so a replayed state (time-scrubber) feeds it the same way.
@@ -133,6 +133,17 @@ const scene = useMemo(() => toScene({ status, latestTelemetry, activeAlerts }), 
 - **Camera** — it goes around the Outpost in 80 s. The Operator can turn it and zoom with the mouse, between bounds that keep the Outpost in frame (no panning, never under the ground); 3 s after they let go, the orbit picks up speed again. `autoOrbitSpeed` is that rule, as a pure function.
 - **Resolution** — `pixelRatio` caps the rendering at a pixel ratio of 2 and at 3 million pixels (`MAX_PIXELS`), whatever the screen. That budget was measured on an Iris Xe, where the Twin holds 60 images per second up to about 3.4 million pixels: raise it on a stronger GPU.
 
+**The Enclosure** (#31) — the Sentinel-X product itself, on a mast, at an exaggerated scale (`SCALE`) to stay readable from the back of the room. Built in code from bevelled volumes (`RoundedBoxGeometry`) and canvas-drawn textures, no external model.
+
+![The Enclosure, nominal](../docs/twin/enclosure-nominal.png)
+
+- **Front:** the LCD band, then the camera lens, the PIR dome, the mic grille. **Under the body:** the ventilated Probe compartment, louvres front and back, the DHT22 and the MQ-2 visible between them. **On top:** the buzzer and the LED ring around it. **Right side:** the engraving, *AetherCorp / SENTINEL-X / serial* (`ENGRAVING`).
+- **Parts to drive:** every Probe and actuator is a named object — `scene.getObjectByName(ENCLOSURE_PARTS.mq2)` — for the later slices: predictive pulse on `dht22` / `mq2` (#13), PIR flash, alarm on `ledRing` / `buzzer`.
+- **LCD:** shows `scene.enclosure.lcd.text` (`LCD_TEXT`: `NOMINAL`, `ELEVATED`, `CRITICAL`) in the Status's color. The text switches like a real LCD's, the color fades. Unlit, so it glows.
+- **LED ring:** breathes in the Status's color, one breath every `BREATH_PERIOD` (4 s), never below `BREATH_FLOOR` — `breath(t)` is pure and tested. The kit has no LED any more (`docs/ARCHITECTURE.md`): on the Twin, the ring is the Status light.
+- **Gas:** the body carries the glow of #20, and lights the ground from inside it.
+- **Camera:** the orbit now turns around the Enclosure's height (`TARGET` y = 1.2).
+
 ## TODO
 - [x] App shell + live feed (WebSocket client, store, hook) — #10
 - [ ] Operator login screen: the API is ready (`POST /api/v1/auth/login`, `GET /api/v1/auth/check`, see [`../backend/README.md`](../backend/README.md#operator-session))
@@ -141,6 +152,7 @@ const scene = useMemo(() => toScene({ status, latestTelemetry, activeAlerts }), 
 - [x] 3D Outpost whose Enclosure reacts to gas — #20
 - [x] Scene mapper + Status color — #12
 - [x] Twin full screen, in studio light, with an orbiting camera — #30
+- [x] The Enclosure, with its LCD and LED ring alive — #31
 - [ ] Intruder placement (`x_norm` → perimeter arc), pulse — #13, #23
 - [ ] Time-scrubber + scenario mode — #15
 - [ ] CI: build + smoke render — #16
