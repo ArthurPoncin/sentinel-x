@@ -5,6 +5,7 @@ import { createAlertPipeline, normalizeAlert } from './alerts.js'
 import type { AlertKind, AlertSource } from './contract.js'
 import { createHub, type Hub } from './hub.js'
 import { startMockFeed } from './mock-feed.js'
+import { type MqttConfig, startMqttIngress } from './mqtt-ingress.js'
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -15,6 +16,8 @@ declare module 'fastify' {
 export interface ServerConfig {
   // Plays the scripted scenario instead of waiting for a Sentinel; `false` turns it off.
   mockFeed: false | { intervalMs: number }
+  // The broker the Sentinels publish to; `false` leaves the MQTT ingress off.
+  mqtt: false | MqttConfig
 }
 
 const ALERT_BODY_LIMIT = 16 * 1024
@@ -28,6 +31,15 @@ const KIND_OF_SERVICE: Partial<Record<AlertSource, AlertKind>> = {
 // Same body as the errors Fastify raises on its own (malformed JSON, body too large…).
 function refuse(reply: FastifyReply, statusCode: 400 | 403, error: string, message: string) {
   return reply.code(statusCode).send({ statusCode, error, message })
+}
+
+// Runs a feed from the moment the server is ready until it closes. `start` returns what stops it.
+function whileRunning(app: FastifyInstance, start: () => () => void | Promise<void>) {
+  let stop: () => void | Promise<void> = () => {}
+  app.addHook('onReady', async () => {
+    stop = start()
+  })
+  app.addHook('onClose', async () => stop())
 }
 
 export async function buildServer(config: ServerConfig): Promise<FastifyInstance> {
@@ -58,11 +70,12 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
 
   if (config.mockFeed) {
     const { intervalMs } = config.mockFeed
-    let stop = () => {}
-    app.addHook('onReady', async () => {
-      stop = startMockFeed(hub, intervalMs)
-    })
-    app.addHook('onClose', async () => stop())
+    whileRunning(app, () => startMockFeed(hub, intervalMs))
+  }
+
+  if (config.mqtt) {
+    const broker = config.mqtt
+    whileRunning(app, () => startMqttIngress(hub, broker))
   }
 
   return app

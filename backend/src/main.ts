@@ -5,4 +5,6 @@ const config = loadConfig(process.env)
 const server = await buildServer(config)
 const address = await server.listen({ host: config.host, port: config.port })
 
-console.log(`Command Post API listening on ${address} (mock feed ${config.mockFeed ? 'on' : 'off'})`)
+const mockFeed = `mock feed ${config.mockFeed ? 'on' : 'off'}`
+const mqtt = `MQTT ingress ${config.mqtt ? 'on' : 'off'}`
+console.log(`Command Post API listening on ${address} (${mockFeed}, ${mqtt})`)
