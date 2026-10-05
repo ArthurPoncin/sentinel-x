@@ -1,47 +1,124 @@
 import { describe, expect, it } from 'vitest'
-import { type Frame, FrameSchema, type StatusLevel } from '../src/contract.js'
-import { mockTicks } from '../src/mock-feed.js'
+import { createAlertPipeline } from '../src/alerts.js'
+import { AlertSchema, type Frame, TelemetrySchema } from '../src/contract.js'
+import { createMemoryHistory } from '../src/history.js'
+import { listIncidents } from '../src/incidents.js'
+import { type MockTick, mockTicks } from '../src/mock-feed.js'
+import { createTelemetryPipeline } from '../src/telemetry.js'
 
-// Enough ticks to play the scenario several times over.
-function firstTicks(count = 100): Frame[][] {
-  const ticks: Frame[][] = []
-  for (const tick of mockTicks()) {
+// One loop of the scenario is 40 ticks.
+const LOOP = 40
+
+function firstTicks(count: number, run = 'test'): MockTick[] {
+  const ticks: MockTick[] = []
+  for (const tick of mockTicks(run)) {
     ticks.push(tick)
     if (ticks.length === count) break
   }
   return ticks
 }
 
+// Plays the ticks through the real pipelines, as the server does, and keeps what comes out.
+function play(ticks: MockTick[]) {
+  const frames: Frame[] = []
+  const hub = { broadcast: (frame: Frame) => frames.push(frame) }
+  const history = createMemoryHistory()
+  const telemetry = createTelemetryPipeline(hub, history)
+  const alerts = createAlertPipeline(hub, history)
+  for (const tick of ticks) {
+    telemetry.accept(tick.telemetry)
+    for (const alert of tick.alerts) alerts.accept(alert)
+  }
+  return { frames, history }
+}
+
+const alertsOf = (ticks: MockTick[]) => ticks.flatMap((tick) => tick.alerts)
+
 describe('mock feed script', () => {
-  it('walks the Status from nominal to elevated, critical and back to nominal, in a loop', () => {
-    const statuses = firstTicks()
-      .flat()
-      .flatMap((frame) => (frame.type === 'status' ? [frame.payload.status] : []))
-
-    expect(statuses.slice(0, 6)).toEqual(['elevated', 'critical', 'nominal', 'elevated', 'critical', 'nominal'])
-  })
-
-  it('raises the gas reading as the Status worsens', () => {
-    const air: Record<StatusLevel, number[]> = { nominal: [], elevated: [], critical: [] }
-    let status: StatusLevel = 'nominal'
-    for (const tick of firstTicks()) {
-      for (const frame of tick) if (frame.type === 'status') status = frame.payload.status
-      for (const frame of tick) if (frame.type === 'telemetry') air[status].push(frame.payload.readings.air)
-    }
-
-    expect(Math.max(...air.nominal)).toBeLessThan(Math.min(...air.elevated))
-    expect(Math.max(...air.elevated)).toBeLessThan(Math.min(...air.critical))
-  })
-
-  it('emits one telemetry snapshot per tick', () => {
-    for (const tick of firstTicks()) {
-      expect(tick.filter((frame) => frame.type === 'telemetry')).toHaveLength(1)
+  it('emits one telemetry snapshot per tick, and only what validates against the contract', () => {
+    for (const { telemetry, alerts } of firstTicks(3 * LOOP)) {
+      expect(TelemetrySchema.safeParse(telemetry)).toMatchObject({ success: true })
+      for (const alert of alerts) expect(AlertSchema.safeParse(alert)).toMatchObject({ success: true })
     }
   })
 
-  it('only emits frames that validate against the contract', () => {
-    for (const frame of firstTicks().flat()) {
-      expect(FrameSchema.safeParse(frame)).toMatchObject({ success: true })
-    }
+  it('sends every kind of Alert, each from the producer that owns it', () => {
+    const sources = Object.fromEntries(alertsOf(firstTicks(LOOP)).map((alert) => [alert.kind, alert.source]))
+
+    expect(sources).toEqual({
+      gas: 'esp32',
+      thermal: 'esp32',
+      presence: 'esp32',
+      noise: 'esp32',
+      intrusion: 'vision',
+      predictive: 'predictive',
+    })
+  })
+
+  it('walks the Status from nominal to elevated, critical and back, intruder included, in a loop', () => {
+    const { frames } = play(firstTicks(2 * LOOP))
+    const statuses = frames.flatMap((frame) => (frame.type === 'status' ? [frame.payload.status] : []))
+    // Consecutive duplicates removed: an Alert that leaves the Status as it was still sends it.
+    const changes = statuses.filter((status, index) => status !== statuses[index - 1])
+
+    const loop = ['elevated', 'critical', 'elevated', 'nominal', 'critical', 'nominal']
+    expect(changes).toEqual([...loop, ...loop])
+  })
+
+  it('clears every Alert it raised by the end of each loop', () => {
+    const { frames } = play(firstTicks(LOOP))
+    const last = frames.findLast((frame) => frame.type === 'status')
+
+    expect(last).toMatchObject({ payload: { status: 'nominal' } })
+  })
+
+  it('makes three Incidents a loop: the gas leak, the clap and the intruder', () => {
+    const { history } = play(firstTicks(LOOP))
+
+    expect(listIncidents(history)).toMatchObject([
+      { kinds: ['predictive', 'gas', 'presence', 'thermal'], peak: 'critical', alerts: 10, ongoing: false },
+      { kinds: ['noise'], peak: 'info', alerts: 2, ongoing: false },
+      { kinds: ['intrusion'], peak: 'critical', alerts: 5, ongoing: false },
+    ])
+  })
+
+  it('records the telemetry and the Alerts it plays in the history', () => {
+    const ticks = firstTicks(LOOP)
+    const { history } = play(ticks)
+    const range = { from: '2000-01-01T00:00:00Z', to: '2100-01-01T00:00:00Z' }
+
+    const records = history.query(range)
+    expect(records.filter((record) => record.type === 'telemetry')).toHaveLength(LOOP)
+    expect(records.filter((record) => record.type === 'alert')).toHaveLength(alertsOf(ticks).length)
+  })
+
+  it('gives each loop and each run alert_ids of its own', () => {
+    const [first, second] = [firstTicks(2 * LOOP, 'run-a'), firstTicks(LOOP, 'run-b')]
+    const ids = (ticks: MockTick[]) => [...new Set(alertsOf(ticks).map((alert) => alert.alert_id))]
+
+    const [firstLoop, secondLoop] = [ids(first.slice(0, LOOP)), ids(first.slice(LOOP))]
+    expect(secondLoop.filter((id) => firstLoop.includes(id))).toEqual([])
+    expect(ids(second).filter((id) => firstLoop.includes(id))).toEqual([])
+  })
+
+  it('walks the intruder across the field, left to right', () => {
+    const positions = alertsOf(firstTicks(LOOP)).flatMap((alert) =>
+      alert.kind === 'intrusion' && alert.state === 'raised' ? [alert.detail.x_norm] : [],
+    )
+
+    expect(positions.length).toBeGreaterThan(1)
+    expect(positions).toEqual([...positions].sort((a, b) => a - b))
+  })
+
+  it('raises the gas reading as the leak worsens, and the sound reading on the clap only', () => {
+    const ticks = firstTicks(LOOP)
+    const air = ticks.map((tick) => tick.telemetry.readings.air)
+    const sound = ticks.map((tick) => tick.telemetry.readings.sound)
+
+    expect(Math.max(...air)).toBeGreaterThan(600)
+    expect(air.at(-1)).toBeLessThan(200)
+    expect(sound.filter((level) => level > 0.5)).toHaveLength(1)
+    expect(Math.min(...sound)).toBeGreaterThanOrEqual(0)
+    expect(Math.max(...sound)).toBeLessThanOrEqual(1)
   })
 })

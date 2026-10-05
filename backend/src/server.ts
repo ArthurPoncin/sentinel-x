@@ -145,7 +145,7 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
 
   if (config.mockFeed) {
     const { intervalMs } = config.mockFeed
-    whileRunning(app, () => startMockFeed(hub, intervalMs))
+    whileRunning(app, () => startMockFeed({ telemetry, alerts }, intervalMs))
   }
 
   if (config.mqtt) {
