@@ -5,7 +5,9 @@
 Orchestrates the whole server stack on the Pi and owns the isolated table network.
 
 ## Plug and play
-On a Raspberry Pi 4 with Raspberry Pi OS Bookworm, plugged into Ethernet the first time, with the ESP32 on one of its USB ports:
+Step by step, from a blank SD card to the dashboard: [`../docs/INSTALLATION-PI.md`](../docs/INSTALLATION-PI.md).
+
+On a Raspberry Pi 4 with a recent Raspberry Pi OS (64-bit), plugged into Ethernet the first time, with the ESP32 on one of its USB ports:
 
 ```bash
 git clone https://github.com/ArthurPoncin/sentinel-x.git && cd sentinel-x

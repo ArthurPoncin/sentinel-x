@@ -77,7 +77,7 @@ flowchart LR
 
 **Every channel is encrypted and authenticated**: MQTTS (TLS) with per-device credentials and ACLs between the Sentinel and the broker, HTTPS/WSS with an Operator session for the dashboard. Only two service ports reach the table network (443, 8883). The stack runs via **Docker-Compose** on the Pi, on an **isolated `192.168.X.0/24` subnet** behind its own WPA2 Wi-Fi access point.
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/DIGITAL-TWIN.md`](docs/DIGITAL-TWIN.md) for the deep dives, and [`docs/SCOPE.md`](docs/SCOPE.md) for the demo scenario and build tiers (MVP → wow).
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/DIGITAL-TWIN.md`](docs/DIGITAL-TWIN.md) for the deep dives, and [`docs/SCOPE.md`](docs/SCOPE.md) for the demo scenario and build tiers (MVP → wow). To set up the Pi and the Sentinel, step by step: [`docs/INSTALLATION-PI.md`](docs/INSTALLATION-PI.md).
 
 ---
 
