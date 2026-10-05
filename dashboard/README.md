@@ -34,7 +34,7 @@ cd backend && npm install && OPERATOR_AUTH=off MOCK_FEED=true HISTORY_FILE=:memo
 # terminal 2 — the app on http://localhost:5173 (/ and /twin)
 cd dashboard && npm install && npm run dev
 
-npm test            # store, feed client, config
+npm test            # store, feed client, config, gas level
 npm run build       # typecheck + production bundle in dist/
 ```
 
@@ -55,12 +55,16 @@ src/
 │   ├── layout.tsx
 │   └── routes/              # operator.tsx, twin.tsx — assemble features, no logic
 ├── features/
-│   └── live-feed/           # #10 — the socket, the store, the hook
-│       ├── api/             # connectFeed(): WebSocket client, backoff, drops bad frames
-│       ├── stores/          # apply(state, event): pure reducer + tiny external store
-│       ├── hooks/           # useLiveFeed(selector)
-│       ├── components/      # LiveFeedProvider, ConnectionIndicator, FeedInspector
-│       └── index.ts         # the feature's public API
+│   ├── live-feed/           # #10 — the socket, the store, the hook
+│   │   ├── api/             # connectFeed(): WebSocket client, backoff, drops bad frames
+│   │   ├── stores/          # apply(state, event): pure reducer + tiny external store
+│   │   ├── hooks/           # useLiveFeed(selector)
+│   │   ├── components/      # LiveFeedProvider, ConnectionIndicator, FeedInspector
+│   │   └── index.ts         # the feature's public API
+│   └── twin/                # #20 — the 3D Outpost
+│       ├── components/      # OutpostTwin: the react-three-fiber scene
+│       ├── utils/           # gasLevel(air): how far the gas Reading is from calm, 0–1
+│       └── index.ts
 └── shared/
     ├── contract/            # re-exports backend/src/contract.ts — never redeclare a schema
     └── config/              # feedUrl()
@@ -80,7 +84,7 @@ src/
 | `features/telemetry` | #21 gas curve, #11 every curve | `/` |
 | `features/status` · `features/alerts` | #11 Status badge, active Alerts | `/` |
 | `features/camera` · `features/actuators` | #14 camera feed, actuator panel | `/` |
-| `features/twin` | #20 3D Outpost, #12 scene mapper, #13 / #23 intrusion, pulse | `/twin` |
+| `features/twin` (started) | #12 scene mapper, #13 / #23 intrusion, pulse | `/twin` |
 | `features/replay` | #15 time-scrubber, scenario mode (rebuilds state with `apply`) | `/twin` |
 
 ## Live feed — `features/live-feed`
@@ -99,12 +103,26 @@ const history = useLiveFeed((state) => state.history)                // every fr
 - On every (re)connection the backend sends its snapshot (current Status + latest telemetry) and the active Alerts start over, since some may have cleared while the socket was down.
 - Types come from `@/shared/contract`: `Telemetry`, `Alert`, `Status`, `Frame`…
 
+## Digital Twin — `features/twin`
+
+```tsx
+import { OutpostTwin } from '@/features/twin'
+
+const air = useLiveFeed((state) => state.latestTelemetry?.readings.air ?? null)
+<OutpostTwin air={air} />
+```
+
+- The Enclosure goes from grey to red as `readings.air` rises, and lights the ground around it. It follows the telemetry, not the Alerts: it moves before any `gas` Alert is raised.
+- `gasLevel(air)` gives the share of the way from calm to critical, 0–1. Its two bounds, `CALM_AIR` (200) and `CRITICAL_AIR` (620), are those of the mock feed: tune them to the MQ-2's calibration when the Sentinel sends its own Readings.
+- The feature takes its data as props: `app/routes/twin.tsx` reads the feed and hands it over.
+
 ## TODO
 - [x] App shell + live feed (WebSocket client, store, hook) — #10
 - [ ] Operator login screen: the API is ready (`POST /api/v1/auth/login`, `GET /api/v1/auth/check`, see [`../backend/README.md`](../backend/README.md#operator-session))
 - [ ] Charts + Status + Alerts — #21, #11
 - [ ] Camera panel + actuator control panel — #14
-- [ ] 3D Outpost scene + data bindings — #20, #12
+- [x] 3D Outpost whose Enclosure reacts to gas — #20
+- [ ] Scene mapper + Status color — #12
 - [ ] Intruder placement (`x_norm` → perimeter arc), pulse — #13, #23
 - [ ] Time-scrubber + scenario mode — #15
 - [ ] CI: build + smoke render — #16
