@@ -1,6 +1,6 @@
 # dashboard/ — Web UI & 3D Digital Twin
 
-**Node:** served by the Command Post (Pi) through the reverse proxy (HTTPS/WSS), rendered in the Operator's browser · **Stack:** Vite + React + TypeScript, react-three-fiber (Three.js) for the Twin
+**Node:** served by the Command Post (Pi) through the reverse proxy (HTTPS/WSS), rendered in the Operator's browser · **Stack:** Vite + React + TypeScript, Tailwind CSS v4 + [shadcn/ui](https://ui.shadcn.com/docs/components) (Recharts for the charts), react-three-fiber (Three.js) for the Twin
 
 The face of Sentinel-X and our **"wow" centerpiece**. See [`../docs/DIGITAL-TWIN.md`](../docs/DIGITAL-TWIN.md).
 
@@ -46,6 +46,9 @@ The app always talks to its **own origin** (`/ws`, `/api`): the Vite dev server 
 | Variable | Default | Purpose |
 |---|---|---|
 | `BACKEND_URL` | `http://127.0.0.1:8080` | Command Post API that `/ws` and `/api` are proxied to in `dev` and `preview` (e.g. the Pi's address). Set it in `.env` (see `.env.example`). |
+| `CAMERA_URL` | — | The `vision` service's MJPEG stream that `/camera` is proxied to in `dev` and `preview`. Unset: the camera panel shows "unavailable" and retries every 5 s. |
+
+Run the backend with `OPERATOR_AUTH=on` (and an `OPERATOR_PASSWORD_HASH`) to get the login screen; with `OPERATOR_AUTH=off` the app goes straight in.
 
 ## Structure — feature-driven
 
@@ -62,8 +65,15 @@ src/
 │   │   ├── api/             # connectFeed(): WebSocket client, backoff, drops bad frames
 │   │   ├── stores/          # apply(state, event): pure reducer + tiny external store
 │   │   ├── hooks/           # useLiveFeed(selector)
-│   │   ├── components/      # LiveFeedProvider, ConnectionIndicator, FeedInspector
+│   │   ├── components/      # LiveFeedProvider, ConnectionIndicator
 │   │   └── index.ts         # the feature's public API
+│   ├── auth/                # AuthGate (login screen until a session exists), SignOutButton
+│   ├── status/              # StatusPanel, StatusBadge — the Status the backend computes
+│   ├── telemetry/           # #21 #11 — ReadingTiles, Gas / Climate / Sound charts, toSeries()
+│   ├── alerts/              # #11 — ActiveAlerts, AlertLog, AlertToasts
+│   ├── incidents/           # ThreatOverview, IncidentTable, useIncidents() on GET /api/v1/incidents
+│   ├── camera/              # #14 — CameraPanel on /camera, intruder marker from x_norm
+│   ├── actuators/           # #14 — ActuatorPanel, POST /api/v1/commands
 │   └── twin/                # #20, #12, #30, #31, #32, #33, #40, #13, #36, #34, #35, #37, #23 — the Outpost as a maquette, on its studio stage
 │       ├── components/      # OutpostTwin: the scene, drawn from SceneProps · Enclosure · OrbitCamera · Halo
 │       │                    # Socle · PowerPlant · Perimeter · Steam: the site, drawn from SITE
@@ -87,7 +97,10 @@ src/
 │       └── index.ts
 └── shared/
     ├── contract/            # re-exports backend/src/contract.ts — never redeclare a schema
-    └── config/              # feedUrl() · captureMode() · STATUS_COLORS
+    ├── config/              # feedUrl() · captureMode() · STATUS_COLORS
+    ├── api/                 # getJson / postJson on the app's own origin
+    ├── lib/                 # cn(), labels, Status/severity colors, time formats
+    └── ui/                  # shadcn/ui components (components.json points the CLI here)
 ```
 
 **Rules**
@@ -97,13 +110,12 @@ src/
 - Logic goes in pure functions next to their tests (`*.test.ts`), so it is tested without a browser; components stay thin.
 - Imports use the `@/` alias for `src/`.
 
+- UI building blocks come from shadcn/ui: `npx shadcn@latest add <component>` writes them to `src/shared/ui/`. Colors are tokens in `app/styles.css` (dark only); `nominal` / `elevated` / `critical` are Tailwind colors too (`text-critical`, `bg-nominal/10`…).
+
 **Features to come**
 
 | Feature folder | Tickets | On |
 |---|---|---|
-| `features/telemetry` | #21 gas curve, #11 every curve | `/` |
-| `features/status` · `features/alerts` | #11 Status badge, active Alerts | `/` |
-| `features/camera` · `features/actuators` | #14 camera feed, actuator panel | `/` |
 | `features/twin` (started) | #38 / #39 final intrusion and drift | `/twin` |
 | `features/replay` | #15 time-scrubber, scenario mode (rebuilds state with `apply`) | `/twin` |
 
@@ -257,11 +269,25 @@ const history = useLiveFeed((state) => state.history)
 - **Whole in frame** — `<OutpostTwin wholeStage />` stands the camera back until the whole stage holds in the frame, whatever its shape: `wholeStageDistance(aspect)` fits a sphere around the stage (`STAGE_RADIUS`, the ring around the socle plus room for its halo) in the narrower field of view, so it holds all the way around the orbit and at any tilt. The camera can still be turned by hand; it no longer zooms.
 - Anything added to the stage further out than the ring around the socle needs a larger `STAGE_RADIUS`.
 
+## Operator view — `/`
+
+| Panel | Feature | Data |
+|---|---|---|
+| Outpost Status, top-bar badge | `status` | `status` frames; "Connecting…" / "Signal lost" while the feed is down |
+| Reading tiles (with the change over 30 s) | `telemetry` | latest `telemetry` frame |
+| Gas, temperature & humidity, noise curves (last 5 min) | `telemetry` | `telemetry` frames of the live history |
+| Camera, intruder marker at `x_norm` | `camera` | `GET /camera` (MJPEG), active `intrusion` Alert |
+| Active Alerts, toast on each new or escalated Alert | `alerts` | active Alerts |
+| Alarm control (siren, buzzer off, red/green LED, LEDs off) | `actuators` | `POST /api/v1/commands`; the request is checked against the contract before it leaves |
+| Threats: Incidents, neutralized, under way, mean time to nominal, Incidents per kind | `incidents` | `GET /api/v1/incidents`, fetched again after each Alert and every 15 s |
+| Latest Incidents | `incidents` | same |
+| Alert log | `alerts` | `alert` frames of the live history |
+
 ## TODO
 - [x] App shell + live feed (WebSocket client, store, hook) — #10
-- [ ] Operator login screen: the API is ready (`POST /api/v1/auth/login`, `GET /api/v1/auth/check`, see [`../backend/README.md`](../backend/README.md#operator-session))
-- [ ] Charts + Status + Alerts — #21, #11
-- [ ] Camera panel + actuator control panel — #14
+- [x] Operator login screen (`POST /api/v1/auth/login`, `GET /api/v1/auth/check`)
+- [x] Charts + Status + Alerts — #21, #11
+- [x] Camera panel + actuator control panel — #14 (the `/camera` route in the reverse proxy and the firmware's pattern / LED names are still to agree on)
 - [x] 3D Outpost whose Enclosure reacts to gas — #20
 - [x] Scene mapper + Status color — #12
 - [x] Twin full screen, in studio light, with an orbiting camera — #30
