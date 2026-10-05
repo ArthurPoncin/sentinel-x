@@ -1,0 +1,61 @@
+# === Secrets & credentials — NEVER commit (hard rule from the brief) ===
+*.env
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+secrets/
+certs/
+credentials*
+id_rsa*
+*.priv
+
+# === Python (ai/) ===
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.ipynb_checkpoints/
+# AI model weights (large binaries — share via release/drive, not git)
+*.pt
+*.onnx
+*.weights
+*.h5
+
+# === Node / JS (backend/, dashboard/) ===
+node_modules/
+dist/
+build/
+.next/
+*.local
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# === PlatformIO / firmware ===
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# === Docker / infra ===
+*.log
+volumes/
+data/
+
+# === OS / editors ===
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# === Media (large) — keep teaser/renders out of git ===
+*.mp4
+*.mov
+*.raw
