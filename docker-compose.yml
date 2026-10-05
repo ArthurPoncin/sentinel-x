@@ -1,0 +1,93 @@
+# The Command Post stack, on the Pi. From the repo root, once infra/setup.sh has made the secrets:
+#   docker compose up -d --build
+# Only the reverse proxy (443) and the broker (8883) are reachable from the table network; the
+# rest only talk to each other, on a network with no way out. See infra/README.md.
+
+x-hardened: &hardened
+  restart: unless-stopped
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  read_only: true
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+services:
+  reverse-proxy:
+    <<: *hardened
+    build: infra/caddy
+    image: sentinel-x/reverse-proxy
+    ports: ["443:8443"]
+    volumes:
+      - ./infra/secrets/caddy/proxy.crt:/certs/proxy.crt:ro
+      - ./infra/secrets/caddy/proxy.key:/certs/proxy.key:ro
+    tmpfs: ["/config:mode=1777", "/data:mode=1777"]
+    networks: [edge, internal]
+    depends_on: [api, dashboard]
+
+  mosquitto:
+    <<: *hardened
+    image: eclipse-mosquitto:2.0
+    user: "1883:1883"
+    ports: ["8883:8883"]
+    volumes:
+      - ./infra/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./infra/secrets/ca.crt:/mosquitto/config/certs/ca.crt:ro
+      # broker certificate and key, password file, ACL: readable by the broker only.
+      - ./infra/secrets/mosquitto:/mosquitto/config/auth:ro
+    networks: [edge, internal]
+
+  api:
+    <<: *hardened
+    build: backend
+    image: sentinel-x/api
+    env_file: infra/secrets/api.env
+    environment:
+      MQTT_URL: mqtts://mosquitto:8883
+      MQTT_USERNAME: api
+      MQTT_CA_FILE: /certs/ca.crt
+      # MOCK_FEED=true docker compose up -d: the scripted scenario until the Sentinel is there.
+      # It is recorded in the history like the real thing.
+      MOCK_FEED: ${MOCK_FEED:-false}
+    volumes:
+      - ./infra/secrets/ca.crt:/certs/ca.crt:ro
+      - api-data:/data
+    tmpfs: [/tmp]
+    networks: [internal]
+    depends_on: [mosquitto]
+
+  dashboard:
+    <<: *hardened
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    image: sentinel-x/dashboard
+    tmpfs: ["/config:mode=1777", "/data:mode=1777"]
+    networks: [internal]
+
+  # Not written yet. Each joins the internal network only; vision gets the ZIF camera through
+  # `devices:` and serves the annotated feed the reverse proxy routes under /camera/.
+  # vision:
+  #   <<: *hardened
+  #   build: ai/vision
+  #   devices: [/dev/video0, /dev/media0, /dev/dma_heap]
+  #   environment: { ALERTS_URL: http://api:8080/api/v1/alerts }
+  #   env_file: infra/secrets/vision.env        # VISION_TOKEN
+  #   networks: [internal]
+  # predictive:
+  #   <<: *hardened
+  #   build: ai/predictive
+  #   environment: { MQTT_URL: mqtts://mosquitto:8883, ALERTS_URL: http://api:8080/api/v1/alerts }
+  #   env_file: infra/secrets/predictive.env    # MQTT password, PREDICTIVE_TOKEN
+  #   networks: [internal]
+
+volumes:
+  # The history (SQLite): telemetry and Alerts, for the time-scrubber.
+  api-data:
+
+networks:
+  # The published ports' side: the table network reaches the proxy and the broker through it.
+  edge:
+  # Between the services only, no route out.
+  internal:
+    internal: true
