@@ -34,7 +34,7 @@ cd backend && npm install && OPERATOR_AUTH=off MOCK_FEED=true HISTORY_FILE=:memo
 # terminal 2 — the app on http://localhost:5173 (/ and /twin)
 cd dashboard && npm install && npm run dev
 
-npm test            # store, feed client, config, gas level, scene mapper, automatic orbit, pixel ratio, framing
+npm test            # store, feed client, config, gas level, scene mapper, fades, automatic orbit, pixel ratio, framing
 npm run build       # typecheck + production bundle in dist/
 ```
 
@@ -63,16 +63,16 @@ src/
 │   │   ├── hooks/           # useLiveFeed(selector)
 │   │   ├── components/      # LiveFeedProvider, ConnectionIndicator, FeedInspector
 │   │   └── index.ts         # the feature's public API
-│   └── twin/                # #20, #12, #30, #40 — the 3D Outpost, on its studio stage
+│   └── twin/                # #20, #12, #30, #33, #40 — the 3D Outpost, on its studio stage
 │       ├── components/      # OutpostTwin: the scene, drawn from SceneProps · OrbitCamera · Halo
-│       ├── hooks/           # usePixelRatio(element)
+│       ├── hooks/           # usePixelRatio(element) · useFade(target), useColorFade(color)
 │       ├── utils/           # toScene(state): the scene's props, pure · gasLevel(air): 0–1
 │       │                    # autoOrbitSpeed(touch, now) · pixelRatio(density, width, height)
-│       │                    # wholeStageDistance(aspect)
+│       │                    # wholeStageDistance(aspect) · fadeTo(fade, to, now), fadeValue(fade, now)
 │       └── index.ts
 └── shared/
     ├── contract/            # re-exports backend/src/contract.ts — never redeclare a schema
-    └── config/              # feedUrl() · captureMode()
+    └── config/              # feedUrl() · captureMode() · STATUS_COLORS
 ```
 
 **Rules**
@@ -106,32 +106,41 @@ const history = useLiveFeed((state) => state.history)                // every fr
 - Select a state field as is; derive anything else with `useMemo` (a selector returning a new array each call loops).
 - The Status comes from the Command Post: the front never recomputes it.
 - On every (re)connection the backend sends its snapshot (current Status + latest telemetry) and the active Alerts start over, since some may have cleared while the socket was down.
+- `connection` is the socket as it is now (`connecting`, `open`, `closed`), `connectedOnce` whether it has ever been open. Together they tell a signal lost (not open any more) from a first connection still being tried.
 - Types come from `@/shared/contract`: `Telemetry`, `Alert`, `Status`, `Frame`…
+- The Status colors are defined once, in `shared/config/status-colors.ts` (`STATUS_COLORS`). `main.tsx` hands them to the stylesheet as `--nominal`, `--elevated` and `--critical`; the Twin lights its scene with the same.
 
 ## Digital Twin — `features/twin`
 
 ```tsx
 import { OutpostTwin, toScene } from '@/features/twin'
 
+const connection = useLiveFeed((state) => state.connection)
+const connectedOnce = useLiveFeed((state) => state.connectedOnce)
 const status = useLiveFeed((state) => state.status)
 const latestTelemetry = useLiveFeed((state) => state.latestTelemetry)
 const activeAlerts = useLiveFeed((state) => state.activeAlerts)
-const scene = useMemo(() => toScene({ status, latestTelemetry, activeAlerts }), [status, latestTelemetry, activeAlerts])
+const scene = useMemo(
+  () => toScene({ connection, connectedOnce, status, latestTelemetry, activeAlerts }),
+  [connection, connectedOnce, status, latestTelemetry, activeAlerts],
+)
 <OutpostTwin scene={scene} />
 ```
 
-- `toScene(state)` turns the live state into what the scene shows, and is all the scene reads: pure, tested without WebGL. It gives the Enclosure's color and glow (gas), what its LCD reads and the color its LED ring breathes in (the Status), the Status's color grade, the drivers to pulse (active `predictive` Alerts) and where the intruder stands (last active `intrusion`'s `x_norm`). The pulse and the intruder are not drawn yet (#13).
-- The `Status` grades the whole scene — light, perimeter ring: green `nominal`, amber `elevated`, red `critical`. It follows the Command Post's Status, never the readings. The sky stays black on the stage (#30): the grade's `background` is no longer drawn.
+- `toScene(state)` turns the live state into what the scene shows, and is all the scene reads: pure, tested without WebGL. It gives the Enclosure's color and glow (gas), what its LCD reads and the color its LED ring breathes in (the Status), the Status's color grade, the drivers to pulse (active `predictive` Alerts), where the intruder stands (last active `intrusion`'s `x_norm`) and whether the signal is lost. The pulse and the intruder are not drawn yet (#13).
+- The `Status` grades the whole scene. At `nominal` the studio keeps its neutral light, and only the perimeter ring, the LCD and the LED ring are green. At `elevated` and `critical` every light takes the Status's color: the whole model is lit in amber, in red. It follows the Command Post's Status, never the readings. The sky stays black on the stage (#30): the grade's `background` is no longer drawn.
+- **Nothing cuts** (#33). A new Status fades in over `FADE_SECONDS` (0.8 s), lights, perimeter ring, LCD and LED ring together, and one that comes during a fade starts from the color on screen. `fadeTo(fade, to, now)` and `fadeValue(fade, now)` are that rule, pure and tested; `useFade` / `useColorFade` run it on every frame.
+- **Signal lost** (#33). When the feed closes after having been open, `scene.signalLost` is true until it is open again, the retries in between included: the whole frame fades to grey (`<Halo saturation>`), "Signal lost" shows over the scene and the caption loses its colors, so that a stale state never passes for a live one. Before the first connection there is no signal to lose: the scene is neutral, with no notice. To see it, stop the backend.
 - The Enclosure goes from dark anodized to red as `readings.air` rises, and lights the ground around it. It follows the telemetry, not the Alerts: it moves before any `gas` Alert is raised.
 - `gasLevel(air)` gives the share of the way from calm to critical, 0–1. Its two bounds, `CALM_AIR` (200) and `CRITICAL_AIR` (620), are those of the mock feed: tune them to the MQ-2's calibration when the Sentinel sends its own Readings.
-- Colors and glow ease toward the scene's: a snapshot a second fades in, it does not jump.
+- What follows the Readings (the Enclosure's gas color and glow) eases toward them (`EASE`): a snapshot a second flows into the next, it does not jump.
 - The feature takes its data as props: `app/routes/twin.tsx` reads the feed, maps it with `toScene` and hands it over. `TwinState` asks for the live-feed state's fields by shape, so a replayed state (time-scrubber) feeds it the same way.
 
 **The stage** (#30) is what every later Twin slice is set on:
 
 - **Full screen** — `OutpostTwin` fills its parent. A route that renders a `.stage` gets the whole window under the top bar (`styles.css`); the other routes keep the padded page.
-- **Light** — black background, a key light that casts the soft shadows, a cold rim light from behind, a trace of fill. The key and the fill take the Status's light color; the lights stay put while the camera orbits. Give a new mesh `castShadow` / `receiveShadow`.
-- **Halo** — only what emits light glows. `Halo` draws the scene a second time with its lights off and blurs that image over the frame: set `emissive` + `emissiveIntensity` on a material and it glows in proportion, in its own color; a lit surface never does, however bright. An unlit material (`meshBasicMaterial`) counts as emitting — the perimeter ring glows in the Status's color that way — so use a standard one for anything that should not glow.
+- **Light** — black background, a key light that casts the soft shadows, a cold rim light from behind, a trace of fill. The key and the fill take the grade's `light`, the rim its `rim`: neutral at `nominal`, the Status's color otherwise. The lights stay put while the camera orbits. Give a new mesh `castShadow` / `receiveShadow`.
+- **Halo** — only what emits light glows. `Halo` draws the scene a second time with its lights off and blurs that image over the frame: set `emissive` + `emissiveIntensity` on a material and it glows in proportion, in its own color; a lit surface never does, however bright. An unlit material (`meshBasicMaterial`) counts as emitting — the perimeter ring glows in the Status's color that way — so use a standard one for anything that should not glow. Its pass is the last to touch the frame: that is also where the frame turns grey when the signal is lost (`saturation`).
 - **Color** — the frame is rendered in HDR and tone-mapped with `NeutralToneMapping`, which leaves the Status colors as they are.
 - **Camera** — it goes around the Outpost in 80 s. The Operator can turn it and zoom with the mouse, between bounds that keep the Outpost in frame (no panning, never under the ground); 3 s after they let go, the orbit picks up speed again. `autoOrbitSpeed` is that rule, as a pure function.
 - **Resolution** — `pixelRatio` caps the rendering at a pixel ratio of 2 and at 3 million pixels (`MAX_PIXELS`), whatever the screen. That budget was measured on an Iris Xe, where the Twin holds 60 images per second up to about 3.4 million pixels: raise it on a stronger GPU.
@@ -163,6 +172,7 @@ const scene = useMemo(() => toScene({ status, latestTelemetry, activeAlerts }), 
 - [x] Scene mapper + Status color — #12
 - [x] Twin full screen, in studio light, with an orbiting camera — #30
 - [x] The Enclosure, with its LCD and LED ring alive — #31
+- [x] Status fades and "signal lost" — #33
 - [x] Capture mode for the teaser (`/twin?capture`) — #40
 - [ ] Intruder placement (`x_norm` → perimeter arc), pulse — #13, #23
 - [ ] Time-scrubber + scenario mode — #15

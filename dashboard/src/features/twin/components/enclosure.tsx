@@ -10,6 +10,7 @@ import {
   SRGBColorSpace,
 } from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
+import { useColorFade } from '../hooks/use-fade'
 import { breath } from '../utils/breathing'
 import { EASE, ease } from '../utils/easing'
 import { ENCLOSURE_PARTS, ENGRAVING } from '../utils/enclosure-parts'
@@ -51,11 +52,11 @@ function useCanvasTexture(width: number, height: number, draw: (context: CanvasR
   return texture
 }
 
-// The LCD band: the Status in white on black, tinted by an unlit material whose color eases toward the
-// Status's. The text switches like a real LCD's; its color fades.
+// The LCD band: the Status in white on black, tinted by an unlit material whose color fades to the
+// Status's, with the light of the scene. The text switches like a real LCD's; its color fades.
 function Lcd({ text, color }: SceneProps['enclosure']['lcd']) {
   const material = useRef<MeshBasicMaterial>(null)
-  const target = useMemo(() => new Color(color), [color])
+  const colorNow = useColorFade(color)
   const [initial] = useState(color)
   const screen = useCanvasTexture(512, 128, (context) => {
     context.fillStyle = '#050607'
@@ -68,8 +69,8 @@ function Lcd({ text, color }: SceneProps['enclosure']['lcd']) {
     context.fillText(text, 26, 104)
   })
 
-  useFrame((_, delta) => {
-    if (material.current) ease(material.current.color, target, delta)
+  useFrame(() => {
+    material.current?.color.fromArray(colorNow())
   })
 
   return (
@@ -237,12 +238,12 @@ function ProbeCompartment() {
 // On top: the buzzer, and the LED ring around it that breathes in the Status's color.
 function Crown({ color }: SceneProps['enclosure']['ring']) {
   const ring = useRef<MeshStandardMaterial>(null)
-  const target = useMemo(() => new Color(color), [color])
+  const colorNow = useColorFade(color)
   const [initial] = useState(color)
 
-  useFrame(({ clock }, delta) => {
+  useFrame(({ clock }) => {
     if (!ring.current) return
-    ease(ring.current.emissive, target, delta)
+    ring.current.emissive.fromArray(colorNow())
     ring.current.emissiveIntensity = 2.2 * breath(clock.elapsedTime)
   })
 

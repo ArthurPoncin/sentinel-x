@@ -1,12 +1,31 @@
 import { describe, expect, it } from 'vitest'
+import { STATUS_COLORS } from '@/shared/config/status-colors'
 import type { Alert, StatusLevel } from '@/shared/contract'
 import { CALM_AIR, CRITICAL_AIR } from './gas-level'
-import { CALM_COLOR, GAS_COLOR, LCD_TEXT, mix, STATUS_GRADES, type TwinState, toScene } from './scene'
+import {
+  CALM_COLOR,
+  GAS_COLOR,
+  LCD_TEXT,
+  mix,
+  NEUTRAL_LIGHT,
+  NEUTRAL_RIM,
+  STATUS_GRADES,
+  type TwinState,
+  toScene,
+} from './scene'
 
 const ts = '2026-10-05T14:23:00.000Z'
 
+// The state the feed starts in: nothing received, the first connection still being tried.
 function state(overrides: Partial<TwinState> = {}): TwinState {
-  return { status: 'nominal', latestTelemetry: null, activeAlerts: [], ...overrides }
+  return {
+    connection: 'connecting',
+    connectedOnce: false,
+    status: 'nominal',
+    latestTelemetry: null,
+    activeAlerts: [],
+    ...overrides,
+  }
 }
 
 function withAir(air: number): TwinState {
@@ -61,6 +80,7 @@ describe('toScene', () => {
       status: STATUS_GRADES.nominal,
       pulses: [],
       intruder: null,
+      signalLost: false,
     })
   })
 
@@ -101,13 +121,55 @@ describe('toScene', () => {
   it('gives each Status its own colors', () => {
     const grades = Object.values(STATUS_GRADES)
 
-    for (const key of ['background', 'light', 'perimeter'] as const) {
+    for (const key of ['background', 'light', 'rim', 'perimeter'] as const) {
       expect(new Set(grades.map((grade) => grade[key])).size).toBe(grades.length)
     }
   })
 
+  it('lights the model in neutral when nominal', () => {
+    expect(toScene(state({ status: 'nominal' })).status).toMatchObject({ light: NEUTRAL_LIGHT, rim: NEUTRAL_RIM })
+  })
+
+  it.each(['elevated', 'critical'] as const)('lights the whole model in the color of the %s Status', (level) => {
+    const color = STATUS_COLORS[level]
+
+    expect(toScene(state({ status: level })).status).toMatchObject({ light: color, rim: color })
+  })
+
+  it.each<StatusLevel>(['nominal', 'elevated', 'critical'])(
+    "rings the perimeter in the dashboard's %s color",
+    (level) => {
+      expect(toScene(state({ status: level })).status.perimeter).toBe(STATUS_COLORS[level])
+    },
+  )
+
   it('follows the Status, not the gas', () => {
     expect(toScene({ ...withAir(CRITICAL_AIR), status: 'nominal' }).status.level).toBe('nominal')
+  })
+
+  it('has no signal to lose before the first connection, even if that one fails', () => {
+    expect(toScene(state({ connection: 'connecting' })).signalLost).toBe(false)
+    expect(toScene(state({ connection: 'closed' })).signalLost).toBe(false)
+  })
+
+  it('has its signal while the feed is open', () => {
+    expect(toScene(state({ connection: 'open', connectedOnce: true })).signalLost).toBe(false)
+  })
+
+  it('has lost its signal once the feed closes after having been open, until it is open again', () => {
+    const connected = (connection: TwinState['connection']) => state({ connection, connectedOnce: true })
+
+    expect(toScene(connected('closed')).signalLost).toBe(true)
+    expect(toScene(connected('connecting')).signalLost).toBe(true)
+    expect(toScene(connected('open')).signalLost).toBe(false)
+  })
+
+  it('keeps what it last knew on screen when the signal is lost', () => {
+    const known = { ...withAir(CRITICAL_AIR), status: 'critical', activeAlerts: [intrusion('i1', 0.2)] } as const
+    const live = toScene({ ...known, connection: 'open', connectedOnce: true })
+    const lost = toScene({ ...known, connection: 'closed', connectedOnce: true })
+
+    expect(lost).toEqual({ ...live, signalLost: true })
   })
 
   it('pulses the drivers of the active predictive Alerts, each once', () => {

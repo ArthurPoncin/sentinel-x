@@ -1,6 +1,7 @@
 import type { Color } from 'three'
 
-// How fast what is on screen eases toward the scene: a snapshot a second fades in, it does not jump.
+// How fast what follows the Readings eases toward them: a snapshot a second flows into the next, it does
+// not jump. A change of Status does not ease: it fades, over a set time (fade.ts).
 export const EASE = 4
 
 // Eases `color` toward `target` over the frame, at the same pace as MathUtils.damp with EASE.

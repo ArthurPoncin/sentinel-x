@@ -14,6 +14,7 @@ import {
 } from 'three'
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js'
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
+import { useFade } from '../hooks/use-fade'
 
 const HALO_STRENGTH = 0.22
 const HALO_RADIUS = 0.8
@@ -30,6 +31,7 @@ const SUM_VERTEX = /* glsl */ `
 const SUM_FRAGMENT = /* glsl */ `
   uniform sampler2D tLit;
   uniform sampler2D tHalo;
+  uniform float saturation;
   varying vec2 vUv;
 
   // One 8-bit step of the screen (sRGB), as wide as it is in linear light at this level.
@@ -39,6 +41,8 @@ const SUM_FRAGMENT = /* glsl */ `
 
   void main() {
     vec3 color = max(texture2D(tLit, vUv).rgb + texture2D(tHalo, vUv).rgb, 0.0);
+    // Toward the grey that is as bright as the color: the frame keeps its light and loses its hues.
+    color = mix(vec3(dot(color, vec3(0.2126, 0.7152, 0.0722))), color, saturation);
     // A halo fading to black shows the screen's steps as bands: half a step of noise either way hides them.
     float noise = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) - 0.5;
     gl_FragColor = vec4(max(color + noise * screenStep(color), 0.0), 1.0);
@@ -46,6 +50,8 @@ const SUM_FRAGMENT = /* glsl */ `
 `
 
 interface HaloEffect extends Effect {
+  // How much of its hues the frame keeps, 0–1.
+  saturation: { value: number }
   capture: (renderer: WebGLRenderer, scene: Scene, camera: Camera) => void
   dispose: () => void
 }
@@ -63,8 +69,9 @@ function createHalo(): HaloEffect {
   if (!blurred) throw new Error('UnrealBloomPass has no blurred target')
 
   const lit: { value: Texture | null } = { value: null }
+  const saturation = { value: 1 }
   const sum = new ShaderMaterial({
-    uniforms: { tLit: lit, tHalo: { value: blurred.texture } },
+    uniforms: { tLit: lit, tHalo: { value: blurred.texture }, saturation },
     vertexShader: SUM_VERTEX,
     fragmentShader: SUM_FRAGMENT,
     depthTest: false,
@@ -75,6 +82,8 @@ function createHalo(): HaloEffect {
   const intensities: number[] = []
 
   return {
+    saturation,
+
     setSize(width, height) {
       glowing.setSize(Math.round(width / 2), Math.round(height / 2))
       bloom.setSize(width, height)
@@ -118,11 +127,18 @@ function createHalo(): HaloEffect {
   }
 }
 
+export interface HaloProps {
+  // How much of its hues the frame keeps, from 0 (all grey) to 1 (as lit). A change fades in.
+  saturation?: number
+}
+
 // Takes over the rendering of the Canvas, whose renderer must draw to an HDR buffer (`outputBufferType`):
-// three.js only runs effects there.
-export function Halo() {
+// three.js only runs effects there. Its pass is the last to touch the frame, halo included: that is where
+// the whole frame can lose its hues.
+export function Halo({ saturation = 1 }: HaloProps) {
   const gl = useThree((state) => state.gl)
   const halo = useRef<HaloEffect | null>(null)
+  const saturationNow = useFade([saturation])
 
   useEffect(() => {
     const created = createHalo()
@@ -138,7 +154,10 @@ export function Halo() {
 
   // After every other frame callback, so that the halo and the lit frame show the same instant.
   useFrame(({ scene, camera }) => {
-    halo.current?.capture(gl, scene, camera)
+    if (halo.current) {
+      halo.current.saturation.value = saturationNow()[0] ?? 1
+      halo.current.capture(gl, scene, camera)
+    }
     gl.render(scene, camera)
   }, 1)
 
