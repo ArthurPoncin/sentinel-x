@@ -3,12 +3,10 @@ import { useEffect, useRef } from 'react'
 import { MathUtils } from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { autoOrbitSpeed, type CameraTouch } from '../utils/auto-orbit'
+import { TARGET, wholeStageDistance } from '../utils/framing'
 
 // Seconds the automatic orbit takes to go once around the Outpost.
 const ORBIT_PERIOD = 80
-// The camera turns around this point, halfway up the Enclosure on its mast, and cannot be panned away
-// from it, so the Outpost stays centred.
-const TARGET = [0, 1.2, 0] as const
 // Close enough to read the Enclosure, far enough to still see the whole perimeter.
 const MIN_DISTANCE = 4
 const MAX_DISTANCE = 12
@@ -18,7 +16,13 @@ const MAX_POLAR = MathUtils.degToRad(82)
 
 const seconds = () => performance.now() / 1000
 
-export function OrbitCamera() {
+export interface OrbitCameraProps {
+  // Stands back just far enough to hold the whole stage, whatever the shape of the frame. The Operator can
+  // still turn the camera, no longer zoom.
+  wholeStage?: boolean
+}
+
+export function OrbitCamera({ wholeStage = false }: OrbitCameraProps) {
   const camera = useThree((state) => state.camera)
   const canvas = useThree((state) => state.gl.domElement)
   const controls = useRef<OrbitControls | null>(null)
@@ -29,6 +33,9 @@ export function OrbitCamera() {
     orbit.target.set(...TARGET)
     orbit.enablePan = false
     orbit.enableDamping = true
+    // With the whole stage in frame the distance is not the Operator's to set: a wheel notch must not even
+    // pause the orbit.
+    orbit.enableZoom = !wholeStage
     orbit.autoRotate = true
     orbit.minDistance = MIN_DISTANCE
     orbit.maxDistance = MAX_DISTANCE
@@ -47,11 +54,13 @@ export function OrbitCamera() {
       controls.current = null
       orbit.dispose()
     }
-  }, [camera, canvas])
+  }, [camera, canvas, wholeStage])
 
-  useFrame((_, delta) => {
+  useFrame(({ size }, delta) => {
     const orbit = controls.current
     if (!orbit) return
+    // Both bounds at once: the controls bring the camera there, and follow the frame when it changes shape.
+    if (wholeStage) orbit.minDistance = orbit.maxDistance = wholeStageDistance(size.width / size.height)
     // OrbitControls counts autoRotateSpeed in turns per minute.
     orbit.autoRotateSpeed = (60 / ORBIT_PERIOD) * autoOrbitSpeed(touch.current, seconds())
     orbit.update(delta)

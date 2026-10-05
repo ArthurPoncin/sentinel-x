@@ -120,6 +120,11 @@ main {
   overflow: hidden;
 }
 
+/* A stage in capture mode is all there is on the window: the top bar goes with the rest of the interface. */
+.shell:has(.stage[data-capture]) .topbar {
+  display: none;
+}
+
 .stage {
   position: relative;
   height: 100%;

@@ -34,9 +34,11 @@ cd backend && npm install && OPERATOR_AUTH=off MOCK_FEED=true HISTORY_FILE=:memo
 # terminal 2 — the app on http://localhost:5173 (/ and /twin)
 cd dashboard && npm install && npm run dev
 
-npm test            # store, feed client, config, gas level, scene mapper, automatic orbit, pixel ratio
+npm test            # store, feed client, config, gas level, scene mapper, automatic orbit, pixel ratio, framing
 npm run build       # typecheck + production bundle in dist/
 ```
+
+**Filming the Twin for the teaser** — open `/twin?capture` in a vertical 9:16 window (1080 × 1920) and record the screen while the scenario plays: the Twin alone on black, no interface, on the same feed. See [capture mode](#digital-twin--featurestwin).
 
 The app always talks to its **own origin** (`/ws`, `/api`): the Vite dev server proxies them to `BACKEND_URL`, the reverse proxy does it on the Pi. Mock or live is the backend's setting, the front never changes.
 
@@ -61,15 +63,16 @@ src/
 │   │   ├── hooks/           # useLiveFeed(selector)
 │   │   ├── components/      # LiveFeedProvider, ConnectionIndicator, FeedInspector
 │   │   └── index.ts         # the feature's public API
-│   └── twin/                # #20, #12, #30 — the 3D Outpost, on its studio stage
+│   └── twin/                # #20, #12, #30, #40 — the 3D Outpost, on its studio stage
 │       ├── components/      # OutpostTwin: the scene, drawn from SceneProps · OrbitCamera · Halo
 │       ├── hooks/           # usePixelRatio(element)
 │       ├── utils/           # toScene(state): the scene's props, pure · gasLevel(air): 0–1
 │       │                    # autoOrbitSpeed(touch, now) · pixelRatio(density, width, height)
+│       │                    # wholeStageDistance(aspect)
 │       └── index.ts
 └── shared/
     ├── contract/            # re-exports backend/src/contract.ts — never redeclare a schema
-    └── config/              # feedUrl()
+    └── config/              # feedUrl() · captureMode()
 ```
 
 **Rules**
@@ -144,6 +147,13 @@ const scene = useMemo(() => toScene({ status, latestTelemetry, activeAlerts }), 
 - **Gas:** the body carries the glow of #20, and lights the ground from inside it.
 - **Camera:** the orbit now turns around the Enclosure's height (`TARGET` y = 1.2).
 
+**Capture mode** (#40) — `/twin?capture` is the Twin alone, to be filmed for the teaser:
+
+- **No interface** — no top bar, no connection indicator, no caption: the canvas takes the whole window, on black. `captureMode(location)` reads the parameter (being there is enough, whatever its value); without it `/twin` is the normal view.
+- **Same feed** — mock or live, it plays what the normal view plays.
+- **Whole in frame** — `<OutpostTwin wholeStage />` stands the camera back until the whole stage holds in the frame, whatever its shape: `wholeStageDistance(aspect)` fits a sphere around the stage (`STAGE_RADIUS`, the perimeter ring plus room for its halo) in the narrower field of view, so it holds all the way around the orbit and at any tilt. The camera can still be turned by hand; it no longer zooms.
+- Anything added to the stage further out than the perimeter ring needs a larger `STAGE_RADIUS`.
+
 ## TODO
 - [x] App shell + live feed (WebSocket client, store, hook) — #10
 - [ ] Operator login screen: the API is ready (`POST /api/v1/auth/login`, `GET /api/v1/auth/check`, see [`../backend/README.md`](../backend/README.md#operator-session))
@@ -153,6 +163,7 @@ const scene = useMemo(() => toScene({ status, latestTelemetry, activeAlerts }), 
 - [x] Scene mapper + Status color — #12
 - [x] Twin full screen, in studio light, with an orbiting camera — #30
 - [x] The Enclosure, with its LCD and LED ring alive — #31
+- [x] Capture mode for the teaser (`/twin?capture`) — #40
 - [ ] Intruder placement (`x_norm` → perimeter arc), pulse — #13, #23
 - [ ] Time-scrubber + scenario mode — #15
 - [ ] CI: build + smoke render — #16
