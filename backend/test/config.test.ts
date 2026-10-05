@@ -28,6 +28,21 @@ describe('configuration from the environment', () => {
     )
   })
 
+  it('allows no other origin unless CORS_ORIGINS lists them', () => {
+    expect(loadConfig({}).corsOrigins).toEqual([])
+    expect(loadConfig({ CORS_ORIGINS: 'https://192.168.4.1, http://localhost:5173,' }).corsOrigins).toEqual([
+      'https://192.168.4.1',
+      'http://localhost:5173',
+    ])
+  })
+
+  it('refuses in CORS_ORIGINS what is not an http(s) origin', () => {
+    expect(() => loadConfig({ CORS_ORIGINS: '*' })).toThrow(/CORS_ORIGINS/)
+    expect(() => loadConfig({ CORS_ORIGINS: 'ftp://192.168.4.1' })).toThrow(/CORS_ORIGINS/)
+    expect(() => loadConfig({ CORS_ORIGINS: 'http://localhost:5173/' })).toThrow(/no path.*CORS_ORIGINS/s)
+    expect(() => loadConfig({ CORS_ORIGINS: 'https://192.168.4.1/twin' })).toThrow(/CORS_ORIGINS/)
+  })
+
   it('names the variable it cannot make sense of', () => {
     expect(() => loadConfig({ MOCK_FEED: 'yes' })).toThrow(/MOCK_FEED/)
     expect(() => loadConfig({ PORT: 'http' })).toThrow(/PORT/)

@@ -7,7 +7,13 @@ import { connectClient } from './ws-client.js'
 // Starts the API on a free port and closes it when the calling test ends.
 // Every feed is off unless the test turns it on, and the history starts empty, in memory.
 export async function startServer(config: Partial<ServerConfig> = {}) {
-  const server = await buildServer({ mockFeed: false, mqtt: false, history: createMemoryHistory(), ...config })
+  const server = await buildServer({
+    mockFeed: false,
+    mqtt: false,
+    history: createMemoryHistory(),
+    corsOrigins: [],
+    ...config,
+  })
   onTestFinished(() => server.close())
   await server.listen({ port: 0, host: '127.0.0.1' })
   const { port } = server.server.address() as AddressInfo
@@ -33,5 +39,8 @@ export async function startServer(config: Partial<ServerConfig> = {}) {
     getIncidents: () => fetch(`http://127.0.0.1:${port}/api/v1/incidents`),
     // Takes the id as given, so a test can also ask for one that is not a number.
     getIncident: (id: number | string) => fetch(`http://127.0.0.1:${port}/api/v1/incidents/${id}`),
+    getHealth: () => fetch(`http://127.0.0.1:${port}/health`),
+    // Any request, as a browser would send it from another origin.
+    request: (path: string, init?: RequestInit) => fetch(`http://127.0.0.1:${port}${path}`, init),
   }
 }
