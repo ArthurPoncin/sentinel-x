@@ -3,6 +3,7 @@ import { useMemo, useRef, useState } from 'react'
 import { type AmbientLight, Color, HalfFloatType, type MeshBasicMaterial, NeutralToneMapping, type SpotLight } from 'three'
 import { usePixelRatio } from '../hooks/use-pixel-ratio'
 import { ease } from '../utils/easing'
+import { FIELD_OF_VIEW } from '../utils/framing'
 import type { SceneProps, StatusGrade } from '../utils/scene'
 import { Enclosure } from './enclosure'
 import { Halo } from './halo'
@@ -65,12 +66,15 @@ function Grade({ light, perimeter }: StatusGrade) {
 export interface OutpostTwinProps {
   // What the scene shows, from toScene(state).
   scene: SceneProps
+  // Keeps the whole stage in frame whatever the shape of the window, a vertical one included: the camera
+  // stands back as far as that takes, and no longer zooms.
+  wholeStage?: boolean
 }
 
 // The Outpost in 3D, lit like a product in a studio on a black background: the Status grades the light and
 // the perimeter ring, the Enclosure turns red as gas rises, shows the Status on its LCD and breathes it on
 // its LED ring. It fills its parent: give that the size the Twin should have on screen.
-export function OutpostTwin({ scene }: OutpostTwinProps) {
+export function OutpostTwin({ scene, wholeStage = false }: OutpostTwinProps) {
   const frame = useRef<HTMLDivElement>(null)
   const dpr = usePixelRatio(frame)
 
@@ -79,14 +83,14 @@ export function OutpostTwin({ scene }: OutpostTwinProps) {
       <Canvas
         shadows="percentage"
         dpr={dpr}
-        camera={{ position: [4.2, 3.2, 5.4], fov: 40 }}
+        camera={{ position: [4.2, 3.2, 5.4], fov: FIELD_OF_VIEW }}
         // HDR buffer: the halo is added before tone mapping. Neutral keeps the Status colors as they are.
         gl={{ outputBufferType: HalfFloatType, toneMapping: NeutralToneMapping }}
       >
         <color attach="background" args={['#000000']} />
         <Grade {...scene.status} />
         <Enclosure {...scene.enclosure} />
-        <OrbitCamera />
+        <OrbitCamera wholeStage={wholeStage} />
         <Halo />
       </Canvas>
     </div>
