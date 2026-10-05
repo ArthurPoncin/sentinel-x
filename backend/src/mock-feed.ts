@@ -36,7 +36,7 @@ function telemetryFrame(phase: Phase, progress: number, ts: string): Frame {
         humidity: 44,
         air: Math.round(along(phase.air, progress)),
         pir: false,
-        accel: { x: 0.01, y: -0.02, z: 0.98 },
+        sound: 1350,
       },
     },
   }

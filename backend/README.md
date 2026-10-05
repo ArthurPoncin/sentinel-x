@@ -109,7 +109,7 @@ The body is the Actuator command of [`../docs/ARCHITECTURE.md`](../docs/ARCHITEC
 | Field | Value |
 |---|---|
 | `sentinel` | The Sentinel to reach. It becomes a level of the topic: letters, digits, `-` and `_` only, 64 at most |
-| `actuator` | `buzzer`, `speaker` or `led` |
+| `actuator` | `buzzer` or `led` |
 | `action` | `on`, `off` or `pattern` |
 | `params` | Optional. `pattern` and `led`, each optional, 32 characters at most |
 

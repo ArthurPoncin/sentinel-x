@@ -10,7 +10,7 @@ const telemetry = {
     humidity: 44.0,
     air: 180,
     pir: false,
-    accel: { x: 0.01, y: -0.02, z: 0.98 },
+    sound: 1350,
   },
 }
 
@@ -29,7 +29,6 @@ const alert = {
 const detailOf = {
   intrusion: { x_norm: 0.42, confidence: 0.88, bbox: [120, 80, 60, 180] },
   predictive: { anomaly_score: 0.91, drivers: ['temp_slope', 'air_slope'] },
-  tamper: { magnitude: 1.4, axis: 'y' },
 }
 
 const command = {
@@ -65,7 +64,7 @@ describe('contract', () => {
   })
 
   it('rejects an Alert carrying the detail of another kind', () => {
-    expect(AlertSchema.safeParse({ ...alert, kind: 'gas', detail: detailOf.tamper }).success).toBe(false)
+    expect(AlertSchema.safeParse({ ...alert, kind: 'gas', detail: detailOf.intrusion }).success).toBe(false)
     expect(AlertSchema.safeParse({ ...alert, kind: 'intrusion', detail: {} }).success).toBe(false)
   })
 
