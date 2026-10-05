@@ -10,8 +10,8 @@ A **live 3D replica** of the Sentinel-X outpost rendered in the dashboard (Three
 | Gas (`air`) | Sentinel | Box glows red, particle haze scales with the reading |
 | Presence (`pir`) | Sentinel | Perimeter zone flashes amber |
 | Tamper (`accel`) | Sentinel | The box itself shakes / flashes red |
-| Intrusion (vision) | AI Worker | **Intruder marker** placed along the perimeter arc from `x_norm` |
-| Predictive drift | AI Worker | The drifting **component pulses orange** *before* the critical threshold |
+| Intrusion (vision) | Command Post (`vision`) | **Intruder marker** placed along the perimeter arc from `x_norm` |
+| Predictive drift | Command Post (`predictive`) | The drifting **component pulses orange** *before* the critical threshold |
 | `Status` (nominal/elevated/critical) | Command Post | The scene's overall color grade |
 | Alarm state (buzzer/MP3/LED) | Sentinel | Twin mirrors the physical box (LED color, siren ring) |
 
