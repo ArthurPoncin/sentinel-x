@@ -121,7 +121,7 @@ One publish per cycle (~1–2 s), all current Readings share one timestamp.
     "humidity": 44.0,      // %
     "air": 180,            // gas sensor raw/ppm
     "pir": false,          // presence
-    "sound": 1350          // sound level, raw ADC (0–4095)
+    "sound": 0.02          // share of the cycle the sound sensor heard sound (0–1)
   }
 }
 ```

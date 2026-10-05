@@ -9,6 +9,7 @@ export const TelemetrySchema = z.strictObject({
     humidity: z.number(),
     air: z.number(),
     pir: z.boolean(),
+    // Share of the cycle the sound sensor heard sound, 0–1: the CZN-15E only says above or below its threshold.
     sound: z.number(),
   }),
 })

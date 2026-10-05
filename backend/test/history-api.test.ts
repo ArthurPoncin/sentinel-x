@@ -8,7 +8,7 @@ import { startServer } from './support/server.js'
 vi.spyOn(console, 'log').mockImplementation(() => {})
 
 function snapshot(ts: string, air = 180): Telemetry {
-  return { sentinel: 'sentinel-01', ts, readings: { temp: 31.2, humidity: 44, air, pir: false, sound: 1350 } }
+  return { sentinel: 'sentinel-01', ts, readings: { temp: 31.2, humidity: 44, air, pir: false, sound: 0.02 } }
 }
 
 function telemetry(ts: string, air?: number): HistoryRecord {
