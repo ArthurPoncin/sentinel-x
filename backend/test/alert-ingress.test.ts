@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Frame } from '../src/contract.js'
 import { gasAlert, intrusionAlert, predictiveAlert } from './support/alerts.js'
-import { startServer } from './support/server.js'
+import { startServer, TOKEN } from './support/server.js'
 
 const marker: Frame = {
   type: 'telemetry',
@@ -66,6 +66,30 @@ describe('POST /api/v1/alerts', () => {
     })
   })
 
+  it('takes the source from the token, whatever the body declares', async () => {
+    const { connect, postAlert } = await startServer()
+    const client = await connect()
+    const { source: _omitted, ...unsigned } = intrusionAlert()
+
+    const responses = [
+      await postAlert({ ...intrusionAlert(), source: 'predictive' }, TOKEN.vision),
+      await postAlert({ ...unsigned, alert_id: 'intruder-2' }, TOKEN.vision),
+    ]
+
+    expect(responses.map((response) => response.status)).toEqual([202, 202])
+    await vi.waitFor(() => {
+      const alerts = client.frames.filter((frame) => (frame as Frame).type === 'alert')
+      expect(alerts).toMatchObject([{ payload: { source: 'vision' } }, { payload: { source: 'vision' } }])
+    })
+  })
+
+  it('turns away a service the API holds no token for', async () => {
+    const { postAlert } = await startServer({ serviceTokens: { vision: TOKEN.vision } })
+
+    expect((await postAlert(predictiveAlert(), TOKEN.predictive)).status).toBe(401)
+    expect((await postAlert(intrusionAlert(), TOKEN.vision)).status).toBe(202)
+  })
+
   it('greets a client joining during an Alert with the Status it led to', async () => {
     const { connect, postAlert } = await startServer()
     await postAlert(intrusionAlert())
@@ -99,7 +123,6 @@ describe('POST /api/v1/alerts', () => {
       ['a severity the contract does not define', { ...intrusionAlert(), severity: 'elevated' }],
       ['a detail that is not the one of its kind', { ...intrusionAlert(), detail: {} }],
       ['a timestamp that is not ISO 8601', { ...intrusionAlert(), ts: '05/10/2026 14:23' }],
-      ['no declared source', { ...intrusionAlert(), source: undefined }],
       ['a list of Alerts', [intrusionAlert()]],
     ])('400 on %s', async (_label, body) => {
       const response = await expectNothingChanged(({ postAlert }) => postAlert(body))
@@ -125,6 +148,25 @@ describe('POST /api/v1/alerts', () => {
       const response = await expectNothingChanged(({ postAlert }) =>
         postAlert({ ...predictiveAlert(), source: 'vision' }),
       )
+
+      expect(response.status).toBe(403)
+    })
+
+    it.each([
+      ['no Authorization header', null],
+      ['a token no service holds', 'Bearer not-a-token-0123456789abcdef0123456789'],
+      ['a token that is not a bearer one', `Basic ${TOKEN.vision}`],
+      ['an empty bearer token', 'Bearer '],
+      ['a token with something after it', `Bearer ${TOKEN.vision} ${TOKEN.predictive}`],
+    ])('401 on %s, before reading the body', async (_label, authorization) => {
+      const response = await expectNothingChanged(({ post }) => post('{"alert_id": ', authorization))
+
+      expect(response.status).toBe(401)
+      expect(response.headers.get('www-authenticate')).toBe('Bearer')
+    })
+
+    it('403 on a kind another service owns, whatever source the body declares', async () => {
+      const response = await expectNothingChanged(({ postAlert }) => postAlert(intrusionAlert(), TOKEN.predictive))
 
       expect(response.status).toBe(403)
     })

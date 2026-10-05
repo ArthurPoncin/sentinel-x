@@ -45,6 +45,8 @@ All the configuration comes from environment variables. `npm run dev` and `npm s
 | `MQTT_USERNAME` | `api` | MQTT user |
 | `MQTT_PASSWORD` | — | Its password. Required with `MQTT_URL`; never committed |
 | `MQTT_CA_FILE` | — | Path of the team CA certificate (PEM). Required with `MQTT_URL` |
+| `VISION_TOKEN` | — | Bearer token of the `vision` service on `POST /api/v1/alerts`, 32 characters or more. Unset: `vision` cannot post. Never committed |
+| `PREDICTIVE_TOKEN` | — | Same for the `predictive` service; must differ from `VISION_TOKEN` |
 | `HISTORY_FILE` | `data/history.sqlite` | SQLite file of the history, created with its directory if missing. `:memory:` keeps it in the process only |
 
 ## Docker
@@ -130,11 +132,12 @@ socket.onmessage = (event) => {
 ```
 
 ## Alert ingress — `POST /api/v1/alerts`
-The entry point of the `vision` and `predictive` services. The body is one Alert, as specified in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#alert--sentinelidalert-and-body-of-post-apiv1alerts):
+The entry point of the `vision` and `predictive` services. Each one sends its own token, `Authorization: Bearer <token>`, set in `VISION_TOKEN` / `PREDICTIVE_TOKEN`. The body is one Alert, as specified in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#alert--sentinelidalert-and-body-of-post-apiv1alerts):
 
 ```bash
-curl -i -X POST http://127.0.0.1:8080/api/v1/alerts -H 'content-type: application/json' -d '{
-  "alert_id": "intruder-1", "sentinel": "sentinel-01", "source": "vision",
+curl -i -X POST http://127.0.0.1:8080/api/v1/alerts -H 'content-type: application/json' \
+  -H "authorization: Bearer $VISION_TOKEN" -d '{
+  "alert_id": "intruder-1", "sentinel": "sentinel-01",
   "kind": "intrusion", "severity": "critical", "state": "raised",
   "detail": { "x_norm": 0.42, "confidence": 0.88, "bbox": [120, 80, 60, 180] },
   "ts": "2026-10-05T14:23:05Z"
@@ -144,7 +147,8 @@ curl -i -X POST http://127.0.0.1:8080/api/v1/alerts -H 'content-type: applicatio
 | Response | When |
 |---|---|
 | `202` | Accepted: every client gets the `alert` frame, then the `status` frame it leads to |
-| `400` | Not an Alert — the `message` names each offending field. Unknown fields are rejected, and `detail` must be the one of its `kind` (`{}` for `gas`, `thermal`, `presence`) |
+| `400` | Not an Alert — the `message` names each offending field. Unknown fields are rejected, and `detail` must be the one of its `kind` (`{}` for `gas`, `thermal`, `presence`, `noise`) |
+| `401` | No bearer token, or one no service holds — answered before the body is read, with `WWW-Authenticate: Bearer` |
 | `403` | A service posting a `kind` it does not own: `vision` → `intrusion`, `predictive` → `predictive`. The Sentinel's kinds only come in over MQTT |
 | `413` | Body above 16 KB |
 
@@ -152,7 +156,8 @@ A refused body is never broadcast and never moves the `Status`.
 
 Post the same `alert_id` with `"state": "cleared"` to end the Alert. Posting `raised` again on an `alert_id` that is still raised updates that Alert (new `severity`, new `x_norm`…) instead of opening a second one. The `Status` is recomputed from the Alerts still raised and broadcast after every accepted Alert.
 
-> No service token yet: the caller is the `source` it declares in the body. Once tokens are in, `source` comes from the token and the body's value is ignored.
+- `source` comes from the token: whatever the body says there is overwritten, and it may be left out.
+- Tokens are compared in constant time. Each must be at least 32 characters (`openssl rand -hex 32`), and the two must differ. A service with no token set cannot post: the API starts all the same.
 
 ## History — `GET /api/v1/history`
 Feeds the time-scrubber. Every telemetry snapshot that comes in over MQTTS and every Alert the API accepts is written to an SQLite file (`HISTORY_FILE`) before it goes out on `/ws`. So is the [mock feed](#mock-feed), which goes through the same pipelines: run it on `HISTORY_FILE=:memory:` or a file of its own to keep it out of the real history.
@@ -281,7 +286,7 @@ The body is the Actuator command of [`../docs/ARCHITECTURE.md`](../docs/ARCHITEC
 
 ## TODO
 - [x] `POST /api/v1/alerts` + schema validation
-- [ ] Service tokens on `POST /api/v1/alerts`
+- [x] Service tokens on `POST /api/v1/alerts`
 - [x] MQTT subscriber: Sentinel telemetry → WebSocket
 - [x] MQTT subscriber: Sentinel Alerts → normalizer
 - [x] DB writer (telemetry + Alert history)
