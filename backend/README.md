@@ -104,6 +104,7 @@ curl -i -X POST https://192.168.X.1/api/v1/auth/login -H 'content-type: applicat
 - One Operator, one password, kept as an scrypt hash in `OPERATOR_PASSWORD_HASH`: the API never sees it in clear except at login. Without a hash, the API refuses to start.
 - The cookie, `sx_session`, is `HttpOnly; Secure; SameSite=Strict`, for 12 hours. Sessions live in the API: a restart logs the Operator out.
 - `/ws` also checks the `Origin` of the page opening it: the API's own origin as the browser reached it (`Host`, or `X-Forwarded-Host` from the reverse proxy) or one in `CORS_ORIGINS`; any other gets `403`, session or not. A client that is not a browser sends no `Origin` and only needs the session.
+- At most 5 logins a minute per address, right password or not: `429` with `Retry-After` past that. Behind the reverse proxy every browser comes from its address, so the limit is the Operator's as a whole.
 - `OPERATOR_AUTH=off` lets anyone in without logging in — every endpoint and `/ws` answer, `auth/check` says `204`. For development on a laptop only.
 
 ## Mock feed
@@ -172,6 +173,7 @@ curl -i -X POST http://127.0.0.1:8080/api/v1/alerts -H 'content-type: applicatio
 | `401` | No bearer token, or one no service holds — answered before the body is read, with `WWW-Authenticate: Bearer` |
 | `403` | A service posting a `kind` it does not own: `vision` → `intrusion`, `predictive` → `predictive`. The Sentinel's kinds only come in over MQTT |
 | `413` | Body above 16 KB |
+| `429` | More than 20 Alerts in a second from this service's token, with `Retry-After` (seconds). The other service is not held back |
 
 A refused body is never broadcast and never moves the `Status`.
 
@@ -296,12 +298,12 @@ The body is the Actuator command of [`../docs/ARCHITECTURE.md`](../docs/ARCHITEC
 | `400` | Not a command — the `message` names each offending field. Unknown fields are rejected, `cmd_id` and `ts` among them |
 | `413` | Body above 1 KB |
 | `503` | No broker to relay to: `MQTT_URL` unset, broker away, or gone before it acknowledged |
+| `429` | More than 2 commands in a second, with `Retry-After` (seconds) |
 
 - Published at QoS 1, not retained: the `202` waits for the broker's acknowledgement. The QoS the Sentinel subscribes with decides the last hop.
 - A command is for now. One the broker did not take is refused and never sent later, even once the broker is back: the Operator sends it again.
 - A refused command is never published.
 
-> No rate limit yet: an Operator can send commands as fast as they like.
 
 ## TODO
 - [x] `POST /api/v1/alerts` + schema validation
@@ -316,6 +318,6 @@ The body is the Actuator command of [`../docs/ARCHITECTURE.md`](../docs/ARCHITEC
 - [x] WebSocket event bus
 - [x] Session + `Origin` check on the WebSocket upgrade
 - [x] `POST /api/v1/commands` → MQTT publish
-- [ ] Rate limiting
+- [x] Rate limiting
 - [x] `.env.example` (broker URL, history file, CORS origins, password placeholder — no secrets committed)
 - [x] CORS, `GET /health`, Dockerfile
