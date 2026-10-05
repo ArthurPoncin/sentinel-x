@@ -1,19 +1,26 @@
+import { useMemo } from 'react'
 import { useLiveFeed } from '@/features/live-feed'
-import { OutpostTwin } from '@/features/twin'
+import { OutpostTwin, toScene } from '@/features/twin'
 
-// The Digital Twin's screen: the 3D Outpost reacting to gas. Next: scene mapper and Status color
-// (#12), intrusion and predictive pulse (#13).
+// The Digital Twin's screen: the 3D Outpost graded by the Status, reacting to gas. Next: intrusion
+// and predictive pulse (#13).
 export function TwinRoute() {
   const status = useLiveFeed((state) => state.status)
-  const air = useLiveFeed((state) => state.latestTelemetry?.readings.air ?? null)
+  const latestTelemetry = useLiveFeed((state) => state.latestTelemetry)
+  const activeAlerts = useLiveFeed((state) => state.activeAlerts)
+  const scene = useMemo(
+    () => toScene({ status, latestTelemetry, activeAlerts }),
+    [status, latestTelemetry, activeAlerts],
+  )
 
   return (
     <section className="twin">
       <h1>Digital Twin</h1>
       <p>
-        Outpost Status: <strong data-status={status}>{status}</strong> · Gas: {air ?? '—'}
+        Outpost Status: <strong data-status={status}>{status}</strong> · Gas:{' '}
+        {latestTelemetry?.readings.air ?? '—'}
       </p>
-      <OutpostTwin air={air} />
+      <OutpostTwin scene={scene} />
     </section>
   )
 }
