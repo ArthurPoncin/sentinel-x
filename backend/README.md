@@ -42,6 +42,7 @@ npm test
 | `MQTT_USERNAME` | `api` | MQTT user |
 | `MQTT_PASSWORD` | — | Its password. Required with `MQTT_URL`; never committed |
 | `MQTT_CA_FILE` | — | Path of the team CA certificate (PEM). Required with `MQTT_URL` |
+| `HISTORY_FILE` | `data/history.sqlite` | SQLite file of the history, created with its directory if missing. `:memory:` keeps it in the process only |
 
 ## Sentinel telemetry — MQTTS
 With `MQTT_URL` set, the API logs in to the broker over TLS, checks its certificate against the team CA and nothing else, and subscribes to `sentinel/+/telemetry`. Every snapshot a Sentinel publishes there goes out as a `telemetry` frame on `/ws`.
@@ -94,6 +95,41 @@ Post the same `alert_id` with `"state": "cleared"` to end the Alert. Posting `ra
 
 > No service token yet: the caller is the `source` it declares in the body. Once tokens are in, `source` comes from the token and the body's value is ignored.
 
+## History — `GET /api/v1/history`
+Feeds the time-scrubber. Every telemetry snapshot that comes in over MQTTS and every Alert the API accepts is written to an SQLite file (`HISTORY_FILE`) before it goes out on `/ws`. The mock feed is not recorded: nothing scripted ends up in the history.
+
+```bash
+curl 'http://127.0.0.1:8080/api/v1/history?from=2026-10-05T14:20:00Z&to=2026-10-05T14:30:00Z'
+```
+
+| Query | Value |
+|---|---|
+| `from` | Start of the range, ISO 8601 UTC, included |
+| `to` | End of the range, ISO 8601 UTC, included. Not before `from` |
+
+```jsonc
+{
+  "records": [
+    { "type": "telemetry", "payload": { /* telemetry snapshot */ } },
+    { "type": "alert",     "payload": { /* alert object */ } }
+  ]
+}
+```
+
+| Response | When |
+|---|---|
+| `200` | The records whose `ts` falls in the range, oldest first — the same `telemetry` and `alert` frames as on `/ws`, so a replay can go through the same code as the live feed. Records sharing a `ts` keep the order they came in. A range where nothing happened gives `{ "records": [] }` |
+| `400` | A bound missing, not ISO 8601, or `from` after `to` — the `message` names it |
+
+- Dates are those of the payloads: the Sentinel's `ts` for telemetry and its Alerts, the service's for the others. Records are sorted by instant, so `…:00Z` and `…:00.500Z` come in the right order.
+- Every cleared Alert is kept along with its raised one: `alert_id` pairs them, and the `Status` at any instant follows from the Alerts raised by then.
+- The schemas are in [`src/contract.ts`](src/contract.ts): `HistorySchema`, `HistoryRecordSchema`, `HistoryQuerySchema`.
+- If the file cannot take a record (SD card full…), the API logs it and the live feed carries on.
+- The storage sits behind the `HistoryRepository` interface of [`src/history.ts`](src/history.ts) (`append`, `query(range)`): SQLite in production, in memory for the tests, both held to the same test suite.
+- Node prints `ExperimentalWarning: SQLite is an experimental feature` once at start: the API uses Node's built-in `node:sqlite`, so nothing native to compile on the Pi.
+
+> No Operator session yet: whoever reaches the API can read the history.
+
 ## Actuator commands — `POST /api/v1/commands`
 The Operator's way to the Alarm. The API stamps the command with a `cmd_id` and a `ts`, then publishes it on `command/<sentinel>/actuator`, over the same MQTTS connection the telemetry comes in on.
 
@@ -131,7 +167,8 @@ The body is the Actuator command of [`../docs/ARCHITECTURE.md`](../docs/ARCHITEC
 - [ ] Service tokens on `POST /api/v1/alerts`
 - [x] MQTT subscriber: Sentinel telemetry → WebSocket
 - [ ] MQTT subscriber: Sentinel Alerts → normalizer
-- [ ] DB writer (telemetry + Alert history)
+- [x] DB writer (telemetry + Alert history)
+- [x] `GET /api/v1/history` for the time-scrubber
 - [x] Status engine
 - [ ] Operator login + session middleware + `GET /api/v1/auth/check`
 - [x] WebSocket event bus
