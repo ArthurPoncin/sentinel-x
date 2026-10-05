@@ -21,6 +21,13 @@ describe('configuration from the environment', () => {
     expect(loadConfig({ HOST: '0.0.0.0', PORT: '9000' })).toMatchObject({ host: '0.0.0.0', port: 9000 })
   })
 
+  it('keeps the history in data/history.sqlite unless HISTORY_FILE says otherwise', () => {
+    expect(loadConfig({}).historyFile).toBe('data/history.sqlite')
+    expect(loadConfig({ HISTORY_FILE: '/var/lib/sentinel-x/history.sqlite' }).historyFile).toBe(
+      '/var/lib/sentinel-x/history.sqlite',
+    )
+  })
+
   it('names the variable it cannot make sense of', () => {
     expect(() => loadConfig({ MOCK_FEED: 'yes' })).toThrow(/MOCK_FEED/)
     expect(() => loadConfig({ PORT: 'http' })).toThrow(/PORT/)

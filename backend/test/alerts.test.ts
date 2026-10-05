@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createAlertPipeline, normalizeAlert } from '../src/alerts.js'
 import type { Alert, Frame } from '../src/contract.js'
+import { createMemoryHistory, type HistoryRepository } from '../src/history.js'
 import { gasAlert, intrusionAlert } from './support/alerts.js'
 
 describe('normalizeAlert', () => {
@@ -36,9 +37,9 @@ describe('normalizeAlert', () => {
 })
 
 describe('alert pipeline', () => {
-  function startPipeline() {
+  function startPipeline(history: HistoryRepository = createMemoryHistory()) {
     const frames: Frame[] = []
-    const pipeline = createAlertPipeline({ broadcast: (frame) => frames.push(frame) })
+    const pipeline = createAlertPipeline({ broadcast: (frame) => frames.push(frame) }, history)
     // The Status after each accepted Alert, oldest first.
     const statuses = () => frames.flatMap((frame) => (frame.type === 'status' ? [frame.payload.status] : []))
     return { pipeline, frames, statuses }
@@ -47,6 +48,36 @@ describe('alert pipeline', () => {
   function accept(pipeline: ReturnType<typeof startPipeline>['pipeline'], ...alerts: Alert[]) {
     for (const alert of alerts) pipeline.accept(alert)
   }
+
+  it('records every Alert in the history, cleared ones included', () => {
+    const history = createMemoryHistory()
+    const { pipeline } = startPipeline(history)
+
+    pipeline.accept(gasAlert())
+    pipeline.accept(gasAlert({ state: 'cleared', ts: '2026-10-05T14:24:00Z' }))
+
+    expect(history.query({ from: '2026-10-05T14:00:00Z', to: '2026-10-05T15:00:00Z' })).toEqual([
+      { type: 'alert', payload: gasAlert() },
+      { type: 'alert', payload: gasAlert({ state: 'cleared', ts: '2026-10-05T14:24:00Z' }) },
+    ])
+  })
+
+  it('still broadcasts an Alert the history cannot take, and says so', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const broken: HistoryRepository = {
+      append: () => {
+        throw new Error('database or disk is full')
+      },
+      query: () => [],
+    }
+    const { pipeline, frames } = startPipeline(broken)
+
+    pipeline.accept(gasAlert())
+
+    expect(frames).toMatchObject([{ type: 'alert' }, { type: 'status', payload: { status: 'elevated' } }])
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('database or disk is full'))
+    warn.mockRestore()
+  })
 
   it('broadcasts the Alert, then the Status it leads to', () => {
     const { pipeline, frames } = startPipeline()
