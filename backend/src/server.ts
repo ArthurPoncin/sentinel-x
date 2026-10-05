@@ -3,9 +3,18 @@ import fastify, { type FastifyInstance, type FastifyReply } from 'fastify'
 import { z } from 'zod'
 import { createAlertPipeline, normalizeAlert } from './alerts.js'
 import { type CommandRelay, createCommandRelay } from './commands.js'
-import { type AlertKind, type AlertSource, CommandRequestSchema, type History, HistoryQuerySchema } from './contract.js'
+import {
+  type AlertKind,
+  type AlertSource,
+  CommandRequestSchema,
+  type History,
+  HistoryQuerySchema,
+  IncidentParamsSchema,
+  type Incidents,
+} from './contract.js'
 import type { HistoryRepository } from './history.js'
 import { createHub, type Hub } from './hub.js'
+import { listIncidents, replayIncident } from './incidents.js'
 import { startMockFeed } from './mock-feed.js'
 import { connectBroker, type MqttConfig } from './mqtt.js'
 import { startMqttIngress } from './mqtt-ingress.js'
@@ -37,7 +46,7 @@ const KIND_OF_SERVICE: Partial<Record<AlertSource, AlertKind>> = {
 }
 
 // Same body as the errors Fastify raises on its own (malformed JSON, body too large…).
-function refuse(reply: FastifyReply, statusCode: 400 | 403 | 503, error: string, message: string) {
+function refuse(reply: FastifyReply, statusCode: 400 | 403 | 404 | 503, error: string, message: string) {
   return reply.code(statusCode).send({ statusCode, error, message })
 }
 
@@ -83,6 +92,21 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
 
     const history: History = { records: config.history.query(parsed.data) }
     return reply.send(history)
+  })
+
+  app.get('/api/v1/incidents', (_request, reply) => {
+    const incidents: Incidents = { incidents: listIncidents(config.history) }
+    return reply.send(incidents)
+  })
+
+  app.get('/api/v1/incidents/:incident_id', (request, reply) => {
+    const parsed = IncidentParamsSchema.safeParse(request.params)
+    if (!parsed.success) return refuse(reply, 400, 'Bad Request', z.prettifyError(parsed.error))
+
+    const { incident_id } = parsed.data
+    const replay = replayIncident(config.history, incident_id)
+    if (!replay) return refuse(reply, 404, 'Not Found', `No Incident ${incident_id}`)
+    return reply.send(replay)
   })
 
   // The way out to the Sentinels, once the server runs with a broker.
