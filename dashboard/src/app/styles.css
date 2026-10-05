@@ -106,10 +106,45 @@ main {
   padding-left: 1rem;
 }
 
-.twin-scene {
-  height: 70vh;
-  min-height: 20rem;
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
+/* A route that renders a .stage takes the whole window under the top bar; the others keep the padded page. */
+.shell:has(.stage) {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.shell:has(.stage) main {
+  flex: 1;
+  min-height: 0;
+  padding: 0;
   overflow: hidden;
+}
+
+.stage {
+  position: relative;
+  height: 100%;
+  background: #000;
+}
+
+.stage-caption {
+  position: absolute;
+  left: 1.25rem;
+  bottom: 1rem;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.stage-caption h1 {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.stage-caption p {
+  margin: 0.25rem 0 0;
+}
+
+.twin-scene {
+  height: 100%;
 }

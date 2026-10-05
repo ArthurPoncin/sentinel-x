@@ -34,7 +34,7 @@ cd backend && npm install && OPERATOR_AUTH=off MOCK_FEED=true HISTORY_FILE=:memo
 # terminal 2 — the app on http://localhost:5173 (/ and /twin)
 cd dashboard && npm install && npm run dev
 
-npm test            # store, feed client, config, gas level, scene mapper
+npm test            # store, feed client, config, gas level, scene mapper, automatic orbit, pixel ratio
 npm run build       # typecheck + production bundle in dist/
 ```
 
@@ -61,9 +61,11 @@ src/
 │   │   ├── hooks/           # useLiveFeed(selector)
 │   │   ├── components/      # LiveFeedProvider, ConnectionIndicator, FeedInspector
 │   │   └── index.ts         # the feature's public API
-│   └── twin/                # #20, #12 — the 3D Outpost
-│       ├── components/      # OutpostTwin: the react-three-fiber scene, drawn from SceneProps
+│   └── twin/                # #20, #12, #30 — the 3D Outpost, on its studio stage
+│       ├── components/      # OutpostTwin: the scene, drawn from SceneProps · OrbitCamera · Halo
+│       ├── hooks/           # usePixelRatio(element)
 │       ├── utils/           # toScene(state): the scene's props, pure · gasLevel(air): 0–1
+│       │                    # autoOrbitSpeed(touch, now) · pixelRatio(density, width, height)
 │       └── index.ts
 └── shared/
     ├── contract/            # re-exports backend/src/contract.ts — never redeclare a schema
@@ -116,11 +118,20 @@ const scene = useMemo(() => toScene({ status, latestTelemetry, activeAlerts }), 
 ```
 
 - `toScene(state)` turns the live state into what the scene shows, and is all the scene reads: pure, tested without WebGL. It gives the Enclosure's color and glow (gas), the Status's color grade, the drivers to pulse (active `predictive` Alerts) and where the intruder stands (last active `intrusion`'s `x_norm`). The pulse and the intruder are not drawn yet (#13).
-- The `Status` grades the whole scene — sky, light, perimeter ring: green `nominal`, amber `elevated`, red `critical`. It follows the Command Post's Status, never the readings.
+- The `Status` grades the whole scene — light, perimeter ring: green `nominal`, amber `elevated`, red `critical`. It follows the Command Post's Status, never the readings. The sky stays black on the stage (#30): the grade's `background` is no longer drawn.
 - The Enclosure goes from grey to red as `readings.air` rises, and lights the ground around it. It follows the telemetry, not the Alerts: it moves before any `gas` Alert is raised.
 - `gasLevel(air)` gives the share of the way from calm to critical, 0–1. Its two bounds, `CALM_AIR` (200) and `CRITICAL_AIR` (620), are those of the mock feed: tune them to the MQ-2's calibration when the Sentinel sends its own Readings.
 - Colors and glow ease toward the scene's: a snapshot a second fades in, it does not jump.
 - The feature takes its data as props: `app/routes/twin.tsx` reads the feed, maps it with `toScene` and hands it over. `TwinState` asks for the live-feed state's fields by shape, so a replayed state (time-scrubber) feeds it the same way.
+
+**The stage** (#30) is what every later Twin slice is set on:
+
+- **Full screen** — `OutpostTwin` fills its parent. A route that renders a `.stage` gets the whole window under the top bar (`styles.css`); the other routes keep the padded page.
+- **Light** — black background, a key light that casts the soft shadows, a cold rim light from behind, a trace of fill. The key and the fill take the Status's light color; the lights stay put while the camera orbits. Give a new mesh `castShadow` / `receiveShadow`.
+- **Halo** — only what emits light glows. `Halo` draws the scene a second time with its lights off and blurs that image over the frame: set `emissive` + `emissiveIntensity` on a material and it glows in proportion, in its own color; a lit surface never does, however bright. An unlit material (`meshBasicMaterial`) counts as emitting — the perimeter ring glows in the Status's color that way — so use a standard one for anything that should not glow.
+- **Color** — the frame is rendered in HDR and tone-mapped with `NeutralToneMapping`, which leaves the Status colors as they are.
+- **Camera** — it goes around the Outpost in 80 s. The Operator can turn it and zoom with the mouse, between bounds that keep the Outpost in frame (no panning, never under the ground); 3 s after they let go, the orbit picks up speed again. `autoOrbitSpeed` is that rule, as a pure function.
+- **Resolution** — `pixelRatio` caps the rendering at a pixel ratio of 2 and at 3 million pixels (`MAX_PIXELS`), whatever the screen. That budget was measured on an Iris Xe, where the Twin holds 60 images per second up to about 3.4 million pixels: raise it on a stronger GPU.
 
 ## TODO
 - [x] App shell + live feed (WebSocket client, store, hook) — #10
@@ -129,6 +140,7 @@ const scene = useMemo(() => toScene({ status, latestTelemetry, activeAlerts }), 
 - [ ] Camera panel + actuator control panel — #14
 - [x] 3D Outpost whose Enclosure reacts to gas — #20
 - [x] Scene mapper + Status color — #12
+- [x] Twin full screen, in studio light, with an orbiting camera — #30
 - [ ] Intruder placement (`x_norm` → perimeter arc), pulse — #13, #23
 - [ ] Time-scrubber + scenario mode — #15
 - [ ] CI: build + smoke render — #16

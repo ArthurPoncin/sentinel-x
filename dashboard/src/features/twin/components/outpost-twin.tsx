@@ -3,14 +3,18 @@ import { useMemo, useRef, useState } from 'react'
 import {
   type AmbientLight,
   Color,
-  type DirectionalLight,
-  type Group,
+  HalfFloatType,
   MathUtils,
   type MeshBasicMaterial,
   type MeshStandardMaterial,
+  NeutralToneMapping,
   type PointLight,
+  type SpotLight,
 } from 'three'
+import { usePixelRatio } from '../hooks/use-pixel-ratio'
 import { GAS_COLOR, type SceneProps, type StatusGrade } from '../utils/scene'
+import { Halo } from './halo'
+import { OrbitCamera } from './orbit-camera'
 
 // How fast what is on screen eases toward the scene: a snapshot a second fades in, it does not jump.
 const EASE = 4
@@ -21,7 +25,6 @@ function ease(color: Color, target: Color, delta: number) {
 }
 
 function Enclosure({ color, glow }: SceneProps['enclosure']) {
-  const enclosure = useRef<Group>(null)
   const material = useRef<MeshStandardMaterial>(null)
   const light = useRef<PointLight>(null)
   const target = useMemo(() => new Color(color), [color])
@@ -31,7 +34,6 @@ function Enclosure({ color, glow }: SceneProps['enclosure']) {
 
   useFrame((_, delta) => {
     shown.current = MathUtils.damp(shown.current, glow, EASE, delta)
-    if (enclosure.current) enclosure.current.rotation.y += delta * 0.15
     if (material.current) {
       ease(material.current.color, target, delta)
       material.current.emissiveIntensity = shown.current * 0.6
@@ -40,12 +42,12 @@ function Enclosure({ color, glow }: SceneProps['enclosure']) {
   })
 
   return (
-    <group ref={enclosure}>
-      <mesh position={[0, 0.08, 0]}>
+    <group>
+      <mesh position={[0, 0.08, 0]} castShadow receiveShadow>
         <boxGeometry args={[2, 0.16, 1.5]} />
         <meshStandardMaterial color="#233040" roughness={0.8} />
       </mesh>
-      <mesh position={[0, 0.66, 0]}>
+      <mesh position={[0, 0.66, 0]} castShadow receiveShadow>
         <boxGeometry args={[1.6, 1, 1.1]} />
         <meshStandardMaterial ref={material} color={initial} emissive={GAS_COLOR} emissiveIntensity={0} roughness={0.5} />
       </mesh>
@@ -55,38 +57,53 @@ function Enclosure({ color, glow }: SceneProps['enclosure']) {
   )
 }
 
-// The Status's color grade over the whole scene: the sky, the light, the perimeter ring.
-function Grade({ background, light, perimeter }: StatusGrade) {
+// The studio the Outpost stands in, and the Status's color grade over it: the light, the perimeter ring.
+// The lights stay put while the camera orbits, so the shadows do not sweep across the ground.
+function Grade({ light, perimeter }: StatusGrade) {
   // Set once, then eased toward the Status's: a color prop would jump past the easing.
   const [initial] = useState({ light, perimeter })
-  const sky = useRef(new Color(background))
-  const ambient = useRef<AmbientLight>(null)
-  const sun = useRef<DirectionalLight>(null)
+  const key = useRef<SpotLight>(null)
+  const fill = useRef<AmbientLight>(null)
   const ring = useRef<MeshBasicMaterial>(null)
   const targets = useMemo(
-    () => ({ background: new Color(background), light: new Color(light), perimeter: new Color(perimeter) }),
-    [background, light, perimeter],
+    () => ({ light: new Color(light), perimeter: new Color(perimeter) }),
+    [light, perimeter],
   )
 
-  useFrame(({ scene }, delta) => {
-    ease(sky.current, targets.background, delta)
-    scene.background = sky.current
-    if (ambient.current) ease(ambient.current.color, targets.light, delta)
-    if (sun.current) ease(sun.current.color, targets.light, delta)
+  useFrame((_, delta) => {
+    if (key.current) ease(key.current.color, targets.light, delta)
+    if (fill.current) ease(fill.current.color, targets.light, delta)
     if (ring.current) ease(ring.current.color, targets.perimeter, delta)
   })
 
   return (
     <>
-      <ambientLight ref={ambient} color={initial.light} intensity={0.7} />
-      <directionalLight ref={sun} color={initial.light} position={[3, 6, 4]} intensity={2.2} />
+      {/* Key light: from the front and above, the only one that casts shadows. */}
+      <spotLight
+        ref={key}
+        color={initial.light}
+        position={[4.5, 7.5, 3.5]}
+        angle={0.62}
+        penumbra={1}
+        decay={0}
+        intensity={3}
+        castShadow
+        shadow-mapSize={[1024, 1024]}
+        shadow-radius={5}
+        shadow-bias={-0.0004}
+      />
+      {/* Rim light: cold, low and from behind, it draws the edges out of the black. */}
+      <directionalLight position={[-5, 2.2, -4.5]} intensity={2.4} color="#9dbcff" />
+      {/* Just enough fill for the faces neither light reaches. */}
+      <ambientLight ref={fill} color={initial.light} intensity={0.06} />
       <group rotation={[-Math.PI / 2, 0, 0]}>
-        <mesh>
+        <mesh receiveShadow>
           <circleGeometry args={[3.2, 96]} />
           <meshStandardMaterial color="#1a2430" roughness={0.9} />
         </mesh>
         <mesh position={[0, 0, 0.005]}>
           <ringGeometry args={[3.14, 3.2, 96]} />
+          {/* Unlit: it shows the Status whatever the light, and the halo takes it for a light of its own. */}
           <meshBasicMaterial ref={ring} color={initial.perimeter} />
         </mesh>
       </group>
@@ -99,13 +116,27 @@ export interface OutpostTwinProps {
   scene: SceneProps
 }
 
-// The Outpost in 3D: the Status grades the whole scene, the Enclosure turns red as gas rises.
+// The Outpost in 3D, lit like a product in a studio on a black background: the Status grades the light and
+// the perimeter ring, the Enclosure turns red as gas rises. It fills its parent: give that the size the Twin
+// should have on screen.
 export function OutpostTwin({ scene }: OutpostTwinProps) {
+  const frame = useRef<HTMLDivElement>(null)
+  const dpr = usePixelRatio(frame)
+
   return (
-    <div className="twin-scene" role="img" aria-label="3D view of the Outpost">
-      <Canvas camera={{ position: [4.2, 3.2, 5.4], fov: 40 }}>
+    <div ref={frame} className="twin-scene" role="img" aria-label="3D view of the Outpost">
+      <Canvas
+        shadows="percentage"
+        dpr={dpr}
+        camera={{ position: [4.2, 3.2, 5.4], fov: 40 }}
+        // HDR buffer: the halo is added before tone mapping. Neutral keeps the Status colors as they are.
+        gl={{ outputBufferType: HalfFloatType, toneMapping: NeutralToneMapping }}
+      >
+        <color attach="background" args={['#000000']} />
         <Grade {...scene.status} />
         <Enclosure {...scene.enclosure} />
+        <OrbitCamera />
+        <Halo />
       </Canvas>
     </div>
   )
