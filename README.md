@@ -22,7 +22,7 @@ Most teams will build four disconnected bricks. **We build one living system.**
 The dashboard is not a wall of separate charts. It's a **live 3D replica of the outpost** (Three.js) where the real world drives the scene:
 
 - Real sensor values animate the twin — the box glows red as **gas** rises, heat shimmers on **thermal** spikes, the perimeter zone flashes on **PIR** motion.
-- The AI's webcam **intrusion detection** spawns an animated intruder marker inside the 3D perimeter, in real time.
+- The AI's camera **intrusion detection** spawns an animated intruder marker inside the 3D perimeter, in real time.
 - The AI's **predictive maintenance** pulses the exact component it believes is drifting *before* the critical threshold is crossed.
 - A **time-scrubber** replays the last incident second-by-second — our secret weapon for the live demo and the 60s teaser.
 
@@ -32,43 +32,43 @@ The twin makes the embedded intelligence *visible*. That's the story we tell the
 
 ## 🧩 System architecture
 
-> Hardware path: **Option B — Distributed "Edge-to-Server"**. No Raspberry Pi. A student laptop acts as the **Local Server + Wi-Fi access point**; the USB webcam plugs straight into it; the ESP8266 talks to it over Wi-Fi.
+> **3-node "Edge-to-Server"** on an isolated table network. The **Raspberry Pi 4** is the Command Post (the single logical server): it runs the stack, is the Wi-Fi access point, and owns the CSI camera. The **ESP32** is the field Sentinel. A **laptop** acts as the AI Worker (heavy vision + predictive inference, delegated by the Pi) and the Operator's screen.
 
 ```mermaid
 flowchart LR
-    subgraph box["🛰️ Sentinel-X Box (field)"]
-        ESP["ESP8266 firmware (C++)"]
-        DHT["DHT22 · temp/humidity"]
-        MQ["MQ-2 · gas/smoke"]
-        PIR["PIR HC-SR501 · presence"]
-        OLED["OLED I2C · status"]
-        ACT["Buzzer + status LEDs"]
-        DHT --> ESP
-        MQ --> ESP
-        PIR --> ESP
-        ESP --> OLED
-        ESP --> ACT
+    subgraph sentinel["🛰️ Sentinel · ESP32 (field)"]
+        DHT["DHT · temp/humidity"]
+        AIR["Air · gas"]
+        PIR["PIR · presence"]
+        ACC["Accelerometer · tamper"]
+        FP["Fingerprint · access"]
+        ALARM["Alarm · buzzer + MP3 speaker + LEDs"]
     end
 
-    subgraph server["💻 Local Server (laptop = AP + compute)"]
-        BROKER["Mosquitto MQTT broker"]
+    subgraph cp["💻 Command Post · Raspberry Pi 4 (Wi-Fi AP)"]
+        BROKER["Mosquitto (MQTTS)"]
         API["REST / WebSocket API"]
         DB["(Time-series DB)"]
-        AI["AI service · Python"]
-        CAM["USB webcam"]
-        DASH["Dashboard · 3D Digital Twin"]
+        CAM["CSI camera"]
+        DASH["Dashboard host · 3D Twin"]
     end
 
-    ESP -- "MQTTS / TLS" --> BROKER
-    BROKER --> API
-    API --> DB
-    CAM --> AI
-    AI --> API
-    API -- "WebSocket" --> DASH
-    DASH -- "actuator commands" --> API --> BROKER --> ESP
+    subgraph worker["🧠 AI Worker · laptop"]
+        VISION["Vision · intrusion"]
+        PRED["Predictive · temp+air drift"]
+        SCREEN["Operator screen"]
+    end
+
+    sentinel -- "MQTTS: telemetry + alerts" --> BROKER
+    BROKER --> API --> DB
+    CAM -- "video (Ethernet)" --> VISION
+    VISION -- "HTTPS POST /api/v1/alerts" --> API
+    PRED -- "HTTPS POST /api/v1/alerts" --> API
+    API -- "WebSocket" --> SCREEN
+    SCREEN -- "actuator command" --> API -- "MQTTS" --> BROKER --> sentinel
 ```
 
-**End-to-end encryption is mandatory** (MQTTS/TLS between the ESP8266 and the stack). The whole server stack runs containerized via **Docker-Compose** on an **isolated `192.168.x.0/24` subnet** behind a dedicated Wi-Fi access point.
+**End-to-end encryption is mandatory** (MQTTS/TLS between the Sentinel and the stack, HTTPS for the Worker). The server stack runs containerized via **Docker-Compose** on the Pi, on an **isolated `192.168.x.0/24` subnet** behind its dedicated Wi-Fi access point; the Worker links to the Pi over wired Ethernet.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/DIGITAL-TWIN.md`](docs/DIGITAL-TWIN.md) for the deep dives.
 
@@ -76,27 +76,29 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/DIGITAL-TWIN.md`](
 
 ## 🛠️ The four technical pillars
 
-| Pillar | What it delivers | Suggested stack |
-|---|---|---|
-| **Edge / IoT** | ESP8266 firmware: cadenced sensor reads, OLED status, buzzer/LED actuators, structured payloads to the server | C++ · PlatformIO |
-| **Local AI & Data** | Standalone Python: webcam intrusion detection + **correlation-based** predictive maintenance (no static `if temp>40`) | Python · YOLOv8-tiny / OpenCV · scikit-learn (Isolation Forest) |
-| **Infrastructure** | Containerized stack (DB + API + Mosquitto), isolated Wi-Fi topology & IP plan, MCO monitoring | Docker-Compose · Mosquitto |
-| **Cybersecurity** | TLS/MQTTS everywhere, OS hardening (UFW, SSH keys only), cross-team pentest | OpenSSL · UFW/iptables · Nmap/Wireshark |
-| **Dashboard & API** | Real-time UI: **3D Digital Twin**, live charts, box status, webcam feed, reactive actuator control | React · react-three-fiber (Three.js) · WebSocket |
+| Pillar | What it delivers | Suggested stack | Runs on |
+|---|---|---|---|
+| **Edge / IoT** | ESP32 firmware: cadenced probe reads, local display, Alarm (buzzer/MP3/LED), its own threshold/tamper Alerts, structured payloads | C++ · PlatformIO | Sentinel |
+| **Local AI & Data** | Vision intrusion detection + **correlation-based** predictive maintenance on temp+air drift (no static `if temp>40`) | Python · YOLOv8-tiny / OpenCV · scikit-learn | AI Worker |
+| **Infrastructure** | Containerized stack (DB + API + Mosquitto), isolated 3-node Wi-Fi/Ethernet topology & IP plan, MCO monitoring | Docker-Compose · Mosquitto | Command Post |
+| **Cybersecurity** | TLS/MQTTS everywhere, OS hardening (UFW, SSH keys only), cross-team pentest | OpenSSL · UFW/iptables · Nmap/Wireshark | transversal |
+| **Dashboard & API** | Real-time UI: **3D Digital Twin**, live charts, `Status`, camera feed, reactive actuator control | React · react-three-fiber (Three.js) · WebSocket | Command Post |
 
-> **Interconnection is pass/fail.** Physical sensor data must move the dashboard graphics in real time, and the AI must analyze the live webcam. That's the single most important integration to protect.
+> **Interconnection is pass/fail.** Physical probe data must move the Twin in real time, and the AI must analyze the live camera. That's the single most important integration to protect. The contract that binds it all is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#json-schemas-the-contract--lock-monday-change-only-by-team-agreement).
 
 ---
 
-## 👥 Consortium & roles (3 dev + 2 infra)
+## 👥 Consortium & workstreams (3 dev + 2 infra)
 
-| # | Role | Primary ownership |
+The **who-does-what split is open** — decided together after brainstorming. The stable part is the workstreams and which node each runs on:
+
+| Workstream | Node | Scope |
 |---|---|---|
-| Dev 1 | **Edge / IoT** | `firmware/` — ESP8266, sensors, actuators, payload contract |
-| Dev 2 | **AI / Data** | `ai/` — vision intrusion detection + predictive time-series model |
-| Dev 3 | **Dashboard / Digital Twin + API** | `dashboard/` + `backend/` — 3D twin, real-time UI, API |
-| Infra 1 | **Platform & Network** | `infra/` — Docker stack, MQTT, DB, Wi-Fi topology & IP plan |
-| Infra 2 | **Cyber & MCO** | `cyber/` — TLS, hardening, pentest, monitoring |
+| **Edge / IoT** | Sentinel (ESP32) | `firmware/` — probes, Alarm, local Alerts, telemetry |
+| **AI / Data** | AI Worker (laptop) | `ai/` — vision intrusion + predictive drift |
+| **Dashboard / Twin + API** | Command Post (Pi) | `dashboard/` + `backend/` — 3D twin, real-time UI, API |
+| **Platform & Network** | Command Post (Pi) | `infra/` — Docker stack, MQTT, DB, 3-node topology |
+| **Cyber & MCO** | transversal | `cyber/` — TLS, hardening, pentest, monitoring |
 
 Full breakdown in [`docs/TEAM.md`](docs/TEAM.md). User stories & tickets land in GitHub Issues once we finish brainstorming.
 
@@ -106,7 +108,7 @@ Full breakdown in [`docs/TEAM.md`](docs/TEAM.md). User stories & tickets land in
 
 ```
 sentinel-x/
-├── firmware/      # ESP8266 C++ firmware (PlatformIO)
+├── firmware/      # ESP32 C++ firmware (PlatformIO)
 ├── ai/            # Python: vision + predictive maintenance
 ├── backend/       # REST + WebSocket API (POST /api/v1/alerts)
 ├── dashboard/     # Web UI + 3D Digital Twin

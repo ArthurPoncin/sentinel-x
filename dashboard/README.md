@@ -1,29 +1,32 @@
 # dashboard/ — Web UI & 3D Digital Twin
 
-**Owner:** Dev 3 · **Suggested:** React + react-three-fiber (Three.js)
+**Node:** served by the Command Post (Pi), rendered in the Operator's browser (laptop) · **Suggested:** React + react-three-fiber (Three.js)
 
 The face of Sentinel-X and our **"wow" centerpiece**. See [`../docs/DIGITAL-TWIN.md`](../docs/DIGITAL-TWIN.md).
 
 ## Must have (from the brief)
 - Real-time environmental curves.
 - Logical box status.
-- Live USB webcam feed.
-- Reactive control panel to trigger actuators (buzzer, LEDs) remotely.
+- Live camera feed (from the Pi's CSI stream).
+- Reactive control panel to trigger actuators (buzzer, speaker, LEDs) remotely.
 
 ## Our extra — the Digital Twin
-- Live 3D replica of the outpost reacting to the real event stream.
-- Intruder marker on webcam detection, component pulse on predictive anomaly.
-- **Time-scrubber** to replay the last incident (demo insurance).
-- Scenario mode for the 3-minute live demo + 60s teaser.
+- Live 3D replica of the **Outpost** reacting to the real WebSocket event stream.
+- **Intruder marker** placed along the perimeter from the `intrusion` Alert's `x_norm`.
+- **Component pulse** on a `predictive` anomaly; box flashes on `tamper`.
+- **`Status`** drives the twin's overall color (`nominal`/`elevated`/`critical`).
+- **Time-scrubber** replays a past Incident (grouped by `alert_id`) — demo insurance.
+- Scenario mode for the 3-min live demo + 60s teaser.
 
 ## Build strategy
 - Decouple scene from data: WebSocket feed → state store → scene subscribes.
 - Mock the feed first so the twin progresses before hardware is ready.
-- Low-poly box model exported from the Fusion360 CAD.
+- Low-poly Outpost assets (Kenney / Poly Pizza) + box model exported from the Fusion360 CAD.
 
 ## TODO
 - [ ] App shell + WebSocket client
-- [ ] Charts + status + webcam panels
-- [ ] 3D scene + data bindings
+- [ ] Charts + Status + camera panels
+- [ ] 3D Outpost scene + data bindings
+- [ ] Intruder placement (`x_norm` → perimeter arc)
 - [ ] Actuator control panel
 - [ ] Time-scrubber + scenario mode
