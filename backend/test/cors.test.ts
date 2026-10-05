@@ -40,6 +40,15 @@ describe('CORS', () => {
     expect(response.headers.get('access-control-allow-headers')).toBe('content-type')
   })
 
+  it('answers the preflight without an Operator session: browsers never send the cookie with it', async () => {
+    const { request } = await startServer({ corsOrigins: [DASHBOARD], operatorAuth: { passwordHash: 'unused' } })
+
+    const response = await request('/api/v1/commands', preflight(DASHBOARD))
+
+    expect(response.status).toBe(204)
+    expect(response.headers.get('access-control-allow-origin')).toBe(DASHBOARD)
+  })
+
   it('grants nothing to an origin that is not listed', async () => {
     const { request } = await startServer({ corsOrigins: [DASHBOARD] })
 
