@@ -32,10 +32,13 @@ MOCK_FEED=true npm run dev   # live feed on ws://127.0.0.1:8080/ws, no hardware 
 npm test
 ```
 
+All the configuration comes from environment variables. `npm run dev` and `npm start` also read them from `backend/.env` if there is one: copy [`.env.example`](.env.example) and fill it in. A variable set in the environment wins over the file. `.env` holds the broker password: it is never committed. A value the API cannot make sense of stops it at start, naming the variable.
+
 | Variable | Default | Purpose |
 |---|---|---|
-| `HOST` | `127.0.0.1` | Listen address (`0.0.0.0` to serve other machines) |
+| `HOST` | `127.0.0.1` | Listen address (`0.0.0.0` to serve other machines; the image sets it) |
 | `PORT` | `8080` | Listen port |
+| `CORS_ORIGINS` | — | Origins allowed to call the API from a browser, comma-separated, e.g. `https://192.168.X.1,http://localhost:5173`. Unset: none — see [CORS](#cors) |
 | `MOCK_FEED` | `false` | `true` plays a scripted gas leak in a loop: `nominal` → `elevated` → `critical` → `nominal` |
 | `MOCK_FEED_INTERVAL_MS` | `1000` | Delay between two mock telemetry snapshots |
 | `MQTT_URL` | — | Broker shared with the Sentinels, e.g. `mqtts://mosquitto:8883`. Unset: no telemetry in, no command out. Only `mqtts://` is accepted |
@@ -43,6 +46,42 @@ npm test
 | `MQTT_PASSWORD` | — | Its password. Required with `MQTT_URL`; never committed |
 | `MQTT_CA_FILE` | — | Path of the team CA certificate (PEM). Required with `MQTT_URL` |
 | `HISTORY_FILE` | `data/history.sqlite` | SQLite file of the history, created with its directory if missing. `:memory:` keeps it in the process only |
+
+## Docker
+[`Dockerfile`](Dockerfile) builds the image the Compose stack runs as the `api` service. Nothing native to compile: it builds on the Pi (arm64) as on a laptop.
+
+```bash
+docker build -t sentinel-x/api backend/
+docker run --env-file backend/.env -v api-data:/data sentinel-x/api
+```
+
+- The image sets `HOST=0.0.0.0`, `PORT=8080` and `HISTORY_FILE=/data/history.sqlite`: mount a volume on `/data` to keep the history across restarts.
+- It runs as the unprivileged `node` user and publishes no port by itself: the reverse proxy reaches it as `api:8080` on the Compose network.
+- No secret in the image: the broker password comes from the environment, the CA from a mounted file (`MQTT_CA_FILE`).
+- Docker's healthcheck calls [`GET /health`](#health--get-health) every 15 s: the container is `unhealthy` while a broker is set and out of reach.
+- `docker compose stop` sends SIGTERM: the API leaves the broker, closes the history file and exits right away.
+
+## Health — `GET /health`
+The service and its link to the broker, for Docker's healthcheck and the MCO monitoring. Outside `/api` on purpose: the reverse proxy routes only `/api` and `/ws`, so it stays on the internal network, and needs no Operator session.
+
+```bash
+curl -i http://127.0.0.1:8080/health
+```
+
+| Response | Body | When |
+|---|---|---|
+| `200` | `{ "status": "ok", "broker": "connected" }` | Connected to the broker |
+| `200` | `{ "status": "ok", "broker": "off" }` | `MQTT_URL` unset: the API runs without a broker, as configured |
+| `503` | `{ "status": "degraded", "broker": "disconnected" }` | A broker is set but out of reach, or refuses the login: no telemetry in, no command out. History and Incidents still answer |
+
+The schema is in [`src/contract.ts`](src/contract.ts): `HealthSchema`.
+
+## CORS
+The dashboard and the Twin call their own origin: the reverse proxy on the Pi, the Vite proxy in dev. That needs no CORS, so by default the API allows no other origin.
+
+A front-end served elsewhere — the Twin on its own port, the dashboard without the Vite proxy — is let in by adding its origin to `CORS_ORIGINS`: scheme, host and port, no path (`http://localhost:5173`, `https://192.168.X.1`). Only `GET` and `POST`, cookies allowed for the Operator session to come. `*` is refused.
+
+CORS does not apply to the WebSocket: `/ws` will check the `Origin` with the Operator session.
 
 ## Sentinel telemetry — MQTTS
 With `MQTT_URL` set, the API logs in to the broker over TLS, checks its certificate against the team CA and nothing else, and subscribes to `sentinel/+/telemetry`. Every snapshot a Sentinel publishes there goes out as a `telemetry` frame on `/ws`.
@@ -234,4 +273,5 @@ The body is the Actuator command of [`../docs/ARCHITECTURE.md`](../docs/ARCHITEC
 - [ ] Session + `Origin` check on the WebSocket upgrade
 - [x] `POST /api/v1/commands` → MQTT publish
 - [ ] Rate limiting
-- [ ] `.env.example` (broker URL, DB URL, token/password placeholders — no secrets committed)
+- [x] `.env.example` (broker URL, history file, CORS origins, password placeholder — no secrets committed)
+- [x] CORS, `GET /health`, Dockerfile
