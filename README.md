@@ -70,7 +70,7 @@ flowchart LR
 
 **End-to-end encryption is mandatory** (MQTTS/TLS between the Sentinel and the stack, HTTPS for the Worker). The server stack runs containerized via **Docker-Compose** on the Pi, on an **isolated `192.168.x.0/24` subnet** behind its dedicated Wi-Fi access point; the Worker links to the Pi over wired Ethernet.
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/DIGITAL-TWIN.md`](docs/DIGITAL-TWIN.md) for the deep dives.
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/DIGITAL-TWIN.md`](docs/DIGITAL-TWIN.md) for the deep dives, and [`docs/SCOPE.md`](docs/SCOPE.md) for the demo scenario and build tiers (MVP → wow).
 
 ---
 
