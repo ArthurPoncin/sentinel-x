@@ -20,15 +20,30 @@ Firmware for the Sentinel: reads the probes, drives the LCD and the Alarm, **dec
 - MQTTS on port 8883 only; **broker certificate verified against the team CA** (`setCACert`) — never `setInsecure()`.
 - Own MQTT credentials (`sentinel-01`). The broker ACL only lets it publish `sentinel/sentinel-01/{telemetry,alert}` and read `command/sentinel-01/actuator`.
 
+## Build and flash
+**Plug and play:** plug the ESP32 into a USB port of the Pi, then on the Pi run [`../infra/plug-and-play.sh`](../infra/plug-and-play.sh) `<table>`. It writes `include/secrets.h` from the Pi's own `infra/secrets/` (the credentials never leave the Command Post), builds the firmware and flashes it.
+
+By hand, from a laptop with PlatformIO: copy `include/secrets.example.h` to `include/secrets.h` (git-ignored), fill it from `infra/secrets/handover.txt` and `infra/secrets/ca.crt`, then `pio run -t upload` and `pio device monitor`.
+
+| File | Role |
+|---|---|
+| `include/pins.h` | GPIOs, as on the wiring diagram |
+| `include/config.h` | cycle, thresholds, hysteresis, warm-ups: **calibrate here** |
+| `src/probes.*` | DHT22, MQ-2 (16-sample average), PIR, sound share (50 ms windows on an esp_timer, idle level read at boot) |
+| `src/alerts.*` | one state machine per kind; a severity change is raised again on the same `alert_id` |
+| `src/buzzer.*` | the Alarm: siren while an Alert is critical; `on` / `pattern` / `off` from the Operator (`off` silences until the next critical) |
+| `src/uplink.*` | Wi-Fi (hostname `sentinel-01`), time from the Pi, MQTTS with the team CA, commands |
+| `src/display.*` | the LCD: link state, Status, readings, active Alerts |
+| `src/main.cpp` | one cycle per second: read, decide, sound, publish, show |
+
+**What to expect:** a short beep at boot. The LCD then says what it waits for, in this order: `Wi-Fi...`, `MQTT: …` (TLS/network, password), `Heure du Pi...`, then `Command Post OK`. Telemetry starts once the DHT22 has answered and the Pi gave the time: the contract wants every reading and a real `ts`. The MQ-2 and the PIR raise no Alert during their first minute (warm-up). Alert transitions made while the broker is unreachable are queued (16), and every raised Alert is sent again on reconnection.
+
 ## Contract
 Telemetry, Alert and command schemas + topics: [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#json-schemas-the-contract--lock-monday-change-only-by-team-agreement). Lock Monday.
 
-## TODO (Mon–Tue)
-- [ ] Breadboard wiring diagram
-- [ ] Probe read loop + calibration (MQ-2 warm-up!)
-- [ ] Telemetry snapshot + Alert state machine (hysteresis)
-- [ ] Autonomous Alarm path (buzzer on critical, Pi-independent)
-- [ ] MQTTS connection with team CA cert + MQTT credentials
-- [ ] Actuator command handling
-
-> Wi-Fi SSID/passphrase, broker IP, MQTT credentials and the CA cert go in `include/secrets.h` — **gitignored, never committed**. Ship `include/secrets.example.h`.
+## TODO
+- [x] Breadboard wiring diagram
+- [x] Probe read loop, telemetry snapshot, Alert state machine (hysteresis), autonomous Alarm
+- [x] MQTTS connection with team CA cert + MQTT credentials, actuator commands
+- [ ] Calibrate the thresholds in `include/config.h` on the real kit (MQ-2 in clean air, a clap, a hand on the DHT22)
+- [ ] Check the LCD init tab (`INITR_BLACKTAB`) on the real screen

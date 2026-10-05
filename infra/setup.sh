@@ -57,8 +57,9 @@ certificate() {
   rm "$dir/$name.csr"
   made "$name.crt ($san)"
 }
-# The ESP32 reaches the broker by IP, the api and predictive by its Compose name.
-certificate "$secrets/mosquitto" broker "IP:$pi_ip,DNS:mosquitto"
+# The ESP32 reaches the broker by IP, the api and predictive by its Compose name. The IP is also
+# a DNS entry: the ESP32's TLS stack (mbedTLS 2.x) only matches the name against DNS entries.
+certificate "$secrets/mosquitto" broker "IP:$pi_ip,DNS:$pi_ip,DNS:mosquitto"
 # 127.0.0.1 and localhost: to check the stack from the Pi itself.
 certificate "$secrets/caddy" proxy "IP:$pi_ip,IP:127.0.0.1,DNS:localhost${EXTRA_SAN:+,$EXTRA_SAN}"
 

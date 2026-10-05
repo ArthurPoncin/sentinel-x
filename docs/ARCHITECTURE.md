@@ -224,6 +224,7 @@ Only what the table network needs reaches it; everything else stays on the inter
 | 8883/tcp | `mosquitto` (MQTTS) | Sentinel from the table Wi-Fi; `api` and `predictive` from the internal Docker network |
 | 22/tcp | SSH, keys only | Operator laptop only |
 | 67/udp | DHCP of the Wi-Fi AP | table Wi-Fi |
+| 123/udp | NTP (chrony): the table network has no Internet, and the Sentinel time-stamps its readings | table Wi-Fi |
 
 No plaintext port: no MQTT 1883, no HTTP 80. `db`, `api`, `dashboard`, `vision`, `predictive` publish no ports.
 

@@ -4,6 +4,23 @@
 
 Orchestrates the whole server stack on the Pi and owns the isolated table network.
 
+## Plug and play
+On a Raspberry Pi 4 with Raspberry Pi OS Bookworm, plugged into Ethernet the first time, with the ESP32 on one of its USB ports:
+
+```bash
+git clone https://github.com/ArthurPoncin/sentinel-x.git && cd sentinel-x
+infra/plug-and-play.sh X          # X = table number: the Pi becomes 192.168.X.1
+```
+
+[`plug-and-play.sh`](plug-and-play.sh) does everything below and more, and can be run again at will (it keeps what exists, `--no-flash` leaves the ESP32 alone):
+1. installs Docker, dnsmasq, chrony and PlatformIO, while there is Internet;
+2. makes the secrets ([`setup.sh`](setup.sh)) and starts the stack;
+3. builds the Sentinel's firmware with this Pi's secrets: no `handover.txt` to carry for the ESP32;
+4. turns the Pi's Wi-Fi into the table access point `SentinelX-X` (NetworkManager, 2.4 GHz, WPA2/CCMP, passphrase made once in `infra/secrets/wifi.env`), with DHCP only (dnsmasq: no DNS, no gateway, `sentinel-01` always on `.10`) and the time for the table (chrony: the network has no Internet, and every reading is time-stamped);
+5. flashes the ESP32 over USB and waits for its first telemetry snapshot on the broker.
+
+Everything comes back by itself when the Pi reboots. The manual steps follow, for reference.
+
 ## Run the Command Post on the Pi
 Everything runs from [`../docker-compose.yml`](../docker-compose.yml). The secrets it needs are made once, on the Pi, by [`setup.sh`](setup.sh), into `infra/secrets/` (git-ignored, never committed).
 
@@ -94,7 +111,8 @@ max_packet_size 4096
 - [x] `docker-compose.yml` + `setup.sh` (secrets) — `reverse-proxy`, `mosquitto`, `api`, `dashboard`
 - [x] Mosquitto config (TLS + ACL, with Cyber)
 - [ ] DB + volumes (history on the `api-data` volume for now; separate `db` to decide)
-- [ ] Wi-Fi AP + DHCP reservations + IP plan documented (network schema for the report)
+- [x] Wi-Fi AP + DHCP + time server: `plug-and-play.sh`
+- [ ] IP plan / network schema for the report
 - [ ] Pre-pull images, test a full cold boot offline
 
 > Deliverable: the **network schema** for the engineering report.
