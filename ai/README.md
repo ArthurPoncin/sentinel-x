@@ -11,6 +11,13 @@ Two jobs, both on the Pi (the brief's Option A): **see** (intrusion on the ZIF c
 - Emit an `intrusion` Alert with **`x_norm`** (normalized horizontal position 0→1) so the 3D twin can place the intruder along the perimeter.
 - `vision` is the only process that opens the camera, so it also **serves the camera feed** to the dashboard (MJPEG, detections drawn), through the reverse proxy behind the Operator session.
 
+### The intrusion Alert's lifecycle — `vision.tracker.IntruderTracker`
+Pure, camera and model aside: each inference's person boxes in, the Alerts to post out, the time passed in by the caller.
+- **One intruder at a time**, the most confident person: `x_norm` = the box's horizontal centre / image width, clamped to 0→1; `bbox` = `[x, y, w, h]` in whole pixels of the captured image, clipped to it. `severity: critical`.
+- **`raised`** once a person is seen on **2 inferences in a row**: a one-frame flash raises nothing.
+- **`raised` again, same `alert_id`**, when `x_norm` moved by **≥ 0.05** since the last Alert sent, **at most every 500 ms**; a move made inside those 500 ms is sent once they are over. Someone standing still sends nothing.
+- **`cleared`** once nobody has been seen for **3 s** (`CLEAR_AFTER_S`), with the last known detail — also when inference stalls, through `tick()`. A shorter miss changes nothing; whoever comes after a clear gets a new `alert_id`.
+
 ### Performance on the Pi 4 — benchmark Monday
 The main technical risk of Option A, on a Pi 4 that is slower than the Pi 5 the brief assumes: TFLite detection on its CPU runs at a few frames per second. Levers, in order:
 1. EfficientDet-Lite0 at its native **320** input (capture stays 640x480); switch to SSD MobileNet if it benchmarks faster.
