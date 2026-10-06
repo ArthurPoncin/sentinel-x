@@ -74,6 +74,24 @@ export function fencePosts(): GroundPoint[] {
   return Array.from({ length: posts }, (_, post) => toward(gate.bearing + halfGate() + post * bay, radius))
 }
 
+// The point `share` of the way along the gas pipe, over the ground: 0 at the hall's wall, 1 at the tank. The
+// haze of a gas leak seeps from there.
+export function alongPipe(share: number): GroundPoint {
+  const [start, ...rest] = SITE.pipe.path
+  const stretches = rest.map((to, index) => {
+    const from = index === 0 ? start : (rest[index - 1] ?? to)
+    return { from, to, length: Math.hypot(to.x - from.x, to.z - from.z) }
+  })
+  let left = Math.min(1, Math.max(0, share)) * stretches.reduce((sum, { length }) => sum + length, 0)
+  for (const { from, to, length } of stretches) {
+    if (left <= length) {
+      return { x: from.x + ((to.x - from.x) * left) / length, z: from.z + ((to.z - from.z) * left) / length }
+    }
+    left -= length
+  }
+  return rest.at(-1) ?? start
+}
+
 // Where the camera's lens is, over the ground: on the Enclosure's front, off its mast.
 export function lensPoint(): GroundPoint {
   const { x, z, heading } = SITE.enclosure

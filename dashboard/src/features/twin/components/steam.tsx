@@ -1,8 +1,8 @@
 import { useFrame } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
-import { IcosahedronGeometry, type Mesh, type MeshLambertMaterial, type WebGLProgramParametersWithUniforms } from 'three'
+import { IcosahedronGeometry, type Mesh, type MeshLambertMaterial } from 'three'
 import { PUFF_LIFE, puffAt } from '../utils/steam'
-import { OFF_WHITE } from './palette'
+import { VapourMaterial } from './vapour'
 
 // Puffs in a plume: enough for each to overlap the next all the way up.
 const PUFFS = 18
@@ -12,19 +12,6 @@ const WIND = { x: 0.95, z: -0.31 }
 const DENSITY = 0.5
 // How far off the plume's line a puff strays, in radii, so the plume is not a string of beads.
 const STRAY = 0.45
-
-// A puff is not a ball: it has no outline, since one looks through less steam toward its edge, and no dark
-// side, since light goes through it. So it thins out toward its edge and takes the light as if from above.
-function soften(shader: WebGLProgramParametersWithUniforms) {
-  shader.fragmentShader = shader.fragmentShader
-    .replace(
-      '#include <normal_fragment_begin>',
-      `#include <normal_fragment_begin>
-      float steamDepth = pow(saturate(dot(normal, normalize(vViewPosition))), 1.6);
-      normal = normalize(mix(normal, (viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz, 0.7));`,
-    )
-    .replace('#include <opaque_fragment>', 'diffuseColor.a *= steamDepth;\n#include <opaque_fragment>')
-}
 
 export interface SteamProps {
   // The chimney's mouth: where it stands and how high.
@@ -68,8 +55,7 @@ export function Steam({ x, z, height, lag = 0 }: SteamProps) {
           geometry={geometry}
           visible={false}
         >
-          {/* Matte, and many deep on screen: the cheapest material that takes the light. */}
-          <meshLambertMaterial color={OFF_WHITE} transparent opacity={0} depthWrite={false} onBeforeCompile={soften} />
+          <VapourMaterial />
         </mesh>
       ))}
     </group>

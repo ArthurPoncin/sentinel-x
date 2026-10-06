@@ -8,12 +8,17 @@ import {
   type Mesh,
   type MeshBasicMaterial,
   MeshStandardMaterial,
+  PlaneGeometry,
   type PointLight,
+  ShaderMaterial,
   SRGBColorSpace,
+  Vector2,
+  Vector3,
 } from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { useColorFade, useFade } from '../hooks/use-fade'
 import { useSweep } from '../hooks/use-sweep'
+import { ARC_REACH, ARCS, arcsAt, blink } from '../utils/alarm'
 import { breath } from '../utils/breathing'
 import { EASE, ease } from '../utils/easing'
 import { ENCLOSURE_PARTS, ENCLOSURE_SHAPE, ENGRAVING } from '../utils/enclosure-parts'
@@ -293,16 +298,107 @@ function ProbeCompartment({ pulses }: Pick<SceneProps['enclosure'], 'pulses'>) {
   )
 }
 
-// On top: the buzzer, and the LED ring around it that breathes in the Status's color.
-function Crown({ color }: SceneProps['enclosure']['ring']) {
-  const ring = useRef<MeshStandardMaterial>(null)
-  const colorNow = useColorFade(color)
-  const [initial] = useState(color)
+// How bright the LED ring is at the top of a breath, and at the top of a flash of the Alarm.
+const RING_GLOW = { breath: 2.2, flash: 4 } as const
+// How wide the line of an arc of sound is, at the Enclosure's scale 1, and how bright: enough for a halo.
+const ARC_LINE = 0.016
+const ARC_GLOW = 1.8
 
-  useFrame(({ clock }) => {
-    if (!ring.current) return
-    ring.current.emissive.fromArray(colorNow())
-    ring.current.emissiveIntensity = 2.2 * breath(clock.elapsedTime)
+const SOUND_VERTEX = /* glsl */ `
+  varying vec2 vAt;
+
+  void main() {
+    vAt = position.xy;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`
+const SOUND_FRAGMENT = /* glsl */ `
+  uniform vec3 color;
+  uniform float level;
+  // Each arc's radius and opacity.
+  uniform vec2 arcs[${ARCS}];
+  varying vec2 vAt;
+
+  void main() {
+    float away = length(vAt);
+    // An arc over the buzzer, not a ring around it: the line dies out as it comes down on either side.
+    float over = smoothstep(0.1, 0.6, vAt.y / max(away, 0.0001));
+    float edge = fwidth(away);
+    float line = 0.0;
+    for (int arc = 0; arc < ${ARCS}; arc++) {
+      float off = abs(away - arcs[arc].x);
+      line += arcs[arc].y * (1.0 - smoothstep(${ARC_LINE / 2} - edge, ${ARC_LINE / 2} + edge, off));
+    }
+    gl_FragColor = vec4(color * ${ARC_GLOW.toFixed(1)}, min(line, 1.0) * over * level);
+  }
+`
+
+// The buzzer's sound, drawn: thin arcs that leave it one a beat and die out as they rise, on a sheet that
+// stands on the buzzer. Unlit: they show whatever the light, and the halo takes them for a light.
+function createSound() {
+  const uniforms = {
+    color: { value: new Color() },
+    level: { value: 0 },
+    arcs: { value: Array.from({ length: ARCS }, () => new Vector2()) },
+  }
+  const material = new ShaderMaterial({
+    uniforms,
+    vertexShader: SOUND_VERTEX,
+    fragmentShader: SOUND_FRAGMENT,
+    transparent: true,
+    depthWrite: false,
+  })
+  // Standing on its lower edge, the buzzer under the middle of it.
+  const height = ARC_REACH + ARC_LINE
+  const sheet = new PlaneGeometry(2 * height, height).translate(0, height / 2, 0)
+
+  return { uniforms, material, sheet }
+}
+
+// On top: the buzzer, and the LED ring around it. At rest the ring breathes in the Status's color. While the
+// Alarm is on it blinks in the Alarm's, and the buzzer sounds on the same beat. One fades into the other.
+function Crown({ ring, alarm }: Pick<SceneProps['enclosure'], 'ring' | 'alarm'>) {
+  const led = useRef<MeshStandardMaterial>(null)
+  const waves = useRef<Mesh>(null)
+  const color = alarm?.color ?? ring.color
+  const colorNow = useColorFade(color)
+  // How much of the Alarm shows, 0–1.
+  const alarmNow = useFade([alarm ? 1 : 0])
+  const [initial] = useState(color)
+  const sound = useMemo(createSound, [])
+  const toCamera = useMemo(() => new Vector3(), [])
+  useEffect(
+    () => () => {
+      sound.material.dispose()
+      sound.sheet.dispose()
+    },
+    [sound],
+  )
+
+  useFrame(({ clock, camera }) => {
+    const shown = colorNow()
+    const alarmed = alarmNow()[0] ?? 0
+    const seconds = clock.elapsedTime
+    if (led.current) {
+      led.current.emissive.fromArray(shown)
+      led.current.emissiveIntensity = MathUtils.lerp(
+        RING_GLOW.breath * breath(seconds),
+        RING_GLOW.flash * blink(seconds),
+        alarmed,
+      )
+    }
+    if (!waves.current?.parent) return
+    // Nothing to draw while the buzzer is silent.
+    waves.current.visible = alarmed > 0.004
+    if (!waves.current.visible) return
+    // The sheet turns on the buzzer to face whoever looks, wherever the camera is on its orbit.
+    waves.current.parent.worldToLocal(toCamera.copy(camera.position))
+    waves.current.rotation.y = Math.atan2(toCamera.x, toCamera.z)
+    sound.uniforms.color.value.fromArray(shown)
+    sound.uniforms.level.value = alarmed
+    arcsAt(seconds).forEach(({ radius, opacity }, arc) => {
+      sound.uniforms.arcs.value[arc]?.set(radius, opacity)
+    })
   })
 
   return (
@@ -313,7 +409,7 @@ function Crown({ color }: SceneProps['enclosure']['ring']) {
       </mesh>
       <mesh name={ENCLOSURE_PARTS.ledRing} position={[0, 0.045, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <torusGeometry args={[0.24, 0.022, 16, 64]} />
-        <meshStandardMaterial ref={ring} color="#0c0d0f" emissive={initial} emissiveIntensity={2.2} />
+        <meshStandardMaterial ref={led} color="#0c0d0f" emissive={initial} emissiveIntensity={RING_GLOW.breath} />
       </mesh>
       <group name={ENCLOSURE_PARTS.buzzer} position={[0, 0.08, 0]}>
         <mesh castShadow>
@@ -324,6 +420,14 @@ function Crown({ color }: SceneProps['enclosure']['ring']) {
           <circleGeometry args={[0.025, 24]} />
           <meshStandardMaterial color="#000000" roughness={1} />
         </mesh>
+        {/* Its sound, from its top up. */}
+        <mesh
+          ref={waves}
+          position={[0, 0.045, 0]}
+          geometry={sound.sheet}
+          material={sound.material}
+          visible={false}
+        />
       </group>
     </group>
   )
@@ -336,9 +440,9 @@ export type EnclosureProps = SceneProps['enclosure'] & {
 
 // The Sentinel-X product: a dark bevelled module on a mast, its Probes and actuators each a part of its
 // own (ENCLOSURE_PARTS). The body turns red and glows as gas rises; the LCD shows the Status and the
-// LED ring breathes in its color; the Probes the predictive model says are drifting pulse; the PIR dome
-// blinks while someone is near.
-export function Enclosure({ color, glow, lcd, ring, pulses, presence }: EnclosureProps) {
+// LED ring breathes in its color, until the Alarm makes it blink and the buzzer sound; the Probes the
+// predictive model says are drifting pulse; the PIR dome blinks while someone is near.
+export function Enclosure({ color, glow, lcd, ring, alarm, pulses, presence }: EnclosureProps) {
   const body = useRef<MeshStandardMaterial>(null)
   const light = useRef<PointLight>(null)
   const target = useMemo(() => new Color(color), [color])
@@ -386,7 +490,7 @@ export function Enclosure({ color, glow, lcd, ring, pulses, presence }: Enclosur
         <MicGrille />
         <Engraving />
         <ProbeCompartment pulses={pulses} />
-        <Crown {...ring} />
+        <Crown ring={ring} alarm={alarm} />
         {/* What the gas throws on the ground around the Enclosure: from inside the body, it lights what
             is around without burning its own faces. */}
         <pointLight ref={light} color={GAS_COLOR} intensity={0} distance={7} />
