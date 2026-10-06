@@ -5,17 +5,22 @@ import {
   BufferAttribute,
   BufferGeometry,
   Color,
+  CylinderGeometry,
   Float32BufferAttribute,
   type InstancedMesh,
   type MeshStandardMaterial,
   Object3D,
+  Quaternion,
   TorusGeometry,
+  Vector3,
 } from 'three'
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { useFade } from '../hooks/use-fade'
 import { useSweep } from '../hooks/use-sweep'
+import { cameraField, type Face, fieldBase, fieldWalls, type SpacePoint } from '../utils/camera-field'
 import { sweepGlow } from '../utils/presence'
 import { INTRUSION_COLOR, PRESENCE_COLOR, type SceneProps } from '../utils/scene'
-import { fencePosts, type GroundPoint, halfGate, lensPoint, SITE, watchedPoint } from '../utils/site'
+import { fencePosts, type GroundPoint, halfGate, SITE } from '../utils/site'
 import { OFF_WHITE, STEEL } from './palette'
 import { Box } from './volumes'
 
@@ -152,20 +157,18 @@ function FenceSweep({ presence }: Pick<PerimeterProps, 'presence'>) {
   )
 }
 
-// A corner of a shape drawn on the ground, and how opaque the shape is there (1 unless given).
-type Corner = GroundPoint & { shade?: number }
+// A corner of a drawn shape: a point of the site, on the ground unless `y` says how high, and how opaque the
+// shape is there (1 unless given).
+type Corner = GroundPoint & { y?: number; shade?: number }
+type Triangle = readonly [Corner, Corner, Corner]
 
-// A flat shape lying on the ground and looking up, from its triangles.
-function onGround(triangles: readonly (readonly [Corner, Corner, Corner])[]): BufferGeometry {
+// A shape from its triangles, each looking the way that sees its corners go round counter-clockwise.
+function shapeOf(triangles: readonly Triangle[]): BufferGeometry {
   const positions: number[] = []
   const colors: number[] = []
-  for (const [a, b, c] of triangles) {
-    // Counter-clockwise seen from above: the face looks up.
-    const up = (b.z - a.z) * (c.x - a.x) - (b.x - a.x) * (c.z - a.z) > 0
-    for (const corner of up ? [a, b, c] : [a, c, b]) {
-      positions.push(corner.x, 0, corner.z)
-      colors.push(1, 1, 1, corner.shade ?? 1)
-    }
+  for (const corner of triangles.flat()) {
+    positions.push(corner.x, corner.y ?? 0, corner.z)
+    colors.push(1, 1, 1, corner.shade ?? 1)
   }
   const geometry = new BufferGeometry()
   geometry.setAttribute('position', new Float32BufferAttribute(positions, 3))
@@ -174,41 +177,85 @@ function onGround(triangles: readonly (readonly [Corner, Corner, Corner])[]): Bu
   return geometry
 }
 
+// A flat shape lying on the ground and looking up, from its triangles.
+function onGround(triangles: readonly Triangle[]): BufferGeometry {
+  return shapeOf(
+    triangles.map(([a, b, c]) => {
+      // Counter-clockwise seen from above: the face looks up.
+      const up = (b.z - a.z) * (c.x - a.x) - (b.x - a.x) * (c.z - a.z) > 0
+      return up ? [a, b, c] : [a, c, b]
+    }),
+  )
+}
+
 // Steps the watched arc of the fence is drawn in.
 const ARC_STEPS = 32
 const LINE = 0.014
 // How opaque the sector is under the lens, and where it reaches the fence.
 const SHADE = { lens: 0.15, fence: 0.03 }
-// How bright the lit sector emits, before its opacity: the field is a wash of light, the line its edge.
-const LIT = { field: 6, line: 4 }
+// The same for the walls of the volume over it, from the lens down: a veil, the Enclosure and the plant are
+// seen through them.
+const WALL = { lens: 0.12, fence: 0.03 }
+// The volume's two edges, from the lens to the ends of the arc: how thin they are drawn.
+const EDGE = 0.005
+// How bright the lit field emits, before its opacity: the sector is a wash of light, the walls a faint one
+// over what stands behind them, the line and the edges what bounds them.
+const LIT = { field: 6, line: 4, wall: 1, edge: 4 }
 
-// The camera's field of view, drawn on the ground: a sector from under the lens to the arc of the fence
-// where `x_norm` places the intruder. Neutral until an intrusion lights it: it then emits the intrusion's
-// color, so the halo takes it for a light, and goes out when the Alert is cleared. Both in a fade.
-function CameraSector({ lit }: SceneProps['sector']) {
-  const fieldMaterial = useRef<MeshStandardMaterial>(null)
+const UP = new Vector3(0, 1, 0)
+
+// A thin rod from `from` to each of `ends`, all of them one shape.
+function rodsTo(from: SpacePoint, ends: readonly SpacePoint[], radius: number): BufferGeometry {
+  const rods = ends.map((end) => {
+    const along = new Vector3(end.x - from.x, end.y - from.y, end.z - from.z)
+    const length = along.length()
+    // Drawn from its foot up, then turned toward its end.
+    return new CylinderGeometry(radius, radius, length, 6, 1, true)
+      .translate(0, length / 2, 0)
+      .applyQuaternion(new Quaternion().setFromUnitVectors(UP, along.normalize()))
+      .translate(from.x, from.y, from.z)
+  })
+  const all = mergeGeometries(rods)
+  for (const rod of rods) rod.dispose()
+  return all
+}
+
+// The camera's field of view, drawn as the volume the site plan gives it: it leaves from the Enclosure's lens
+// and opens down to the arc of the fence where `x_norm` places the intruder. Its base is the sector on the
+// ground, from under the lens to that arc; its walls are a veil, its two edges a thin line each. Neutral and
+// faint until an intrusion lights it: it then emits the intrusion's color, so the halo takes it for a light,
+// and goes out when the Alert is cleared. Both in a fade, the volume and its base together. It is drawn
+// before the intruder, which it does not veil, and casts no shadow.
+function CameraField({ lit }: SceneProps['sector']) {
+  const sectorMaterial = useRef<MeshStandardMaterial>(null)
   const lineMaterial = useRef<MeshStandardMaterial>(null)
+  const wallMaterial = useRef<MeshStandardMaterial>(null)
+  const edgeMaterial = useRef<MeshStandardMaterial>(null)
   const litNow = useFade([lit ? 1 : 0])
 
   useFrame(() => {
     const level = litNow()[0] ?? 0
-    if (fieldMaterial.current) fieldMaterial.current.emissiveIntensity = level * LIT.field
+    if (sectorMaterial.current) sectorMaterial.current.emissiveIntensity = level * LIT.field
     if (lineMaterial.current) lineMaterial.current.emissiveIntensity = level * LIT.line
+    if (wallMaterial.current) wallMaterial.current.emissiveIntensity = level * LIT.wall
+    if (edgeMaterial.current) edgeMaterial.current.emissiveIntensity = level * LIT.edge
   })
 
-  const [field, outline] = useMemo(() => {
-    const lens = lensPoint()
-    const arc = Array.from({ length: ARC_STEPS + 1 }, (_, step) => watchedPoint(step / ARC_STEPS))
-    const around = [lens, ...arc]
+  const [sector, outline, walls, edges] = useMemo(() => {
+    const field = cameraField(ARC_STEPS)
+    const { lens, under, arc } = field
+    const around = [under, ...arc]
+    // Most opaque at the lens and under it, least on the fence.
+    const shaded = (faces: readonly Face[], shade: typeof SHADE): Triangle[] => {
+      const drawn = (corner: SpacePoint): Corner => ({
+        ...corner,
+        shade: corner.x === under.x && corner.z === under.z ? shade.lens : shade.fence,
+      })
+      return faces.map(([a, b, c]) => [drawn(a), drawn(b), drawn(c)])
+    }
 
     return [
-      onGround(
-        arc.slice(1).map((point, step) => [
-          { ...lens, shade: SHADE.lens },
-          { ...(arc[step] ?? point), shade: SHADE.fence },
-          { ...point, shade: SHADE.fence },
-        ]),
-      ),
+      onGround(shaded(fieldBase(field), SHADE)),
       onGround(
         around.flatMap((from, index) => {
           const to = around[(index + 1) % around.length] ?? from
@@ -224,15 +271,46 @@ function CameraSector({ lit }: SceneProps['sector']) {
           return [[a, b, c] as const, [a, c, d] as const]
         }),
       ),
+      shapeOf(shaded(fieldWalls(field), WALL)),
+      rodsTo(lens, [arc.at(0), arc.at(-1)].flatMap((end) => end ?? []), EDGE),
     ]
   }, [])
 
   return (
-    // Just above the ground, the line just above the field, so neither flickers into the other.
-    <group position={[0, 0.004, 0]}>
-      <mesh geometry={field} renderOrder={1} receiveShadow>
+    <group>
+      {/* Just above the ground, the line just above the sector, so neither flickers into the other. */}
+      <group position={[0, 0.004, 0]}>
+        <mesh geometry={sector} renderOrder={1} receiveShadow>
+          <meshStandardMaterial
+            ref={sectorMaterial}
+            color={OFF_WHITE}
+            roughness={1}
+            emissive={INTRUSION_COLOR}
+            emissiveIntensity={0}
+            vertexColors
+            transparent
+            depthWrite={false}
+          />
+        </mesh>
+        <mesh geometry={outline} position={[0, 0.002, 0]} renderOrder={2} receiveShadow>
+          <meshStandardMaterial
+            ref={lineMaterial}
+            color={OFF_WHITE}
+            roughness={1}
+            emissive={INTRUSION_COLOR}
+            emissiveIntensity={0}
+            vertexColors
+            transparent
+            opacity={0.5}
+            depthWrite={false}
+          />
+        </mesh>
+      </group>
+      {/* Only the walls that face the eye are drawn: one veil over what stands behind them, whole, whatever
+          the side the volume is seen from. */}
+      <mesh geometry={walls} renderOrder={2}>
         <meshStandardMaterial
-          ref={fieldMaterial}
+          ref={wallMaterial}
           color={OFF_WHITE}
           roughness={1}
           emissive={INTRUSION_COLOR}
@@ -242,14 +320,13 @@ function CameraSector({ lit }: SceneProps['sector']) {
           depthWrite={false}
         />
       </mesh>
-      <mesh geometry={outline} position={[0, 0.002, 0]} renderOrder={2} receiveShadow>
+      <mesh geometry={edges} renderOrder={2}>
         <meshStandardMaterial
-          ref={lineMaterial}
+          ref={edgeMaterial}
           color={OFF_WHITE}
           roughness={1}
           emissive={INTRUSION_COLOR}
           emissiveIntensity={0}
-          vertexColors
           transparent
           opacity={0.5}
           depthWrite={false}
@@ -260,20 +337,20 @@ function CameraSector({ lit }: SceneProps['sector']) {
 }
 
 export interface PerimeterProps {
-  // Whether the camera's sector is lit: an intrusion is going on in it.
+  // Whether the camera's field is lit, the sector on the ground with it: an intrusion is going on in it.
   sectorLit: boolean
   // Whether someone is near the site: a `presence` Alert is active.
   presence: boolean
 }
 
 // The Outpost's perimeter: the fence around the site, which an amber sweep goes round while someone is near,
-// and, on the ground, what the camera watches of it, which lights up on an intrusion.
+// and what the camera watches of it, a volume from its lens down to the fence, which lights up on an intrusion.
 export const Perimeter = memo(function Perimeter({ sectorLit, presence }: PerimeterProps) {
   return (
     <group>
       <Fence />
       <FenceSweep presence={presence} />
-      <CameraSector lit={sectorLit} />
+      <CameraField lit={sectorLit} />
     </group>
   )
 })

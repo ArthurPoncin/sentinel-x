@@ -60,8 +60,8 @@ export interface SceneProps {
     // Whether the air ripples above it: while a `thermal` Alert is active.
     shimmer: boolean
   }
-  // The zone of the perimeter the camera watches, its sector on the ground: lit while an `intrusion` Alert
-  // is active, wherever the intruder stands in it.
+  // The zone of the perimeter the camera watches, the volume from its lens down to its sector on the ground:
+  // lit while an `intrusion` Alert is active, wherever the intruder stands in it.
   sector: { lit: boolean }
   // The intruder the last raised of the active `intrusion` Alerts sees: where it stands across the camera's
   // image, 0 = left, 1 = right, and so where on the perimeter, on the arc of the fence the camera watches. The
@@ -86,7 +86,7 @@ export const HEAT_COLOR = '#ff5a1f'
 // Color is kept for the Status and the signals.
 export const NEUTRAL_LIGHT = '#ffffff'
 export const NEUTRAL_RIM = '#9dbcff'
-// What the camera's sector lights in on an intrusion.
+// What the camera's field, and the sector on the ground under it, light in on an intrusion.
 export const INTRUSION_COLOR = STATUS_COLORS.critical
 // What the PIR dome blinks in and the fence is swept in on a presence: the amber of a warning.
 export const PRESENCE_COLOR = STATUS_COLORS.elevated
