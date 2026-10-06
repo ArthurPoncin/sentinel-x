@@ -1,6 +1,6 @@
 # dashboard/ — Web UI & 3D Digital Twin
 
-**Node:** served by the Command Post (Pi) through the reverse proxy (HTTPS/WSS), rendered in the Operator's browser · **Stack:** Vite + React + TypeScript, react-three-fiber (Three.js) for the Twin
+**Node:** served by the Command Post (Pi) through the reverse proxy (HTTPS/WSS), rendered in the Operator's browser · **Stack:** Vite + React + TypeScript, Tailwind CSS v4 + [shadcn/ui](https://ui.shadcn.com/docs/components) (Recharts for the charts), react-three-fiber (Three.js) for the Twin
 
 The face of Sentinel-X and our **"wow" centerpiece**. See [`../docs/DIGITAL-TWIN.md`](../docs/DIGITAL-TWIN.md).
 
@@ -47,6 +47,9 @@ The app always talks to its **own origin** (`/ws`, `/api`): the Vite dev server 
 | Variable | Default | Purpose |
 |---|---|---|
 | `BACKEND_URL` | `http://127.0.0.1:8080` | Command Post API that `/ws` and `/api` are proxied to in `dev` and `preview` (e.g. the Pi's address). Set it in `.env` (see `.env.example`). |
+| `CAMERA_URL` | — | The `vision` service's MJPEG stream that `/camera` is proxied to in `dev` and `preview`. Unset: the camera panel shows "unavailable" and retries every 5 s. |
+
+Run the backend with `OPERATOR_AUTH=on` (and an `OPERATOR_PASSWORD_HASH`) to get the login screen; with `OPERATOR_AUTH=off` the app goes straight in.
 
 ## Structure — feature-driven
 
@@ -63,8 +66,15 @@ src/
 │   │   ├── api/             # connectFeed(): WebSocket client, backoff, drops bad frames
 │   │   ├── stores/          # apply(state, event): pure reducer + tiny external store · stateAfter(frames)
 │   │   ├── hooks/           # useLiveFeed(selector)
-│   │   ├── components/      # LiveFeedProvider, ConnectionIndicator, FeedInspector
+│   │   ├── components/      # LiveFeedProvider, ConnectionIndicator
 │   │   └── index.ts         # the feature's public API
+│   ├── auth/                # AuthGate (login screen until a session exists), useSignOut()
+│   ├── status/              # StatusCard, StatusBadge — the Status the backend computes
+│   ├── telemetry/           # #21 #11 — ReadingTiles, Gas / Climate / Sound charts, toSeries()
+│   ├── alerts/              # #11 — ActiveAlerts, AlertLog, AlertToasts
+│   ├── incidents/           # ThreatOverview, IncidentTable, useIncidents() on GET /api/v1/incidents
+│   ├── camera/              # #14 — CameraPanel on /camera, intruder marker from x_norm
+│   ├── actuators/           # #14 — ActuatorPanel, POST /api/v1/commands
 │   ├── replay/              # #15 — the time-scrubber and scenario mode
 │   │   ├── api/             # fetchIncidents(), fetchIncidentReplay(id): the Command Post's recorded Incidents
 │   │   ├── hooks/           # usePlayer(): second by second · useRecordedIncidents(key)
@@ -96,7 +106,12 @@ src/
 │       └── index.ts
 └── shared/
     ├── contract/            # re-exports backend/src/contract.ts — never redeclare a schema
-    └── config/              # feedUrl() · captureMode() · STATUS_COLORS
+    ├── config/              # feedUrl() · captureMode() · STATUS_COLORS
+    ├── api/                 # getJson / postJson on the app's own origin
+    ├── lib/                 # cn(), French labels, Status/severity colors, fr-FR formats
+    ├── components/          # LevelBadge: the outline badge with a colored dot
+    ├── hooks/               # use-mobile (shadcn sidebar)
+    └── ui/                  # shadcn/ui components (components.json points the CLI here)
 ```
 
 **Rules**
@@ -105,6 +120,10 @@ src/
 - Features don't import each other; `app/routes` composes them. `shared/` imports nothing from `features/` or `app/`.
 - Logic goes in pure functions next to their tests (`*.test.ts`), so it is tested without a browser; components stay thin.
 - Imports use the `@/` alias for `src/`.
+
+- UI building blocks come from shadcn/ui: `npx shadcn@latest add <component>` writes them to `src/shared/ui/` (check that its imports say `@/shared/lib/utils`). Icons are lucide-react, shadcn's icon library. The theme is shadcn's neutral one, dark only, in `app/styles.css`; `nominal` / `elevated` / `critical` are Tailwind colors too (`text-critical`, `bg-nominal`…), kept to dots and figures.
+- The UI text is in French (the Operator and the jury are); code, comments and docs stay in English. Labels shared by several features live in `shared/lib/labels.ts`.
+- `app/` holds the shell: the shadcn sidebar (`app-sidebar.tsx`) and the header with the connection and the Status (`layout.tsx`).
 
 **Features to come**
 
@@ -227,7 +246,7 @@ const history = useLiveFeed((state) => state.history)
 
 **The stage** (#30) is what every later Twin slice is set on:
 
-- **Full screen** — `OutpostTwin` fills its parent. A route that renders a `.stage` gets the whole window under the top bar (`styles.css`); the other routes keep the padded page.
+- **Full screen** — `OutpostTwin` fills its parent. A route whose `handle` says `stage: true` (the router's `/twin`) gets the whole space under the header; the other routes keep the padded page. `layoutMode(matches, location)` in `app/layout-mode.ts` decides it.
 - **Light** — black background, a key light that casts the soft shadows, a cold rim light from behind, a trace of fill. The key and the fill take the grade's `light`, the rim its `rim`: neutral at `nominal`, the Status's color otherwise. The lights stay put while the camera orbits. Give a new mesh `castShadow` / `receiveShadow`. The shadow map is 2048 wide with a blur of 3 since #32: a wider blur shows its grain on the off-white walls. The shadows are drawn once (`StillShadows`), since nothing that casts one moves: after moving a caster, ask for them again with `gl.shadowMap.needsUpdate = true`.
 - **Halo** — only what emits light glows. `Halo` draws the scene a second time with its lights off and blurs that image over the frame: set `emissive` + `emissiveIntensity` on a material and it glows in proportion, in its own color; a lit surface never does, however bright. An unlit material (`meshBasicMaterial`) counts as emitting — the ring around the socle glows in the Status's color that way — so use a standard one for anything that should not glow. Its pass is the last to touch the frame: that is also where the frame turns grey when the signal is lost (`saturation`), and where hot air ripples what is seen through it (#35).
 - **Color** — the frame is rendered in HDR and tone-mapped with `NeutralToneMapping`, which leaves the Status colors as they are.
@@ -259,10 +278,23 @@ const history = useLiveFeed((state) => state.history)
 
 **Capture mode** (#40) — `/twin?capture` is the Twin alone, to be filmed for the teaser:
 
-- **No interface** — no top bar, no connection indicator, no caption: the canvas takes the whole window, on black. `captureMode(location)` reads the parameter (being there is enough, whatever its value); without it `/twin` is the normal view.
+- **No interface** — no sidebar, no header (so no connection indicator or Status badge), no caption: the canvas takes the whole window, on black. `captureMode(location)` reads the parameter (being there is enough, whatever its value); without it `/twin` is the normal view.
 - **Same feed** — mock or live, it plays what the normal view plays.
 - **Whole in frame** — `<OutpostTwin wholeStage />` stands the camera back until the whole stage holds in the frame, whatever its shape: `wholeStageDistance(aspect)` fits a sphere around the stage (`STAGE_RADIUS`, the ring around the socle plus room for its halo) in the narrower field of view, so it holds all the way around the orbit and at any tilt. The camera can still be turned by hand; it no longer zooms.
 - Anything added to the stage further out than the ring around the socle needs a larger `STAGE_RADIUS`.
+
+## Operator view — `/`
+
+| Panel | Feature | Data |
+|---|---|---|
+| Outpost Status card, header badge | `status` | `status` frames; "Connexion…" / "Signal perdu" while the feed is down |
+| Reading tiles (with the change over 30 s) | `telemetry` | latest `telemetry` frame |
+| Gas, temperature & humidity, noise curves (last 5 min) | `telemetry` | `telemetry` frames of the live history |
+| Camera, intruder marker at `x_norm` | `camera` | `GET /camera` (MJPEG), active `intrusion` Alert |
+| Active Alerts, toast on each new or escalated Alert | `alerts` | active Alerts |
+| Alarm control (siren, buzzer off, red/green LED, LEDs off) | `actuators` | `POST /api/v1/commands`; the request is checked against the contract before it leaves |
+| Threats: Incidents, neutralized, under way, mean time to nominal, Incidents per kind | `incidents` | `GET /api/v1/incidents`, fetched again after each Alert and every 15 s |
+| Alert log / Incidents tabs | `alerts` · `incidents` | `alert` frames of the live history · `GET /api/v1/incidents` |
 
 ## Time-scrubber — `features/replay`
 
@@ -291,9 +323,9 @@ const shown = player.frames ? stateAfter(player.frames) : liveState   // replaye
 
 ## TODO
 - [x] App shell + live feed (WebSocket client, store, hook) — #10
-- [ ] Operator login screen: the API is ready (`POST /api/v1/auth/login`, `GET /api/v1/auth/check`, see [`../backend/README.md`](../backend/README.md#operator-session))
-- [ ] Charts + Status + Alerts — #21, #11
-- [ ] Camera panel + actuator control panel — #14
+- [x] Operator login screen (`POST /api/v1/auth/login`, `GET /api/v1/auth/check`)
+- [x] Charts + Status + Alerts — #21, #11
+- [x] Camera panel + actuator control panel — #14 (the `/camera` route in the reverse proxy and the firmware's pattern / LED names are still to agree on)
 - [x] 3D Outpost whose Enclosure reacts to gas — #20
 - [x] Scene mapper + Status color — #12
 - [x] Twin full screen, in studio light, with an orbiting camera — #30
