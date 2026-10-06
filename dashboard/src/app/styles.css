@@ -9,6 +9,8 @@
      shared/config/status-colors.ts, and main.tsx hands them over. */
   /* What is laid over the Twin fades as long as the scene under it: FADE_SECONDS, in features/twin. */
   --fade: 0.8s;
+  /* What a replay is told by: a violet no Status shares, so it never passes for the Outpost's state. */
+  --replay: #b48cff;
   font-family: system-ui, sans-serif;
   background: var(--bg);
   color: var(--text);
@@ -191,4 +193,120 @@ main {
   opacity: 1;
   visibility: visible;
   transition-delay: 0s;
+}
+
+/* A replay frames the whole stage in its color: the Twin is not showing the Outpost as it is now. */
+.stage[data-replay]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 3px solid var(--replay);
+  pointer-events: none;
+}
+
+/* LIVE or REPLAY, at the top left of the stage, clear of the scrubber: never both, never neither. */
+.replay-label {
+  position: absolute;
+  top: 1rem;
+  left: 1.25rem;
+  margin: 0;
+  padding: 0.35em 0.9em;
+  border: 1px solid var(--border);
+  background: rgb(0 0 0 / 65%);
+  color: var(--muted);
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.replay-label strong {
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.replay-label[data-mode='replay'] {
+  border-color: var(--replay);
+  background: var(--replay);
+  color: #0b0f14;
+  font-size: clamp(1rem, 2vw, 1.5rem);
+}
+
+.scrubber {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  display: grid;
+  /* The column never grows past the panel: a long Incident in the list is cut, not the panel widened. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.5rem;
+  width: min(24rem, calc(100% - 2rem));
+  box-sizing: border-box;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: rgb(19 26 34 / 85%);
+  font-size: 0.85rem;
+}
+
+.stage[data-replay] .scrubber {
+  border-color: var(--replay);
+}
+
+.scrubber-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.scrubber select,
+.scrubber input[type='range'] {
+  flex: 1;
+  min-width: 0;
+}
+
+.scrubber input[type='range'] {
+  accent-color: var(--replay);
+}
+
+.scrubber select,
+.scrubber button {
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.scrubber button {
+  cursor: pointer;
+}
+
+.scrubber button:hover {
+  border-color: var(--muted);
+}
+
+.scrubber-time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.scrubber-source,
+.scrubber-error {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.scrubber-error {
+  color: var(--critical);
+}
+
+/* Where the top of the stage is too narrow for both, the label goes down, over the caption. */
+@media (max-width: 52rem) {
+  .replay-label {
+    top: auto;
+    bottom: 4.5rem;
+  }
 }

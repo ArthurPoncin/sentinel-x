@@ -61,6 +61,15 @@ export function apply(state: FeedState, event: FeedEvent): FeedState {
   }
 }
 
+// Where a replay starts from: a feed open all along, so a replayed state never shows a signal lost, whatever
+// the socket does meanwhile.
+const REPLAYED: FeedState = { ...initialFeedState, connection: 'open', connectedOnce: true }
+
+// The state the feed would hold after these frames, oldest first: what a replay shows at a point in time.
+export function stateAfter(frames: readonly Frame[]): FeedState {
+  return frames.reduce<FeedState>((state, frame) => apply(state, frame), REPLAYED)
+}
+
 export interface FeedStore {
   getState(): FeedState
   subscribe(listener: () => void): () => void

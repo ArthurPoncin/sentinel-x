@@ -17,9 +17,9 @@ A **live 3D replica** of the Sentinel-X outpost rendered in the dashboard (Three
 
 ## Signature features
 
-- **Time-scrubber** — replay the last N minutes of incidents second-by-second. Lets us script the live demo precisely and re-run it if the network hiccups.
+- **Time-scrubber** — replay a past Incident second-by-second, labelled REPLAY. Lets us script the live demo precisely and re-run it if the network hiccups. Built in #15: see [`../dashboard/README.md`](../dashboard/README.md#time-scrubber--featuresreplay).
 - **Threat overview** — a single glanceable state fusing cyber + physical + environmental, shown on the twin (not three disconnected widgets).
-- **Scenario mode** — a scripted "attack sequence" for the 3-minute live demo and the 60s green-screen teaser.
+- **Scenario mode** — a scripted "attack sequence" for the 3-minute live demo and the 60s green-screen teaser. The dashboard plays the reference scenario (gas leak + two PIR detections) on demand, without the network (#15).
 
 ## Why it scores
 
