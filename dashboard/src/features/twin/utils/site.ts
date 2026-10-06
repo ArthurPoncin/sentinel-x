@@ -71,6 +71,11 @@ export function halfGate(): number {
   return gate.width / radius / 2
 }
 
+// The middle of the gate, on the fence's line: the way in, where whoever comes near the site is headed.
+export function gatePoint(): GroundPoint {
+  return toward(SITE.fence.gate.bearing, SITE.fence.radius)
+}
+
 // Where the fence's posts stand: evenly spaced, from one side of the gate round the site to the other.
 export function fencePosts(): GroundPoint[] {
   const { radius, posts, gate } = SITE.fence

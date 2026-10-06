@@ -19,7 +19,7 @@ import {
   type TwinState,
   toScene,
 } from './scene'
-import { SITE, watchedPoint } from './site'
+import { alongPipe, gatePoint, SITE, watchedPoint } from './site'
 
 const ts = '2026-10-05T14:23:00.000Z'
 
@@ -114,6 +114,7 @@ describe('toScene', () => {
       sector: { lit: false },
       intruder: null,
       presence: { active: false },
+      anchor: null,
       signalLost: false,
     })
   })
@@ -488,6 +489,72 @@ describe('toScene', () => {
 
   it('shows a presence in amber, the color of the elevated Status', () => {
     expect(PRESENCE_COLOR).toBe(STATUS_COLORS.elevated)
+  })
+
+  const anchorFor = (...activeAlerts: Alert[]) => toScene(state({ activeAlerts })).anchor
+
+  it('anchors nothing while no Alert is active', () => {
+    expect(anchorFor()).toBeNull()
+  })
+
+  it('anchors an intrusion where its intruder stands', () => {
+    for (const x_norm of [0.15, 0.35, 0.55, 0.75]) {
+      const scene = toScene(state({ activeAlerts: [intrusion('i1', x_norm)] }))
+
+      expect(scene.anchor).toEqual({ alertId: 'i1', at: watchedPoint(x_norm) })
+      expect(scene.anchor?.at).toEqual(scene.intruder?.at)
+    }
+  })
+
+  it('anchors a gas Alert on the gas pipe, halfway along it', () => {
+    const { path } = SITE.pipe
+
+    expect(anchorFor(gas)).toEqual({ alertId: 'g1', at: alongPipe(0.5) })
+    // On the stretch that leaves the hall, between its two ends.
+    expect(anchorFor(gas)?.at.x).toBeCloseTo(path[0].x)
+    expect(anchorFor(gas)?.at.z).toBeGreaterThan(path[0].z)
+    expect(anchorFor(gas)?.at.z).toBeLessThan(path[1].z)
+  })
+
+  it('anchors a thermal Alert on the generator hall', () => {
+    expect(anchorFor(thermal)).toEqual({ alertId: 't1', at: { x: SITE.hall.x, z: SITE.hall.z } })
+  })
+
+  it('anchors a presence Alert at the gate', () => {
+    expect(anchorFor(presence('pr1'))).toEqual({ alertId: 'pr1', at: gatePoint() })
+  })
+
+  it('anchors a predictive Alert on the Enclosure, whatever it says is drifting', () => {
+    const onEnclosure = { x: SITE.enclosure.x, z: SITE.enclosure.z }
+
+    expect(anchorFor(predictive('p1', ['temp_slope']))).toEqual({ alertId: 'p1', at: onEnclosure })
+    expect(anchorFor(predictive('p1', []))).toEqual({ alertId: 'p1', at: onEnclosure })
+  })
+
+  it('gives a noise Alert no anchor, and leaves the one of the Alert raised before it', () => {
+    expect(anchorFor(sensed('noise', 'info'))).toBeNull()
+    expect(anchorFor(gas, sensed('noise', 'info'))).toEqual(anchorFor(gas))
+  })
+
+  it('anchors the last raised of the active Alerts, and the one before it once that one is cleared', () => {
+    // The feed keeps the active Alerts in the order they were first raised, and takes a cleared one out.
+    expect(anchorFor(predictive('p1', ['air_slope']), gas, presence('pr1'))?.alertId).toBe('pr1')
+    expect(anchorFor(predictive('p1', ['air_slope']), gas)?.alertId).toBe('g1')
+    expect(anchorFor(predictive('p1', ['air_slope']))?.alertId).toBe('p1')
+  })
+
+  it('keeps the anchor on the last raised Alert when one raised before it is sent again', () => {
+    // An Alert raised again keeps its place among the active ones: its intruder moved, it is no newer.
+    expect(anchorFor(intrusion('i1', 0.55), gas)?.alertId).toBe('g1')
+  })
+
+  it('gives each kind of Alert an anchor of its own, on the socle', () => {
+    const anchors = [intrusion('i1', 0.15), gas, thermal, presence('pr1'), predictive('p1', [])].map(
+      (alert) => anchorFor(alert)?.at,
+    )
+
+    expect(new Set(anchors.map((at) => `${at?.x.toFixed(3)} ${at?.z.toFixed(3)}`)).size).toBe(anchors.length)
+    for (const at of anchors) expect(Math.hypot(at?.x ?? 0, at?.z ?? 0)).toBeLessThan(SITE.socle.radius)
   })
 
   it('does not change the state it is given', () => {

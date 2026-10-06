@@ -38,7 +38,7 @@ cd dashboard && npm install && npm run dev
 npm test            # store, feed client, config, gas level, heat level, scene mapper, site plan, steam, haze, Alarm,
                     # fades, escalation flash, pulse, presence sweep, noise wave, automatic orbit, pixel ratio, framing,
                     # the camera's field, the intruder's track and last known position, walk cycle and figurine,
-                    # its detection's label and frame,
+                    # its detection's label and frame, the camera's turn to an Alert,
                     # Incidents, replay, scenario, Incidents client, the Twin on a replay
 npm run build       # typecheck + production bundle in dist/
 npm run smoke       # smoke-render of that bundle, on the mock feed — see below
@@ -91,7 +91,7 @@ src/
 │   │   ├── utils/           # incidents(history) · replayOf(history, incident) · framesAt(replay, t)
 │   │   │                    # withStatus(frames) · scenario(start), scenarioFrames(start) · labels
 │   │   └── index.ts
-│   └── twin/                # #20, #12, #30, #31, #32, #33, #40, #13, #36, #34, #35, #37, #23, #38, #91, #92, #93, #94, #96, #95 — the Outpost as a maquette, on its studio stage
+│   └── twin/                # #20, #12, #30, #31, #32, #33, #40, #13, #36, #34, #35, #37, #23, #38, #91, #92, #93, #94, #96, #95, #97 — the Outpost as a maquette, on its studio stage
 │       ├── components/      # OutpostTwin: the scene, drawn from SceneProps · Enclosure · OrbitCamera · Halo
 │       │                    # Socle · PowerPlant · Perimeter · Steam: the site, drawn from SITE
 │       │                    # Haze: the gas around the pipe · VapourMaterial: what steam and haze are made of
@@ -101,15 +101,17 @@ src/
 │       │                    # LabelCard: a signal's label, a card that faces the camera
 │       │                    # Box · Turned: the bevelled volumes it is built from · boxShape, turnedShape: their shapes · palette
 │       ├── hooks/           # usePixelRatio(element) · useFade(target), useColorFade(color) · useSweep(present)
-│       │                    # useWaves(frames) · useStatusLight(level, neutral)
+│       │                    # useWaves(frames) · useStatusLight(level, neutral) · useFraming(anchor, frames)
 │       ├── utils/           # toScene(state): the scene's props, pure · gasLevel(air), heatLevel(temp): 0–1
 │       │                    # SITE: the ground plan · lensPoint(), lensHeight() · watchedPoint(xNorm) · fencePosts()
 │       │                    # bearingTo(from, to): the way to face · roundFence(point): how far round the fence
-│       │                    # bearingAlongFence(point, way): the way to face to walk along it
+│       │                    # bearingAlongFence(point, way): the way to face to walk along it · gatePoint()
 │       │                    # cameraField(steps), fieldBase(field), fieldWalls(field): the camera's field, a volume
 │       │                    # alongPipe(share) · puffAt(age): a puff of steam's life · wispAt(age): a wisp
 │       │                    # of haze's · blink(t), arcsAt(t): the Alarm · ENCLOSURE_PARTS, ENCLOSURE_SHAPE
-│       │                    # autoOrbitSpeed(touch, now) · pixelRatio(density, width, height)
+│       │                    # autoOrbitSpeed(touch, now), resumeRamp(elapsed) · pixelRatio(density, width, height)
+│       │                    # newlyRaised(seen, frames), shortestTurn(from, to), cameraTurn(framing, azimuth, touch, now):
+│       │                    # the camera's turn to an Alert
 │       │                    # wholeStageDistance(aspect) · fadeTo(fade, to, now), fadeValue(fade, now)
 │       │                    # statusShare(from, to, elapsed): the Status's share of the light as it rises
 │       │                    # lightTo(light, level, now), lightShares(light, now), lit(shares, neutral, colors)
@@ -210,7 +212,7 @@ const history = useLiveFeed((state) => state.history)
 <OutpostTwin scene={scene} frames={history} />
 ```
 
-- `toScene(state)` turns the live state into what the scene shows, and is all the scene reads: pure, tested without WebGL. It gives the Enclosure's color and glow (gas), what its LCD reads and the color its LED ring breathes in (the Status), its Alarm (active `gas` and `thermal` Alerts), the Probes to pulse and the drift's label (active `predictive` Alerts), how thick the haze around the gas pipe is (gas), the Status's color grade, the heat of the generator hall (how red its roof glows, whether the air ripples above it), whether the camera's field is lit, its sector on the ground with it (an active `intrusion`), where the intruder stands and how sure the vision model is of it (last active `intrusion`'s `alert_id`, `x_norm` and the point of the fence it gives, `confidence` and the label that reads it), whether someone is near the site (an active `presence`) and whether the signal is lost.
+- `toScene(state)` turns the live state into what the scene shows, and is all the scene reads: pure, tested without WebGL. It gives the Enclosure's color and glow (gas), what its LCD reads and the color its LED ring breathes in (the Status), its Alarm (active `gas` and `thermal` Alerts), the Probes to pulse and the drift's label (active `predictive` Alerts), how thick the haze around the gas pipe is (gas), the Status's color grade, the heat of the generator hall (how red its roof glows, whether the air ripples above it), whether the camera's field is lit, its sector on the ground with it (an active `intrusion`), where the intruder stands and how sure the vision model is of it (last active `intrusion`'s `alert_id`, `x_norm` and the point of the fence it gives, `confidence` and the label that reads it), whether someone is near the site (an active `presence`), where the last raised of the active Alerts happens (`anchor`, for [the camera to turn to](#digital-twin--featurestwin)) and whether the signal is lost.
 - The `Status` grades the scene, and no longer lights the whole of it for good (#91, a change from #12). The key light and the fill are neutral at every Status (`scene.status.light`): the signals are in the Status's hues, and a red intruder is lost on a maquette lit in red. What says the Status at all times is the rim light (`scene.status.rim`, the studio's cold one at `nominal`), the ring around the socle, the LCD and the LED ring: green, amber, red. It follows the Command Post's Status, never the readings. The sky stays black on the stage (#30): the grade's `background` is no longer drawn.
 - **The escalation flash** (#91). When the Status rises (`nominal` → `elevated`, `elevated` → `critical`, `nominal` → `critical`), the whole model is lit in the new Status's color for `FLASH_HOLD` (2 s, the fade that brings the color in included), then the light fades back to neutral over `FADE_SECONDS`, keeping a slight tint of the Status (`REST_SHARE`, 12 % of the light). A Status that goes down does not flash: the light only fades to the tint of the new one, none at `nominal`. `statusShare(from, to, elapsed)` (`utils/escalation.ts`) is that envelope, the share of the Status's color in the light, pure and tested.
 - **From one Status to the next** — `lightTo(light, level, now)` and `lightShares(light, now)` carry the light across the changes: it leaves what is on screen for what the new Status asks over `FADE_SECONDS`, so the flash fades in like every change, and a Status that rises during a flash floods the model in its own color from the one on screen, without a jump. The Status the Twin opens on is shown at rest: nothing flashes for what was already there. `lit(shares, neutral, colors)` is the color that makes; `useStatusLight(level, neutral)` runs it all on every frame, for the key light and the fill. A replay and the scenario flash the same way, a Status reached by a seek included: the light follows the Status on screen, whatever feeds it.
@@ -222,7 +224,7 @@ const history = useLiveFeed((state) => state.history)
 - The Enclosure goes from dark anodized to red as `readings.air` rises, and lights the ground around it. It follows the telemetry, not the Alerts: it moves before any `gas` Alert is raised.
 - `gasLevel(air)` gives the share of the way from calm to critical, 0–1. Its two bounds, `CALM_AIR` (200) and `CRITICAL_AIR` (620), are those of the mock feed: tune them to the MQ-2's calibration when the Sentinel sends its own Readings. The Enclosure's glow and the haze both run over that range: it is set there, once.
 - What follows the Readings (the Enclosure's gas color and glow, the haze, the glow of the hall's roof) eases toward them (`EASE`, `HAZE_EASE`): a snapshot a second flows into the next, it does not jump.
-- The feature takes its data as props: `app/routes/twin.tsx` reads the feed, maps it with `toScene` and hands it over, with the feed's frames (`frames`) for what is an event rather than a state: a clap. `TwinState` asks for the live-feed state's fields by shape, so a replayed state (time-scrubber) feeds it the same way.
+- The feature takes its data as props: `app/routes/twin.tsx` reads the feed, maps it with `toScene` and hands it over, with the feed's frames (`frames`) for what is an event rather than a state: a clap, an Alert raised for the first time. `TwinState` asks for the live-feed state's fields by shape, so a replayed state (time-scrubber) feeds it the same way.
 
 **The threats** (#13) — what the vision and predictive services see, shown on the maquette:
 
@@ -279,6 +281,21 @@ const history = useLiveFeed((state) => state.history)
 - **Drawn** — one disc over the whole socle, whose shader draws every wave as a band around the Enclosure, sharper at its front than at its back, fading out at the socle's cut edge. In `NOISE_COLOR`, an ice white no Status shares (the Alert is only `info`: something was heard, nothing is wrong), unlit and added over the ground, so the halo takes it for a light and the buildings it passes behind hide it. It is not drawn at all while the site is quiet. Its cost, while a wave is on, is one disc's fragments, twice (the lit frame and the halo's): not measured on the Iris Xe yet, but far below the haze's.
 - **On the real Sentinel** — the firmware raises `noise` once and holds it for `NOISE_HOLD_MS` (3 s) of quiet before clearing it: claps closer than that make one Alert, so one wave. On the mock feed, the clap is raised at 0.82 and cleared on the next tick.
 
+**The camera turns to the Alert** (#97) — the orbit took no account of what happened: depending on the instant, an Alert was raised at the edge of the frame or behind the Enclosure. Now the camera goes to it:
+
+![The camera turned to the gas pipe as the gas Alert is raised on the mock feed, the haze around the pipe in front of it](../docs/twin/camera-gas.png)
+
+- **An anchor a kind** — `scene.anchor` is where the last raised of the active Alerts happens on the site plan, with its `alertId`: the intruder for an `intrusion` (`watchedPoint(x_norm)`, where the figurine stands), the middle of the gas pipe for a `gas` (`alongPipe(0.5)`), the generator hall for a `thermal`, the gate for a `presence` (`gatePoint()`), the Enclosure for a `predictive`. A clap is heard, not seen anywhere: a `noise` Alert has no anchor and leaves it to the Alert raised before it. `toScene` does the mapping, tested without a render.
+- **Newly raised** — like a clap, it is an event: `newlyRaised(seen, frames)` gives the Alerts raised for the first time among the frames that came in, paired by `alert_id` as the feed does. An `intrusion` sent again where its intruder now stands, a `gas` Alert raised again as it gets worse are not new, even on the tick another Alert is cleared; the Alerts already active when the Twin opens are past, and so is a history that does not follow on. The pairing reads the frames the Twin is given: an Alert active for longer than the feed's history holds (its last 1000 frames, about a quarter of an hour) counts as new when it is sent again. `useFraming(anchor, frames)` frames the scene's anchor when its Alert is among them, where it was as it was raised: the intruder that walks on does not move the camera a second time.
+- **The turn** — `cameraTurn(framing, azimuth, touch, now)` (`utils/alert-framing.ts`) says how the camera turns on its own at an instant, pure and tested: toward the anchor's bearing the shortest way round (`shortestTurn`), in `FRAMING_TURN` (2 s) however far that is, slow out of the orbit and slow onto the anchor; it stays there for `FRAMING_HOLD` (6 s), the orbit stopped; then the automatic orbit picks up speed over `RESUME_RAMP`, as it does after the Operator. Facing an anchor is standing on its side of the site: the camera still looks at the centre, the anchor in front of it. The turn is worked out from where the camera is, not from where it started, so there is nothing to remember and a more recent Alert takes the camera from wherever the first one left it.
+- **Neither the distance nor the height change** — `OrbitCamera` turns the camera round the vertical of its target, then lets the controls read where it stands, as after a drag.
+- **The Operator's hand comes first** — the camera stops the instant they take it, mid-turn included, and is not taken back when they let go: the orbit resumes after its usual `RESUME_DELAY`. An Alert raised while they hold the camera moves nothing. The next Alert turns the camera again.
+- **Replay and scenario** — the camera follows the Alerts a replay raises, second after second, and again when it is played again; going back to live moves nothing.
+- **Capture mode** — the same turn, at the distance that holds the whole stage: nothing leaves the frame.
+- **On the mock feed** — the camera goes to the Enclosure on the drift, to the pipe on the gas, to the gate on the presence, to the hall on the heat, then to the intruder; the gas raised again at `critical` and back at `warning` moves nothing. The loop raises an Alert every 3 to 4 s at its busiest, so the camera leaves for the next one before the hold is over.
+- **At the default distance** the front of the socle is under the bottom edge of the frame, as it is whenever the orbit passes there: facing an anchor on the fence, the gate or the intruder, puts it at the bottom of the image. When it first appears the figurine shows its head and shoulders, its brackets and its label in frame, and more of itself as it walks on. Three wheel notches back hold it whole, the ring at its feet included, and so does capture mode.
+- **Cost** — nothing is drawn: a few sines a frame, and the history read through once when a frame comes in. Measured on the Iris Xe at 1920 × 1080 against the build before it, production bundle, on the mock feed over a whole loop (42 s), each build on its own with the frame rate capped by the screen: 59.7 images a second against 59.6, a median of 16.7 ms a frame and 99 % of them within 16.8 ms for both. A second run, with other sessions on the GPU, gave 57.4 against 56.9, both builds stalling alike. Uncapped, the two at the same time under the same load: a median of 10.2 ms a frame for both, then 9.1 against 9.4.
+
 **The site** (#32) is what the Enclosure watches over, and what every reaction is anchored on:
 
 ![The Outpost, nominal](../docs/twin/outpost-nominal.png)
@@ -310,7 +327,7 @@ const history = useLiveFeed((state) => state.history)
 - **Light** — black background, a key light that casts the soft shadows, a cold rim light from behind, a trace of fill. The key and the fill take the grade's `light`, neutral at every Status, and the Status's color for a moment as it rises (#91, [the escalation flash](#digital-twin--featurestwin)). The rim takes the grade's `rim`: cold at `nominal`, the Status's color otherwise. Seen from behind, the faces the key light does not reach are lit by the rim alone, so they read in the Status's color for as long as it lasts. The lights stay put while the camera orbits. Give a new mesh `castShadow` / `receiveShadow`. The shadow map is 2048 wide with a blur of 3 since #32: a wider blur shows its grain on the off-white walls. The shadows are drawn once (`StillShadows`), since nothing that casts one moves: after moving a caster, ask for them again with `gl.shadowMap.needsUpdate = true`.
 - **Halo** — only what emits light glows. `Halo` draws the scene a second time with its lights off and blurs that image over the frame: set `emissive` + `emissiveIntensity` on a material and it glows in proportion, in its own color; a lit surface never does, however bright. An unlit material (`meshBasicMaterial`) counts as emitting — the ring around the socle glows in the Status's color that way — so use a standard one for anything that should not glow. Its pass is the last to touch the frame: that is also where the frame turns grey when the signal is lost (`saturation`), and where hot air ripples what is seen through it (#35).
 - **Color** — the frame is rendered in HDR and tone-mapped with `NeutralToneMapping`, which leaves the Status colors as they are.
-- **Camera** — it goes around the Outpost in 80 s. The Operator can turn it and zoom with the mouse, between bounds that keep the Outpost in frame (no panning, never under the ground); 3 s after they let go, the orbit picks up speed again. `autoOrbitSpeed` is that rule, as a pure function.
+- **Camera** — it goes around the Outpost in 80 s. The Operator can turn it and zoom with the mouse, between bounds that keep the Outpost in frame (no panning, never under the ground); 3 s after they let go, the orbit picks up speed again. `autoOrbitSpeed` is that rule, as a pure function. It turns to an Alert as it is raised (#97, [the camera turns to the Alert](#digital-twin--featurestwin)).
 - **Resolution** — `pixelRatio` caps the rendering at a pixel ratio of 2 and at 3 million pixels (`MAX_PIXELS`), whatever the screen. That budget was measured on an Iris Xe, where the Twin holds 60 images per second up to about 3.4 million pixels: raise it on a stronger GPU.
 
 **The Enclosure** (#31) — the Sentinel-X product itself, on a mast, at an exaggerated scale (`ENCLOSURE_SHAPE.scale`) to stay readable from the back of the room. Built in code from bevelled volumes (`RoundedBoxGeometry`) and canvas-drawn textures, no external model.
@@ -340,7 +357,7 @@ const history = useLiveFeed((state) => state.history)
 
 - **No interface** — no top bar, no sidebar (so no connection indicator), no caption: the canvas takes the whole window, on black. `captureMode(location)` reads the parameter (being there is enough, whatever its value); without it `/twin` is the normal view.
 - **Same feed** — mock or live, it plays what the normal view plays.
-- **Whole in frame** — `<OutpostTwin wholeStage />` stands the camera back until the whole stage holds in the frame, whatever its shape: `wholeStageDistance(aspect)` fits a sphere around the stage (`STAGE_RADIUS`, the ring around the socle plus room for its halo) in the narrower field of view, so it holds all the way around the orbit and at any tilt. The camera can still be turned by hand; it no longer zooms.
+- **Whole in frame** — `<OutpostTwin wholeStage />` stands the camera back until the whole stage holds in the frame, whatever its shape: `wholeStageDistance(aspect)` fits a sphere around the stage (`STAGE_RADIUS`, the ring around the socle plus room for its halo) in the narrower field of view, so it holds all the way around the orbit and at any tilt. The camera can still be turned by hand; it no longer zooms. It turns to an Alert as in the normal view (#97), at that distance.
 - Anything added to the stage further out than the ring around the socle needs a larger `STAGE_RADIUS`.
 
 ## Operator view — `/`
@@ -407,6 +424,7 @@ const shown = player.frames ? stateAfter(player.frames) : liveState   // replaye
 - [x] The figurine walks to where it is seen, and turns the way it goes — #94
 - [x] The last known position: the figurine's outline stays about 5 s where it was last seen — #95
 - [x] The camera's field as a volume, from the Enclosure's lens down to its sector on the ground — #96
+- [x] The camera turns to the Alert as it is raised, then orbits again — #97
 - [x] Time-scrubber + scenario mode — #15
 - [x] Neutral light, the Status floods the scene as it rises — #91
 - [x] CI: build + smoke render — #16

@@ -18,6 +18,7 @@ A **live 3D replica** of the Sentinel-X outpost rendered in the dashboard (Three
 ## Signature features
 
 - **Time-scrubber** — replay a past Incident second-by-second, labelled REPLAY. Lets us script the live demo precisely and re-run it if the network hiccups. Built in #15: see [`../dashboard/README.md`](../dashboard/README.md#time-scrubber--featuresreplay).
+- **Director's camera** — the Twin's camera orbits the site, and turns by itself to where an Alert happens the moment it is raised: the intruder on an intrusion, the gas pipe on a gas Alert, the generator hall on a thermal one, the gate on a presence, the box on a predictive drift. It gets there in 2 s by the shortest way round, stays about 6 s, then orbits again; a clap moves nothing. The Operator's hand always wins, and the camera does the same in a replay, in scenario mode and in capture mode. Built in #97: see [`../dashboard/README.md`](../dashboard/README.md#digital-twin--featurestwin).
 - **Threat overview** — a single glanceable state fusing cyber + physical + environmental, shown on the twin (not three disconnected widgets).
 - **Scenario mode** — a scripted "attack sequence" for the 3-minute live demo and the 60s green-screen teaser. The dashboard plays the reference scenario (gas leak + two PIR detections) on demand, without the network (#15).
 
