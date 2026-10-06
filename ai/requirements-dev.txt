@@ -1,3 +1,4 @@
 # Everything the tests of ai/ need, on a laptop: the services' own requirements and pytest.
 pytest==9.1.1
 -r predictive/requirements.txt
+-r vision/requirements.txt

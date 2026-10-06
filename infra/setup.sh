@@ -3,7 +3,8 @@
 #   - the team CA, and the certificates it signs for the broker and the reverse proxy;
 #   - one MQTT account per client (sentinel-01, api, predictive) and the broker's ACL;
 #   - one bearer token per AI service (vision, predictive);
-#   - the Operator's password hash.
+#   - the Operator's password hash;
+#   - the AI services' own files, vision.env and predictive.env: the same tokens and MQTT password.
 # Run it on the Pi, from the repo root, before the first `docker compose up`:
 #   infra/setup.sh <table number>          e.g. infra/setup.sh 4  → the Pi is 192.168.4.1
 # What exists already is kept: delete a file (sudo: some belong to the containers) to make it again.
@@ -113,6 +114,52 @@ fi
 
 [[ -f "$secrets/handover.txt" ]] && chmod 600 "$secrets/handover.txt"
 
+echo "AI services: vision.env, predictive.env"
+# The same values as api.env and the broker's passwd, or the api refuses their Alerts and the broker
+# their login. An install made before them gets them from what it has, nothing else is made again.
+from_api_env() {
+  local value
+  value="$(sed -n "s/^$1=//p" "$secrets/api.env")"
+  [[ -n "$value" ]] || { echo "  No $1 in secrets/api.env: delete it and secrets/mosquitto/passwd (sudo) and run again." >&2; exit 1; }
+  printf %s "$value"
+}
+broker_reload=false
+if [[ -f "$secrets/vision.env" ]]; then
+  kept vision.env
+else
+  vision_token="$(from_api_env VISION_TOKEN)"
+  (umask 077 && cat > "$secrets/vision.env" <<VISION
+# Read by the vision service (docker-compose.yml). Made by infra/setup.sh: VISION_TOKEN as in api.env.
+VISION_TOKEN=$vision_token
+VISION
+  )
+  made vision.env
+fi
+if [[ -f "$secrets/predictive.env" ]]; then
+  kept predictive.env
+else
+  predictive_token="$(from_api_env PREDICTIVE_TOKEN)"
+  # Made just above, or else handed over at the time: passwd only keeps its hash.
+  if [[ -z "${predictive_password:-}" && -f "$secrets/handover.txt" ]]; then
+    predictive_password="$(sed -n 's/.*user predictive, password \([0-9a-f]*\).*/\1/p' "$secrets/handover.txt")"
+  fi
+  if [[ -z "${predictive_password:-}" ]]; then
+    # Lost: a new one, in place of the old one in passwd. The other accounts are left as they are.
+    predictive_password="$(openssl rand -hex 24)"
+    in_container "mosquitto_passwd -b /secrets/mosquitto/passwd predictive '$predictive_password'" 2>/dev/null
+    broker_reload=true
+    echo "  new MQTT password for predictive (none in handover.txt), in passwd"
+  fi
+  (umask 077 && cat > "$secrets/predictive.env" <<PREDICTIVE
+# Read by the predictive service (docker-compose.yml). Made by infra/setup.sh: its MQTT password as
+# in the broker's passwd, PREDICTIVE_TOKEN as in api.env.
+MQTT_PASSWORD=$predictive_password
+PREDICTIVE_TOKEN=$predictive_token
+PREDICTIVE
+  )
+  made predictive.env
+fi
+
 # The ACL, from infra/mosquitto/acl, each run. The broker runs as 1883 and the reverse proxy as
 # 65534: each reads its own files, nobody else.
 in_container "cp /acl /secrets/mosquitto/acl && chown -R 1883:1883 /secrets/mosquitto && chmod 600 /secrets/mosquitto/* \
@@ -120,6 +167,9 @@ in_container "cp /acl /secrets/mosquitto/acl && chown -R 1883:1883 /secrets/mosq
   && chmod 644 /secrets/mosquitto/broker.crt"
 
 echo
+if $broker_reload; then
+  echo "The broker's passwd changed: docker compose restart mosquitto first, if it runs already."
+fi
 echo "Done. Next: docker compose up -d --build   (from the repo root)"
 echo "Then open https://$pi_ip/ from the Operator laptop, after importing infra/secrets/ca.crt as a trusted CA."
 echo "Hand over infra/secrets/handover.txt to the firmware and AI teams, out of band."

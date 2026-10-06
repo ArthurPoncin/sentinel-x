@@ -1,0 +1,11 @@
+# The build context of the AI images is ai/: only the code goes in, never a venv, a cache, the tests
+# or a secret.
+**/.venv
+**/venv
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/tests
+**/.env
+**/.env.*
+**/*.joblib

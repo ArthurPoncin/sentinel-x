@@ -2,6 +2,8 @@
 #   docker compose up -d --build
 # Only the reverse proxy (443) and the broker (8883) are reachable from the table network; the
 # rest only talk to each other, on a network with no way out. See infra/README.md.
+# The camera's device nodes for vision are in docker-compose.camera.yml, taken on the Pi through
+# COMPOSE_FILE in .env (see that file): the stack still starts where there is no camera.
 
 x-hardened: &hardened
   restart: unless-stopped
@@ -65,25 +67,60 @@ services:
     tmpfs: ["/config:mode=1777", "/data:mode=1777"]
     networks: [internal]
 
-  # Not written yet. Each joins the internal network only; vision gets the ZIF camera through
-  # `devices:` and serves the annotated feed the reverse proxy routes under /camera/.
-  # vision:
-  #   <<: *hardened
-  #   build: ai/vision
-  #   devices: [/dev/video0, /dev/media0, /dev/dma_heap]
-  #   environment: { ALERTS_URL: http://api:8080/api/v1/alerts }
-  #   env_file: infra/secrets/vision.env        # VISION_TOKEN
-  #   networks: [internal]
-  # predictive:
-  #   <<: *hardened
-  #   build: ai/predictive
-  #   environment: { MQTT_URL: mqtts://mosquitto:8883, ALERTS_URL: http://api:8080/api/v1/alerts }
-  #   env_file: infra/secrets/predictive.env    # MQTT password, PREDICTIVE_TOKEN
-  #   networks: [internal]
+  # The intrusion detector, and the annotated camera feed the reverse proxy serves under /camera,
+  # behind the Operator session. Its camera device nodes are in docker-compose.camera.yml: a node
+  # missing on the host would stop the whole `docker compose up`. See infra/README.md.
+  vision:
+    <<: *hardened
+    build:
+      context: ai
+      dockerfile: vision/Dockerfile
+    image: sentinel-x/vision
+    # The host's `video` group owns the camera nodes (44 on Debian and Raspberry Pi OS:
+    # getent group video). The user stays the image's, unprivileged; never `privileged`.
+    group_add: ["${VIDEO_GID:-44}"]
+    env_file: infra/secrets/vision.env          # VISION_TOKEN
+    environment:
+      ALERTS_URL: http://api:8080/api/v1/alerts
+      # opencv:0, the first V4L2 camera (a USB webcam). The ZIF camera needs Picamera2: #46 makes
+      # it the default. Another source: CAMERA_SOURCE in .env (infra/README.md).
+      CAMERA_SOURCE: ${CAMERA_SOURCE:-opencv:0}
+      # A person, not just motion: EfficientDet-Lite0 on TFLite, its model in the image. DETECTOR=motion
+      # in .env falls back to motion detection, the brief's allowed fallback (ai/README.md).
+      DETECTOR: ${DETECTOR:-tflite}
+    networks: [internal]
+    depends_on: [api]
+
+  # The predictive model on the live telemetry. Trains on the api's history, read-only:
+  #   docker compose run --rm predictive train --from 2026-10-13T08:00:00Z --to 2026-10-13T11:00:00Z
+  predictive:
+    <<: *hardened
+    build:
+      context: ai
+      dockerfile: predictive/Dockerfile
+    image: sentinel-x/predictive
+    env_file: infra/secrets/predictive.env      # MQTT_PASSWORD, PREDICTIVE_TOKEN
+    environment:
+      MQTT_URL: mqtts://mosquitto:8883
+      MQTT_USERNAME: predictive
+      MQTT_CA_FILE: /certs/ca.crt
+      ALERTS_URL: http://api:8080/api/v1/alerts
+    volumes:
+      - ./infra/secrets/ca.crt:/certs/ca.crt:ro
+      # The api's SQLite history, for `train`: read-only, mode=ro on top. Its files are the api's
+      # (node, 0644): readable by everyone, writable by the api only.
+      - api-data:/history:ro
+      # The model `train` writes and the service reloads by itself.
+      - predictive-model:/model
+    networks: [internal]
+    # The api also for `train`: in WAL mode, a read-only reader needs the -shm file it keeps.
+    depends_on: [mosquitto, api]
 
 volumes:
   # The history (SQLite): telemetry and Alerts, for the time-scrubber.
   api-data:
+  # The predictive model (predictive train → predictive run).
+  predictive-model:
 
 networks:
   # The published ports' side: the table network reaches the proxy and the broker through it.

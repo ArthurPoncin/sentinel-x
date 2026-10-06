@@ -1,0 +1,10 @@
+# The versions the tests ran with, on Python 3.11 (the Pi OS's) and 3.13. NumPy 2.5 needs 3.12 or later.
+# The Pi image takes python3-opencv and python3-numpy from the Pi OS's apt instead (#46): the code keeps to
+# what OpenCV 4.6 and NumPy 1.24 offer.
+opencv-python-headless==5.0.0.93
+numpy==2.4.6; python_version < "3.12"
+numpy==2.5.3; python_version >= "3.12"
+# DETECTOR=tflite's interpreter: TensorFlow Lite's own package (tflite-runtime, its old name, stopped at
+# Python 3.11). Wheels for 3.11 and 3.13, x86_64 and aarch64 (glibc 2.27+: bookworm has 2.36); it also runs
+# on the Pi OS's NumPy 1.24.
+ai-edge-litert==2.2.0
