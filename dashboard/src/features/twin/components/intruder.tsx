@@ -10,9 +10,13 @@ import {
   MeshBasicMaterial,
   OctahedronGeometry,
   ShaderMaterial,
+  Shape,
+  ShapeGeometry,
+  Vector2,
   Vector3,
 } from 'three'
 import { useFade } from '../hooks/use-fade'
+import { brackets, detectionFrame } from '../utils/detection'
 import { fadeTo, fadeValue, settled } from '../utils/fade'
 import {
   FIGURE,
@@ -28,6 +32,7 @@ import {
 import { type Track, trackAt } from '../utils/glide'
 import { INTRUSION_COLOR, type SceneProps } from '../utils/scene'
 import { bearingTo, lensHeight, lensPoint, watchedPoint } from '../utils/site'
+import { LabelCard } from './label-card'
 import { boxShape, type Profile, turnedShape } from './volumes'
 
 // How bright the ring at its feet emits, in the intrusion's red.
@@ -45,8 +50,14 @@ const REST = { lean: 0.07, bend: 0.3 } as const
 const TORSO_BEVEL = 0.022
 // How far below its front the sweep that brings the figurine in still shows, as a band of light.
 const BAND = 0.05
-// The figurine is drawn in two goes, after the sector on the ground: its shade, then its light.
-const DRAWN = { shade: 3, light: 4 } as const
+// How bright the brackets of the detection's frame emit.
+const FRAME_GLOW = 4
+// The label of the detection, over the marker: how wide its card is, and how far above the gem's tip, or the
+// frame's top, it starts.
+const LABEL = { width: 1.2, clear: 0.05 } as const
+// The figurine is drawn in two goes, after the sector on the ground: its shade, then its light. The frame of
+// its detection comes after everything that stands on the site, and under the labels.
+const DRAWN = { shade: 3, light: 4, frame: 9 } as const
 
 const HOLOGRAM_VERTEX = /* glsl */ `
   varying float vHeight;
@@ -171,6 +182,17 @@ function createFigurine() {
     .translate(0, MARKER.top - MARKER.gem.height / 2, 0)
   // The line: a thin rod one unit long from its foot up, stretched and turned from the lens to the head.
   const rod = new CylinderGeometry(LINE.radius, LINE.radius, 1, 6, 1, true).translate(0, 0.5, 0)
+  // The detection's frame: its four brackets, flat, around its own middle. What stands in front of the
+  // figurine does not hide them: they are what the vision model draws over its image, not a thing on the site.
+  const frame = new MeshBasicMaterial({
+    color: new Color(INTRUSION_COLOR).multiplyScalar(FRAME_GLOW),
+    transparent: true,
+    opacity: 0,
+    blending: AdditiveBlending,
+    depthTest: false,
+    depthWrite: false,
+  })
+  const corners = new ShapeGeometry(brackets().map((outline) => new Shape(outline.map(([x, y]) => new Vector2(x, y)))))
 
   return {
     uniforms,
@@ -181,11 +203,14 @@ function createFigurine() {
     stem,
     gem,
     rod,
+    frame,
+    corners,
     dispose() {
       shade.dispose()
       light.dispose()
       pin.dispose()
-      for (const shape of [...Object.values(shapes), stem, gem, rod]) shape.dispose()
+      frame.dispose()
+      for (const shape of [...Object.values(shapes), stem, gem, rod, corners]) shape.dispose()
     },
   }
 }
@@ -278,14 +303,18 @@ export interface IntruderProps {
 // The intruder the camera sees: a human figurine in hologram, in the intrusion's red, standing on the arc of
 // the fence the camera watches, where `x_norm` places it, and facing the Enclosure's lens. A pin of light
 // over its head tells it from afar, a ring marks its feet, and a thin line ties its head to the lens: what the
-// vision service sees, it sees through there. As `x_norm` changes the figurine glides along the arc to its new
-// place, the line following it. A newly raised intruder appears where it stands, in a sweep from its feet to
-// its head; once the last `intrusion` Alert is cleared, it fades out where it last stood. Unlit and brighter
-// than white, so the halo takes it all for lights. Nothing casts a shadow: the shadows are drawn once, and it
-// moves.
+// vision service sees, it sees through there. Four brackets frame it like a detection in an image, always
+// facing the Twin's camera, and a label over the marker reads what the model sees and how sure it is of it,
+// « PERSONNE · 88 % »: both are drawn over whatever stands in front of the figurine. As `x_norm` changes the
+// figurine glides along the arc to its new place, the line, the brackets and the label following it. A newly
+// raised intruder appears where it stands, in a sweep from its feet to its head; once the last `intrusion`
+// Alert is cleared, it fades out where it last stood. Unlit and brighter than white, so the halo takes it all
+// for lights. Nothing casts a shadow: the shadows are drawn once, and it moves.
 export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
   const group = useRef<Group>(null)
   const standing = useRef<Group>(null)
+  const frame = useRef<Group>(null)
+  const label = useRef<Group>(null)
   const ring = useRef<MeshBasicMaterial>(null)
   const line = useRef<Mesh>(null)
   const lineMaterial = useRef<MeshBasicMaterial>(null)
@@ -301,8 +330,10 @@ export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
     return new Vector3(x, lensHeight(), z)
   }, [])
   const toHead = useMemo(() => new Vector3(), [])
+  const framed = useMemo(detectionFrame, [])
+  const cameraUp = useMemo(() => new Vector3(), [])
 
-  useFrame(({ clock }, delta) => {
+  useFrame(({ clock, camera }, delta) => {
     track.current = trackAt(track.current, intruder && { alertId: intruder.alertId, x_norm: intruder.x_norm }, delta)
     const tracked = track.current
     const level = shownNow()[0] ?? 0
@@ -325,6 +356,14 @@ export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
     if (ring.current) ring.current.opacity = level
     drawn.pin.opacity = level
     if (lineMaterial.current) lineMaterial.current.opacity = level
+    // The brackets stand around the figurine's middle and face the camera, wherever it orbits. The label stands
+    // over the marker's gem as the camera sees it, and never lower than the top of the frame: from above, the
+    // marker looks short.
+    frame.current?.position.set(at.x, framed.middle, at.z)
+    frame.current?.quaternion.copy(camera.quaternion)
+    const upright = cameraUp.set(0, 1, 0).applyQuaternion(camera.quaternion).y
+    label.current?.position.setY(Math.max(framed.height / 2, (MARKER.top - framed.middle) * upright) + LABEL.clear)
+    drawn.frame.opacity = level
 
     const rod = line.current
     if (!rod) return
@@ -344,6 +383,18 @@ export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
           <ringGeometry args={[RING.inner, RING.outer, 48]} />
           <meshBasicMaterial ref={ring} color={red} transparent opacity={0} depthWrite={false} />
         </mesh>
+      </group>
+      <group ref={frame}>
+        <mesh geometry={drawn.corners} material={drawn.frame} renderOrder={DRAWN.frame} />
+        <group ref={label}>
+          <LabelCard
+            text={intruder?.label ?? null}
+            color={INTRUSION_COLOR}
+            width={LABEL.width}
+            anchor="foot"
+            shown={() => shownNow()[0] ?? 0}
+          />
+        </group>
       </group>
       <mesh ref={line} geometry={drawn.rod} position={lens}>
         <meshBasicMaterial

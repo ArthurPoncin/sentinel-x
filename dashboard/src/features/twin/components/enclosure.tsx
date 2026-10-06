@@ -1,7 +1,6 @@
 import { useFrame } from '@react-three/fiber'
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  CanvasTexture,
   Color,
   type Group,
   MathUtils,
@@ -11,9 +10,6 @@ import {
   PlaneGeometry,
   type PointLight,
   ShaderMaterial,
-  type Sprite,
-  type SpriteMaterial,
-  SRGBColorSpace,
   Vector2,
   Vector3,
 } from 'three'
@@ -27,6 +23,7 @@ import { ENCLOSURE_PARTS, ENCLOSURE_SHAPE, ENGRAVING } from '../utils/enclosure-
 import { domeFlash } from '../utils/presence'
 import { pulse } from '../utils/pulse'
 import { DRIFT_COLOR, type DriftingProbe, GAS_COLOR, PRESENCE_COLOR, type SceneProps } from '../utils/scene'
+import { LabelCard, useCanvasTexture } from './label-card'
 
 // The Enclosure stands on a mast at an exaggerated scale, to stay readable from the back of the room.
 const SCALE = ENCLOSURE_SHAPE.scale
@@ -39,30 +36,6 @@ const TOP = BODY.height / 2
 
 const ANODIZED = { color: '#232a33', metalness: 0.55, roughness: 0.38 } as const
 const TRIM = { color: '#14181d', metalness: 0.4, roughness: 0.5 } as const
-
-// A texture drawn in code on a 2D canvas: the LCD's screen, the engraving, the mic grille.
-function useCanvasTexture(width: number, height: number, draw: (context: CanvasRenderingContext2D) => void) {
-  const texture = useMemo(() => {
-    const canvas = document.createElement('canvas')
-    canvas.width = width
-    canvas.height = height
-    const created = new CanvasTexture(canvas)
-    created.colorSpace = SRGBColorSpace
-    created.anisotropy = 8
-    return created
-  }, [width, height])
-
-  useEffect(() => {
-    const context = (texture.image as HTMLCanvasElement).getContext('2d')
-    if (!context) return
-    context.clearRect(0, 0, width, height)
-    draw(context)
-    texture.needsUpdate = true
-  })
-
-  useEffect(() => () => texture.dispose(), [texture])
-  return texture
-}
 
 // The LCD band: the Status in white on black, tinted by an unlit material whose color fades to the
 // Status's, with the light of the scene. The text switches like a real LCD's; its color fades.
@@ -242,58 +215,26 @@ function Probe({ part, pulsing, position, children }: ProbeProps) {
   )
 }
 
-// The drift label's card, in pixels, and its size on the Enclosure at scale 1: wider than the compartment it
-// hangs under, to be read from the back of the room.
-const LABEL_CARD = { width: 640, height: 128 } as const
+// The drift label's size on the Enclosure at scale 1: wider than the compartment it hangs under, to be read
+// from the back of the room.
 const LABEL_WIDTH = 1.5
 // How far under the compartment's floor the label hangs, at scale 1, so it hides neither Probe.
 const LABEL_DROP = 0.2
 
-// Under the drifting Probes, what the predictive model says of them: « dérive · score 0.91 », on a dark card
-// edged in the drift's orange. A sprite: it faces the camera wherever the orbit takes it, and is drawn over
-// the mast and the body, so it reads from every side. It comes and goes in a fade, and keeps its last text
-// while it fades out.
+// Under the drifting Probes, what the predictive model says of them: « dérive · score 0.91 », on a card
+// edged in the drift's orange, drawn over the mast and the body. It comes and goes in a fade, and keeps its
+// last text while it fades out.
 function DriftLabel({ drift, below }: Pick<SceneProps['enclosure'], 'drift'> & { below: number }) {
-  const sprite = useRef<Sprite>(null)
-  const material = useRef<SpriteMaterial>(null)
   const shownNow = useFade([drift ? 1 : 0])
-  const [text, setText] = useState(drift?.label ?? '')
-  if (drift && drift.label !== text) setText(drift.label)
-
-  const card = useCanvasTexture(LABEL_CARD.width, LABEL_CARD.height, (context) => {
-    const { width, height } = LABEL_CARD
-    const inset = 6
-    context.beginPath()
-    context.roundRect(inset, inset, width - 2 * inset, height - 2 * inset, (height - 2 * inset) / 2)
-    context.fillStyle = 'rgba(8, 10, 13, 0.86)'
-    context.fill()
-    context.lineWidth = 5
-    context.strokeStyle = DRIFT_COLOR
-    context.stroke()
-    context.fillStyle = DRIFT_COLOR
-    context.font = '700 58px ui-monospace, Menlo, Consolas, monospace'
-    context.textAlign = 'center'
-    context.textBaseline = 'middle'
-    context.fillText(text, width / 2, height / 2 + 2, width - 80)
-  })
-
-  useFrame(() => {
-    const shown = shownNow()[0] ?? 0
-    if (material.current) material.current.opacity = shown
-    // Nothing to draw once it has faded out.
-    if (sprite.current) sprite.current.visible = shown > 0.004
-  })
 
   return (
-    <sprite
-      ref={sprite}
+    <LabelCard
+      text={drift?.label ?? null}
+      color={DRIFT_COLOR}
+      width={LABEL_WIDTH}
       position={[0, below - LABEL_DROP, 0.05]}
-      scale={[LABEL_WIDTH, (LABEL_WIDTH * LABEL_CARD.height) / LABEL_CARD.width, 1]}
-      renderOrder={10}
-      visible={false}
-    >
-      <spriteMaterial ref={material} map={card} transparent opacity={0} depthTest={false} toneMapped={false} />
-    </sprite>
+      shown={() => shownNow()[0] ?? 0}
+    />
   )
 }
 
