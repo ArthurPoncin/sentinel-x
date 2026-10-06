@@ -113,7 +113,8 @@ export interface OutpostTwinProps {
 // Status on its LCD and breathes it on its LED ring. A haze thickens around the gas pipe with the gas, and the
 // Enclosure sounds the Alarm while a `gas` or `thermal` Alert is active. The generator hall's roof glows red
 // with the heat, and the air ripples above it.
-// An intrusion lights the camera's sector on the ground and stands the intruder on its arc, a human figurine in
+// The camera's field is a faint volume from the Enclosure's lens down to its sector on the ground: an intrusion
+// lights it, sector included, and stands the intruder on its arc, a human figurine in
 // hologram tied to the lens, which walks to where `x_norm` places it, in the brackets of its detection and
 // under the vision model's confidence; a predictive drift pulses the Probes it names, its score on a label; a presence blinks the Enclosure's
 // PIR dome and sends an amber sweep round the fence; a clap sends a wave of light from the Enclosure over the socle. Without its

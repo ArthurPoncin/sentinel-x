@@ -55,8 +55,9 @@ const FRAME_GLOW = 4
 // The label of the detection, over the marker: how wide its card is, and how far above the gem's tip, or the
 // frame's top, it starts.
 const LABEL = { width: 1.2, clear: 0.05 } as const
-// The figurine is drawn in two goes, after the sector on the ground: its shade, then its light. The frame of
-// its detection comes after everything that stands on the site, and under the labels.
+// The figurine is drawn in two goes, after the camera's field, its walls as its sector on the ground: its
+// shade, then its light. The frame of its detection comes after everything that stands on the site, and under
+// the labels.
 const DRAWN = { shade: 3, light: 4, frame: 9 } as const
 
 const HOLOGRAM_VERTEX = /* glsl */ `
