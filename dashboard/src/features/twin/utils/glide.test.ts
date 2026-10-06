@@ -65,8 +65,8 @@ describe("the intruder's track", () => {
     expect(trackAt(null, null, FRAME)).toBeNull()
   })
 
-  it('stands the column where a newly raised intruder is, without gliding there', () => {
-    expect(trackAt(null, seen('i1', 0.55), FRAME)).toEqual({ alertId: 'i1', x_norm: 0.55 })
+  it('stands the figurine where a newly raised intruder is, without gliding there', () => {
+    expect(trackAt(null, seen('i1', 0.55), FRAME)).toEqual({ alertId: 'i1', x_norm: 0.55, age: 0 })
   })
 
   it("glides along the arc as the same Alert's x_norm changes", () => {
@@ -79,20 +79,38 @@ describe("the intruder's track", () => {
     expect(next?.x_norm).toBe(glide(0.15, 0.35, FRAME))
   })
 
-  it('stays where it last stood once cleared, so the column fades out there', () => {
-    const shown: Track = { alertId: 'i1', x_norm: 0.62 }
+  it('stays where it last stood once cleared, so the figurine fades out there', () => {
+    const shown: Track = { alertId: 'i1', x_norm: 0.62, age: 3 }
     const cleared = trackAt(shown, null, FRAME)
 
-    expect(cleared).toEqual({ alertId: null, x_norm: 0.62 })
+    expect(cleared).toEqual({ alertId: null, x_norm: 0.62, age: 3 })
     expect(trackAt(cleared, null, FRAME)).toBe(cleared)
   })
 
   it('does not glide from where a previous intruder stood, even one raised again under the same id', () => {
-    const cleared = trackAt({ alertId: 'intruder', x_norm: 0.75 }, null, FRAME)
-    expect(trackAt(cleared, seen('intruder', 0.15), FRAME)).toEqual({ alertId: 'intruder', x_norm: 0.15 })
+    const cleared = trackAt({ alertId: 'intruder', x_norm: 0.75, age: 3 }, null, FRAME)
+    expect(trackAt(cleared, seen('intruder', 0.15), FRAME)).toEqual({ alertId: 'intruder', x_norm: 0.15, age: 0 })
   })
 
-  it('stands the column where another Alert, raised while the first is active, sees its intruder', () => {
-    expect(trackAt({ alertId: 'i1', x_norm: 0.2 }, seen('i2', 0.7), FRAME)).toEqual({ alertId: 'i2', x_norm: 0.7 })
+  it('stands the figurine where another Alert, raised while the first is active, sees its intruder', () => {
+    expect(trackAt({ alertId: 'i1', x_norm: 0.2, age: 3 }, seen('i2', 0.7), FRAME)).toEqual({
+      alertId: 'i2',
+      x_norm: 0.7,
+      age: 0,
+    })
+  })
+
+  it('ages with the time its Alert has been shown, wherever the intruder goes, so its sweep plays once', () => {
+    let shown = trackAt(null, seen('i1', 0.15), FRAME)
+    expect(shown?.age).toBe(0)
+
+    for (let frame = 0; frame < 60; frame++) shown = trackAt(shown, seen('i1', frame < 30 ? 0.15 : 0.35), FRAME)
+    expect(shown?.age).toBeCloseTo(1)
+  })
+
+  it('no longer ages once cleared, and does not go back when the clock does', () => {
+    const cleared = trackAt({ alertId: 'i1', x_norm: 0.62, age: 0.3 }, null, 1)
+    expect(cleared?.age).toBe(0.3)
+    expect(trackAt({ alertId: 'i1', x_norm: 0.62, age: 0.3 }, seen('i1', 0.62), -1)?.age).toBe(0.3)
   })
 })

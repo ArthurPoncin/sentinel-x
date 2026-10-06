@@ -18,7 +18,7 @@ The face of Sentinel-X and our **"wow" centerpiece**. See [`../docs/DIGITAL-TWIN
 
 ## Our extra — the Digital Twin
 - Live 3D replica of the **Outpost** reacting to the real WebSocket event stream.
-- **Intruder marker** placed along the perimeter from the `intrusion` Alert's `x_norm`.
+- **Intruder**: a human figurine in hologram, placed along the perimeter from the `intrusion` Alert's `x_norm`.
 - **Component pulse** on a `predictive` anomaly; sound ripples on `noise`.
 - **`Status`** floods the twin in its color as it rises, then stays on its ring, its rim light and the Enclosure (`nominal`/`elevated`/`critical`).
 - **Time-scrubber** replays a past Incident second by second, labelled REPLAY — demo insurance (#15).
@@ -36,6 +36,7 @@ cd dashboard && npm install && npm run dev
 
 npm test            # store, feed client, config, gas level, heat level, scene mapper, site plan, steam, haze, Alarm,
                     # fades, escalation flash, pulse, presence sweep, noise wave, automatic orbit, pixel ratio, framing,
+                    # the intruder's glide and figurine,
                     # Incidents, replay, scenario, Incidents client, the Twin on a replay
 npm run build       # typecheck + production bundle in dist/
 npm run smoke       # smoke-render of that bundle, on the mock feed — see below
@@ -88,17 +89,18 @@ src/
 │   │   ├── utils/           # incidents(history) · replayOf(history, incident) · framesAt(replay, t)
 │   │   │                    # withStatus(frames) · scenario(start), scenarioFrames(start) · labels
 │   │   └── index.ts
-│   └── twin/                # #20, #12, #30, #31, #32, #33, #40, #13, #36, #34, #35, #37, #23, #38, #91 — the Outpost as a maquette, on its studio stage
+│   └── twin/                # #20, #12, #30, #31, #32, #33, #40, #13, #36, #34, #35, #37, #23, #38, #91, #92 — the Outpost as a maquette, on its studio stage
 │       ├── components/      # OutpostTwin: the scene, drawn from SceneProps · Enclosure · OrbitCamera · Halo
 │       │                    # Socle · PowerPlant · Perimeter · Steam: the site, drawn from SITE
 │       │                    # Haze: the gas around the pipe · VapourMaterial: what steam and haze are made of
 │       │                    # HeatShimmer: the hot air above the hall · NoiseWaves: a clap's wave over the socle
-│       │                    # Intruder: the column of light the camera sees on the fence's arc, tied to its lens
-│       │                    # Box · Turned: the bevelled volumes it is built from · palette
+│       │                    # Intruder: the hologram figurine the camera sees on the fence's arc, tied to its lens
+│       │                    # Box · Turned: the bevelled volumes it is built from · boxShape, turnedShape: their shapes · palette
 │       ├── hooks/           # usePixelRatio(element) · useFade(target), useColorFade(color) · useSweep(present)
 │       │                    # useWaves(frames) · useStatusLight(level, neutral)
 │       ├── utils/           # toScene(state): the scene's props, pure · gasLevel(air), heatLevel(temp): 0–1
 │       │                    # SITE: the ground plan · lensPoint(), lensHeight() · watchedPoint(xNorm) · fencePosts()
+│       │                    # bearingTo(from, to): the way to face
 │       │                    # alongPipe(share) · puffAt(age): a puff of steam's life · wispAt(age): a wisp
 │       │                    # of haze's · blink(t), arcsAt(t): the Alarm · ENCLOSURE_PARTS, ENCLOSURE_SHAPE
 │       │                    # autoOrbitSpeed(touch, now) · pixelRatio(density, width, height)
@@ -111,6 +113,7 @@ src/
 │       │                    # framesSince(seen, frames), clapsIn(frames), wavesAt(waves, claps, now): the waves a
 │       │                    # clap sends · waveShape(elapsed, amplitude): a wave's radius, width and glow
 │       │                    # glide(current, target, elapsed), trackAt(track, intruder, elapsed): the intruder's glide
+│       │                    # FIGURE: the figurine's plan · figureHeight(), headHeight() · sweptTo(age): its sweep
 │       └── index.ts
 └── shared/
     ├── contract/            # re-exports backend/src/contract.ts — never redeclare a schema
@@ -221,14 +224,16 @@ const history = useLiveFeed((state) => state.history)
 
 ![The drift's label under the pulsing Probes](../docs/twin/predictive-label.png)
 
-**The intruder** (#23, #38) — where the vision service sees someone, on the maquette: a column of light on the arc, tied to the lens that sees it.
+**The intruder** (#23, #38, #92) — where the vision service sees someone, on the maquette: a human figurine in hologram on the arc, tied to the lens that sees it.
 
-![The intruder's column on the arc, tied to the lens by a thin line, in the lit sector](../docs/twin/intruder-column.png)
+![The intruder's figurine on the arc, a pin of light over its head, tied to the lens by a thin line, in the lit sector](../docs/twin/intruder-figure.png)
 
 - **Where** — `scene.intruder` is the last raised of the active `intrusion` Alerts: its `alertId`, its `x_norm` and `at`, the point of the fence the camera's sight meets for it, `watchedPoint(x_norm)` (see [the site](#digital-twin--featurestwin), camera sector). 0 is the lens's left, 1 its right: mirrored when you face the Enclosure. `toScene` does the mapping, so it is tested without a render: on the fence, at `watchedPoint`, and moving across the arc, in order, as the mock's 0.15 → 0.35 → 0.55 → 0.75 come in.
-- **Drawn** — `<Intruder>`: a column of light standing on the arc, brightest at its foot and along its axis, fading upward, with a ring on the arc at its feet; a thin line from the Enclosure's lens (`lensPoint()`, `lensHeight()`) to the column, about where a head would be. All of it unlit and brighter than white in `INTRUSION_COLOR`, added over the scene, so it reads even while the Status's flash lights the scene all in red, and the halo takes it for a light. Once the flash has passed, it is the red that stands out of a neutral maquette. Nothing casts a shadow: the shadows are drawn once, and it moves.
-- **Glides** — a new `x_norm` on the same Alert does not move the column there at once: it glides along the arc, the line following it. `glide(current, target, elapsed)` (`utils/glide.ts`) is that smoothing, on `x_norm` so the column never leaves the arc: it closes the same share of the gap in the same time (`GLIDE`, 6 a second), never overshoots, is all but there well before the next value a second later, and lands at the same place whatever the frame rate. `trackAt(track, intruder, elapsed)` is the column from one frame to the next: it glides while the Alert is the same, and stands where an Alert newly raised sees its intruder, without gliding from where a previous one stood, even one raised again under the same `alert_id`. Both are pure and tested without a render.
-- **Comes and goes** — a newly raised intruder fades in where it stands; when the last `intrusion` is `cleared`, the column, the line and the sector fade out together, the column where it last stood (`useFade`).
+- **Drawn** — `<Intruder>`: a human figurine standing on the arc and facing the Enclosure's lens (`bearingTo(at, lens)`), like the pedestrians of a self-driving car's display: a head, a torso, arms and legs in two segments each. It is built from the maquette's volumes (`boxShape`, `turnedShape`: no model is loaded, no dependency added) to the plan in `FIGURE` (`utils/figure.ts`), and is `figureHeight()` tall, about 0.45 unit, nearly twice the fence: exaggerated like the Enclosure, to read from the back of the room. Its matter is a hologram, unlit, in `INTRUSION_COLOR`: a lit edge all around it and scan lines that rise slowly, which fade out evenly where they would be closer than two pixels apart instead of shimmering. It is drawn in two goes: its shade first, which dims what stands behind it (red on the red of the lit sector, its light alone would not tell it apart) and leaves its depth, then its light, added only where a volume is the nearest of them, so that an arm in front of the torso is not twice as bright. A pin of light over its head, a thin stem up to a gem 0.8 above the ground, where the column of #38 ended, tells it from afar; a ring marks its feet on the arc; a thin line runs from the Enclosure's lens (`lensPoint()`, `lensHeight()`) to the middle of its head (`headHeight()`). All of it is brighter than white, so it reads even while the Status's flash lights the scene all in red, and the halo takes it for lights. Once the flash has passed, it is the red that stands out of a neutral maquette. Nothing casts a shadow: the shadows are drawn once, and it moves.
+- **Glides** — a new `x_norm` on the same Alert does not move the figurine there at once: it glides along the arc, still facing the lens, the line following it. `glide(current, target, elapsed)` (`utils/glide.ts`) is that smoothing, on `x_norm` so the figurine never leaves the arc: it closes the same share of the gap in the same time (`GLIDE`, 6 a second), never overshoots, is all but there well before the next value a second later, and lands at the same place whatever the frame rate. `trackAt(track, intruder, elapsed)` is the figurine from one frame to the next: it glides while the Alert is the same, and stands where an Alert newly raised sees its intruder, without gliding from where a previous one stood, even one raised again under the same `alert_id`. It also counts the seconds the Alert has been shown (`age`, from 0 for each newly raised one, held once it is cleared), which the sweep goes by. Both are pure and tested without a render.
+- **Comes and goes** — a newly raised intruder appears where it stands in a sweep from its feet to its head, `SWEEP_SECONDS` (0.7 s) long, a band of light at its front: `sweptTo(age)` is the share of the way up it has got to, pure and tested. Its pin, its ring and the line fade in meanwhile. When the last `intrusion` is `cleared`, the figurine, its pin, its ring, the line and the sector fade out together, the figurine where it last stood (`useFade`, `fadeTo`).
+- **At rest** — it stands, its arms by its sides and its forearms a little forward, which is how its front is told from its back. Walking, and turning the way it walks, come with #94.
+- **Cost** — ten small volumes drawn twice, in the lit frame and in the halo's. On the Iris Xe at 1920 × 1080, production bundle, frame rate uncapped: a median of 9 to 11 ms a frame with the figurine shown, against 8 to 10 without it and 8 to 10 for the column it replaces, so 90 to 100 images a second where the GPU was free, well over the 60 the screen shows. Other sessions shared the GPU during the runs, which scatter by more than the gap between the two: to measure again on a quiet machine.
 
 **Presence** (#36) — the site knows it is approached before anyone is inside:
 
@@ -258,9 +263,9 @@ const history = useLiveFeed((state) => state.history)
 
 - **One ground plan** — `SITE` (`utils/site.ts`) places everything, once: the socle, the generator hall, its two chimneys, the transformer station, the gas tank and the pipe from it to the hall, the fence and its gate, the Enclosure and its camera. Coordinates are scene units from the socle's centre, `x` to the right and `z` to the front; a bearing is an angle around the vertical, 0 to the front. The components only draw what `SITE` says: move a part there, never in a component. Its tests hold the plan together without a render — everything stands on the socle and inside the fence, no two parts on the same ground, the pipe joins the hall to the tank, the Enclosure stands at the gate with nothing of the plant in its field of view.
 - **Who stands where** — the Enclosure is tall enough to throw its shadow across half the socle, and the key light comes from the front right: so it stands on the left by the gate, and the plant on the right, in the light. Keep that in mind before moving either.
-- **Camera sector** — `lensPoint()` is where the Enclosure's lens is over the ground, and `watchedPoint(xNorm)` where its sight meets the fence for what stands at `xNorm` across its image: 0 on the lens's left, 1 on its right (so mirrored when you face the Enclosure). The sector drawn on the ground runs from under the lens to that arc; it lights up on an `intrusion` Alert (#13), and the intruder belongs on its arc (#23, #38). The field of view is `SITE.camera.fov`, 60° until the real lens is measured.
+- **Camera sector** — `lensPoint()` is where the Enclosure's lens is over the ground, and `watchedPoint(xNorm)` where its sight meets the fence for what stands at `xNorm` across its image: 0 on the lens's left, 1 on its right (so mirrored when you face the Enclosure). The sector drawn on the ground runs from under the lens to that arc; it lights up on an `intrusion` Alert (#13), and the intruder belongs on its arc (#23, #38, #92). The field of view is `SITE.camera.fov`, 60° until the real lens is measured.
 - **Socle** — a disc of terrain cut clean, afloat in the black. Its contour lines are drawn by the terrain's material from a relief that exists only there: the ground stays flat. The Status's ring runs around its rim.
-- **Volumes** — `Box` (bevelled edges) and `Turned` (a profile turned around the vertical, every corner crisp) are what the plant is built from; both cast and receive shadows. No model is loaded.
+- **Volumes** — `Box` (bevelled edges) and `Turned` (a profile turned around the vertical, every corner crisp) are what the plant is built from; both cast and receive shadows. No model is loaded. `boxShape` and `turnedShape` give their shapes alone, for what is drawn in a matter of its own: the intruder's figurine.
 - **Materials** — `palette.ts`: graphite and off-white only. Color is kept for the Status and the signals.
 - **Steam** — a slow plume above each chimney, whatever the Status: the plant is idling. `puffAt(age)` is a puff's whole life, pure: it leaves the mouth unseen and is gone when its life ends, so the plume loops without a cut. The puffs are lit, so they take the scene's light, the Status's flash included, and never glow.
 
@@ -372,6 +377,7 @@ const shown = player.frames ? stateAfter(player.frames) : liveState   // replaye
 - [x] Heat on the generator hall: its roof glows with the temperature, the air ripples on a `thermal` Alert — #35
 - [x] Noise: a wave from the Enclosure over the socle on each clap — #37
 - [x] Intruder placement (`x_norm` → perimeter arc) — #23
+- [x] The intruder as a human figurine in hologram — #92
 - [x] Time-scrubber + scenario mode — #15
 - [x] Neutral light, the Status floods the scene as it rises — #91
 - [x] CI: build + smoke render — #16
