@@ -80,6 +80,9 @@ export const NEUTRAL_RIM = '#9dbcff'
 export const INTRUSION_COLOR = STATUS_COLORS.critical
 // What the PIR dome blinks in and the fence is swept in on a presence: the amber of a warning.
 export const PRESENCE_COLOR = STATUS_COLORS.elevated
+// What a clap sends over the socle: a pale ice-white, which no Status shares. A `noise` Alert is only `info`, so
+// its wave says something was heard, not that something is wrong.
+export const NOISE_COLOR = '#cfe8ff'
 // What a drifting Probe pulses in: an orange of its own, to be told from the amber of an elevated Status.
 export const DRIFT_COLOR = '#ff6a1a'
 

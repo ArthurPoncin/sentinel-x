@@ -9,7 +9,7 @@ A **live 3D replica** of the Sentinel-X outpost rendered in the dashboard (Three
 | Temperature (DHT) | Sentinel | The generator hall's roof glows red as `temp` rises; the air above it ripples while a `thermal` Alert is active |
 | Gas (`air`) | Sentinel | Box glows red, a haze around the gas pipe thickens with the reading |
 | Presence (`pir`) | Sentinel | The Enclosure's PIR dome blinks, an amber sweep goes round the fence |
-| Noise (`sound`) | Sentinel | Sound-wave ripples around the box, scaled to `sound` (share of the cycle that was loud) |
+| Noise (`noise`) | Sentinel | A wave of light leaves the box and spreads over the socle on each clap, scaled to the Alert's `value` (share of the cycle that was loud) |
 | Intrusion (vision) | Command Post (`vision`) | **Intruder marker** placed along the perimeter arc from `x_norm` |
 | Predictive drift | Command Post (`predictive`) | The drifting **component pulses orange** *before* the critical threshold |
 | `Status` (nominal/elevated/critical) | Command Post | The scene's overall color grade |
