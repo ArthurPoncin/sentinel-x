@@ -40,16 +40,11 @@ export function ActuatorPanel({ sentinel, className }: { sentinel: string | null
     <Card className={className}>
       <CardHeader>
         <CardTitle>Commande de l'alarme</CardTitle>
-        <CardDescription>{sentinel ? `Buzzer et LED de ${sentinel}` : 'En attente du Sentinel…'}</CardDescription>
+        <CardDescription>{sentinel ? `Sirène de ${sentinel}` : 'En attente du Sentinel…'}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-2">
         {button('siren', 'destructive', 'w-full')}
-        {button('buzzer-off', 'outline', 'w-full')}
-        <div className="grid grid-cols-2 gap-2">
-          {button('led-red')}
-          {button('led-green')}
-        </div>
-        {button('leds-off', 'outline', 'w-full')}
+        {button('siren-off', 'outline', 'w-full')}
       </CardContent>
       <CardFooter className="text-sm text-muted-foreground">
         {last

@@ -13,8 +13,8 @@ import {
 } from '@/shared/ui/sidebar'
 
 export const NAV = [
-  { to: '/', title: 'Vue opérateur' },
-  { to: '/twin', title: 'Jumeau numérique' },
+  { to: '/', title: 'Operator view' },
+  { to: '/twin', title: 'Digital Twin' },
 ] as const
 
 // The side navigation, under the top bar: the two surfaces, and the way out. Always open; words, no icons.
