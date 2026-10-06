@@ -112,6 +112,7 @@ Les seuils se règlent dans [`firmware/include/config.h`](../firmware/include/co
   cd ~/sentinel-x && git pull && infra/plug-and-play.sh 4
   ```
 - **Ne pas toucher à l'ESP32** en relançant : `infra/plug-and-play.sh 4 --no-flash`.
+- **Durcir le Pi avant le pentest** : [`DURCISSEMENT-PI.md`](DURCISSEMENT-PI.md), une fois que tout marche ici. Après, `sentinel-x.local` ne répond plus et SSH n'accepte que le PC Opérateur, sur le Wi-Fi de la table : `ssh ton-utilisateur@192.168.4.1`.
 
 ## Dépannage
 

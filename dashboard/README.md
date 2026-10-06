@@ -13,14 +13,14 @@ The face of Sentinel-X and our **"wow" centerpiece**. See [`../docs/DIGITAL-TWIN
 - Reactive control panel to trigger the actuator (buzzer) remotely — `POST /api/v1/commands`.
 
 ## Security
-- **Operator login** screen; every view, the WebSocket (`wss://`) and the camera feed sit behind the session. In the control room's look: a grid floor, the perimeter radar, the Enclosure's hexagon turning faster while the Command Post checks, red and a shake on a refusal, "Accès autorisé" before the dashboard; whether the channel is encrypted (HTTPS) is read from the page, never claimed. Still with reduced motion. Screenshots in [`../docs/dashboard/`](../docs/dashboard/).
+- **Operator login** screen; every view, the WebSocket (`wss://`) and the camera feed sit behind the session. A session that ends brings the login screen back — see [Operator session](#operator-session--featuresauth). In the control room's look: a grid floor, the perimeter radar, the Enclosure's hexagon turning faster while the Command Post checks, red and a shake on a refusal, "Accès autorisé" before the dashboard; whether the channel is encrypted (HTTPS) is read from the page, never claimed. Still with reduced motion. Screenshots in [`../docs/dashboard/`](../docs/dashboard/).
 - No token or secret in the front-end bundle.
 
 ## Our extra — the Digital Twin
 - Live 3D replica of the **Outpost** reacting to the real WebSocket event stream.
-- **Intruder marker** placed along the perimeter from the `intrusion` Alert's `x_norm`.
+- **Intruder**: a human figurine in hologram, placed along the perimeter from the `intrusion` Alert's `x_norm`.
 - **Component pulse** on a `predictive` anomaly; sound ripples on `noise`.
-- **`Status`** drives the twin's overall color (`nominal`/`elevated`/`critical`).
+- **`Status`** floods the twin in its color as it rises, then stays on its ring, its rim light and the Enclosure (`nominal`/`elevated`/`critical`).
 - **Time-scrubber** replays a past Incident second by second, labelled REPLAY — demo insurance (#15).
 - **Scenario mode** plays the scripted reference scenario on demand, network or not (#15).
 
@@ -35,10 +35,16 @@ cd backend && npm install && OPERATOR_AUTH=off MOCK_FEED=true HISTORY_FILE=:memo
 cd dashboard && npm install && npm run dev
 
 npm test            # store, feed client, config, gas level, heat level, scene mapper, site plan, steam, haze, Alarm,
-                    # fades, pulse, presence sweep, noise wave, automatic orbit, pixel ratio, framing,
+                    # fades, escalation flash, pulse, presence sweep, noise wave, automatic orbit, pixel ratio, framing,
+                    # the intruder's glide and figurine,
                     # Incidents, replay, scenario, Incidents client, the Twin on a replay
 npm run build       # typecheck + production bundle in dist/
+npm run smoke       # smoke-render of that bundle, on the mock feed — see below
 ```
+
+**Smoke-render** (#16) — `npm run build && npm run smoke` opens `/` and `/twin` of the production bundle in a headless Chromium and fails on any runtime error: an uncaught exception, an error on the console, the feed not live, the Status or the Readings missing, the Twin without a WebGL context. It starts what it needs itself, on ports of its own (`playwright.config.ts`): the API from `../backend` on its mock feed (`npm install` there first) and `vite preview`, pointed at it by `BACKEND_URL`. The Twin is rendered in software, as on a CI runner. The browser: `npx playwright install chromium` once, or `SMOKE_BROWSER=/path/to/chrome` for one already on the machine. The tests are in [`smoke/`](smoke/).
+
+**CI** — [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), on every pull request and on `main`: the backend's typecheck and tests (the contract the front imports), then here `npm test`, `npm run build` and the smoke-render; and a check that nothing `.gitignore` lists as a secret is tracked.
 
 **Filming the Twin for the teaser** — open `/twin?capture` in a vertical 9:16 window (1080 × 1920) and record the screen while the scenario plays: the Twin alone on black, no interface, on the same feed. See [capture mode](#digital-twin--featurestwin).
 
@@ -57,7 +63,7 @@ Run the backend with `OPERATOR_AUTH=on` (and an `OPERATOR_PASSWORD_HASH`) to get
 src/
 ├── main.tsx
 ├── app/                     # composition only: shell, router, routes
-│   ├── app.tsx              # LiveFeedProvider + router
+│   ├── app.tsx              # AuthGate + LiveFeedProvider + router
 │   ├── router.tsx           # /  and  /twin (lazy)
 │   ├── layout.tsx
 │   └── routes/              # operator.tsx, twin.tsx — assemble features, no logic
@@ -68,7 +74,8 @@ src/
 │   │   ├── hooks/           # useLiveFeed(selector)
 │   │   ├── components/      # LiveFeedProvider, ConnectionIndicator
 │   │   └── index.ts         # the feature's public API
-│   ├── auth/                # AuthGate (login screen until a session exists), useSignOut()
+│   ├── auth/                # #48 — AuthGate (login screen until a session exists, and again once it is gone)
+│   │                        # useSignOut(), useSessionCheck() · afterCheck(session, answer): pure
 │   ├── status/              # StatusCard, StatusBadge — the Status the backend computes
 │   ├── telemetry/           # #21 #11 — ReadingTiles, Gas / Climate / Sound charts, toSeries()
 │   ├── alerts/              # #11 — ActiveAlerts, AlertLog (+ filters: filterLog()), AlertToasts
@@ -82,32 +89,36 @@ src/
 │   │   ├── utils/           # incidents(history) · replayOf(history, incident) · framesAt(replay, t)
 │   │   │                    # withStatus(frames) · scenario(start), scenarioFrames(start) · labels
 │   │   └── index.ts
-│   └── twin/                # #20, #12, #30, #31, #32, #33, #40, #13, #36, #34, #35, #37, #23, #38 — the Outpost as a maquette, on its studio stage
+│   └── twin/                # #20, #12, #30, #31, #32, #33, #40, #13, #36, #34, #35, #37, #23, #38, #91, #92 — the Outpost as a maquette, on its studio stage
 │       ├── components/      # OutpostTwin: the scene, drawn from SceneProps · Enclosure · OrbitCamera · Halo
 │       │                    # Socle · PowerPlant · Perimeter · Steam: the site, drawn from SITE
 │       │                    # Haze: the gas around the pipe · VapourMaterial: what steam and haze are made of
 │       │                    # HeatShimmer: the hot air above the hall · NoiseWaves: a clap's wave over the socle
-│       │                    # Intruder: the column of light the camera sees on the fence's arc, tied to its lens
-│       │                    # Box · Turned: the bevelled volumes it is built from · palette
+│       │                    # Intruder: the hologram figurine the camera sees on the fence's arc, tied to its lens
+│       │                    # Box · Turned: the bevelled volumes it is built from · boxShape, turnedShape: their shapes · palette
 │       ├── hooks/           # usePixelRatio(element) · useFade(target), useColorFade(color) · useSweep(present)
-│       │                    # useWaves(frames)
+│       │                    # useWaves(frames) · useStatusLight(level, neutral)
 │       ├── utils/           # toScene(state): the scene's props, pure · gasLevel(air), heatLevel(temp): 0–1
 │       │                    # SITE: the ground plan · lensPoint(), lensHeight() · watchedPoint(xNorm) · fencePosts()
+│       │                    # bearingTo(from, to): the way to face
 │       │                    # alongPipe(share) · puffAt(age): a puff of steam's life · wispAt(age): a wisp
 │       │                    # of haze's · blink(t), arcsAt(t): the Alarm · ENCLOSURE_PARTS, ENCLOSURE_SHAPE
 │       │                    # autoOrbitSpeed(touch, now) · pixelRatio(density, width, height)
 │       │                    # wholeStageDistance(aspect) · fadeTo(fade, to, now), fadeValue(fade, now)
+│       │                    # statusShare(from, to, elapsed): the Status's share of the light as it rises
+│       │                    # lightTo(light, level, now), lightShares(light, now), lit(shares, neutral, colors)
 │       │                    # DRIVER_PROBES: driver → Probe · pulse(t): a drifting Probe's beat
 │       │                    # sweepsAt(sweeps, present, now), lapAt(sweeps, now): the fence's sweeps on a presence
 │       │                    # sweepGlow(place, lap) · domeFlash(lap)
 │       │                    # framesSince(seen, frames), clapsIn(frames), wavesAt(waves, claps, now): the waves a
 │       │                    # clap sends · waveShape(elapsed, amplitude): a wave's radius, width and glow
 │       │                    # glide(current, target, elapsed), trackAt(track, intruder, elapsed): the intruder's glide
+│       │                    # FIGURE: the figurine's plan · figureHeight(), headHeight() · sweptTo(age): its sweep
 │       └── index.ts
 └── shared/
     ├── contract/            # re-exports backend/src/contract.ts — never redeclare a schema
     ├── config/              # feedUrl() · captureMode() · STATUS_COLORS
-    ├── api/                 # getJson / postJson on the app's own origin
+    ├── api/                 # getJson / postJson on the app's own origin · onUnauthorized(listener): a 401
     ├── lib/                 # cn(), French labels, Status/severity colors, fr-FR formats · paginate(), inOrder()
     ├── components/          # LevelBadge: the outline badge with a colored dot · Pager, SortByTime
     ├── hooks/               # use-mobile (shadcn sidebar)
@@ -151,6 +162,23 @@ const history = useLiveFeed((state) => state.history)                // every fr
 - Types come from `@/shared/contract`: `Telemetry`, `Alert`, `Status`, `Frame`…
 - The Status colors are defined once, in `shared/config/status-colors.ts` (`STATUS_COLORS`). `main.tsx` hands them to the stylesheet as `--nominal`, `--elevated` and `--critical`; the Twin lights its scene with the same.
 
+## Operator session — `features/auth`
+
+```tsx
+import { AuthGate, useSessionCheck, useSignOut } from '@/features/auth'
+
+<AuthGate>{/* the login screen until there is a session: nothing below mounts without one */}</AuthGate>
+const signOut = useSignOut()             // POST /api/v1/auth/logout, then the login screen
+const checkSession = useSessionCheck()   // asks GET /api/v1/auth/check again
+```
+
+- **At load**, `GET /api/v1/auth/check`: `204` → the app, anything else → the login screen, on `/` as on `/twin`. `POST /api/v1/auth/login`: `204` lets in and the feed opens; `401` « Mot de passe incorrect. », `429` « Trop de tentatives. Patientez une minute. » (5 tries a minute), no answer « Le poste de commande est injoignable. ». **Se déconnecter**, at the foot of the sidebar, signs out.
+- **A session that ends** (#48) — after 12 h, or when the API restarts (it keeps its sessions in memory) — brings the login screen back, and everything under the gate stops with it: the feed no longer retries. Two things say the session is gone:
+  - **the feed going down.** A socket that closes does not say why, so `app.tsx` asks for the session again each time (`LiveFeedProvider`'s `onDown` → `useSessionCheck()`). `401` → the login screen. `204`, or no answer at all (the Command Post is out of reach, or restarting behind its proxy) → still in: the Twin says "Signal lost" and the feed keeps retrying. `afterCheck(session, answer)` is that rule, pure and tested.
+  - **any call the API answers `401`** (`onUnauthorized` in `shared/api/http.ts`): the Incidents asked for every 15 s on `/`, a command.
+- **Not covered** — a socket already open outlives its session: the API checks the session when the socket opens, not after. On `/twin`, where nothing else is asked through `shared/api`, the login screen comes back when that socket drops.
+- With `OPERATOR_AUTH=off` the check always answers `204`: nothing changes in development.
+
 ## Digital Twin — `features/twin`
 
 ```tsx
@@ -170,8 +198,13 @@ const history = useLiveFeed((state) => state.history)
 ```
 
 - `toScene(state)` turns the live state into what the scene shows, and is all the scene reads: pure, tested without WebGL. It gives the Enclosure's color and glow (gas), what its LCD reads and the color its LED ring breathes in (the Status), its Alarm (active `gas` and `thermal` Alerts), the Probes to pulse and the drift's label (active `predictive` Alerts), how thick the haze around the gas pipe is (gas), the Status's color grade, the heat of the generator hall (how red its roof glows, whether the air ripples above it), whether the camera sector is lit (an active `intrusion`), where the intruder stands (last active `intrusion`'s `alert_id`, `x_norm`, and the point of the fence it gives), whether someone is near the site (an active `presence`) and whether the signal is lost.
-- The `Status` grades the whole scene. At `nominal` the studio keeps its neutral light, and only the ring around the socle, the LCD and the LED ring are green. At `elevated` and `critical` every light takes the Status's color: the whole model is lit in amber, in red. It follows the Command Post's Status, never the readings. The sky stays black on the stage (#30): the grade's `background` is no longer drawn.
-- **Nothing cuts** (#33). A new Status fades in over `FADE_SECONDS` (0.8 s), lights, ring around the socle, LCD and LED ring together, and one that comes during a fade starts from the color on screen. `fadeTo(fade, to, now)` and `fadeValue(fade, now)` are that rule, pure and tested; `useFade` / `useColorFade` run it on every frame.
+- The `Status` grades the scene, and no longer lights the whole of it for good (#91, a change from #12). The key light and the fill are neutral at every Status (`scene.status.light`): the signals are in the Status's hues, and a red intruder is lost on a maquette lit in red. What says the Status at all times is the rim light (`scene.status.rim`, the studio's cold one at `nominal`), the ring around the socle, the LCD and the LED ring: green, amber, red. It follows the Command Post's Status, never the readings. The sky stays black on the stage (#30): the grade's `background` is no longer drawn.
+- **The escalation flash** (#91). When the Status rises (`nominal` → `elevated`, `elevated` → `critical`, `nominal` → `critical`), the whole model is lit in the new Status's color for `FLASH_HOLD` (2 s, the fade that brings the color in included), then the light fades back to neutral over `FADE_SECONDS`, keeping a slight tint of the Status (`REST_SHARE`, 12 % of the light). A Status that goes down does not flash: the light only fades to the tint of the new one, none at `nominal`. `statusShare(from, to, elapsed)` (`utils/escalation.ts`) is that envelope, the share of the Status's color in the light, pure and tested.
+- **From one Status to the next** — `lightTo(light, level, now)` and `lightShares(light, now)` carry the light across the changes: it leaves what is on screen for what the new Status asks over `FADE_SECONDS`, so the flash fades in like every change, and a Status that rises during a flash floods the model in its own color from the one on screen, without a jump. The Status the Twin opens on is shown at rest: nothing flashes for what was already there. `lit(shares, neutral, colors)` is the color that makes; `useStatusLight(level, neutral)` runs it all on every frame, for the key light and the fill. A replay and the scenario flash the same way, a Status reached by a seek included: the light follows the Status on screen, whatever feeds it.
+
+![The whole model lit in red as the Status turns critical](../docs/twin/status-flash.png)
+
+- **Nothing cuts** (#33). A new Status fades in over `FADE_SECONDS` (0.8 s), rim light, ring around the socle, LCD and LED ring together, the flash with them, and one that comes during a fade starts from the color on screen. `fadeTo(fade, to, now)` and `fadeValue(fade, now)` are that rule, pure and tested; `useFade` / `useColorFade` run it on every frame.
 - **Signal lost** (#33). When the feed closes after having been open, `scene.signalLost` is true until it is open again, the retries in between included: the whole frame fades to grey (`<Halo saturation>`), "Signal lost" shows over the scene and the caption loses its colors, so that a stale state never passes for a live one. Before the first connection there is no signal to lose: the scene is neutral, with no notice. To see it, stop the backend.
 - The Enclosure goes from dark anodized to red as `readings.air` rises, and lights the ground around it. It follows the telemetry, not the Alerts: it moves before any `gas` Alert is raised.
 - `gasLevel(air)` gives the share of the way from calm to critical, 0–1. Its two bounds, `CALM_AIR` (200) and `CRITICAL_AIR` (620), are those of the mock feed: tune them to the MQ-2's calibration when the Sentinel sends its own Readings. The Enclosure's glow and the haze both run over that range: it is set there, once.
@@ -191,14 +224,16 @@ const history = useLiveFeed((state) => state.history)
 
 ![The drift's label under the pulsing Probes](../docs/twin/predictive-label.png)
 
-**The intruder** (#23, #38) — where the vision service sees someone, on the maquette: a column of light on the arc, tied to the lens that sees it.
+**The intruder** (#23, #38, #92) — where the vision service sees someone, on the maquette: a human figurine in hologram on the arc, tied to the lens that sees it.
 
-![The intruder's column on the arc, tied to the lens by a thin line, in the lit sector](../docs/twin/intruder-column.png)
+![The intruder's figurine on the arc, a pin of light over its head, tied to the lens by a thin line, in the lit sector](../docs/twin/intruder-figure.png)
 
 - **Where** — `scene.intruder` is the last raised of the active `intrusion` Alerts: its `alertId`, its `x_norm` and `at`, the point of the fence the camera's sight meets for it, `watchedPoint(x_norm)` (see [the site](#digital-twin--featurestwin), camera sector). 0 is the lens's left, 1 its right: mirrored when you face the Enclosure. `toScene` does the mapping, so it is tested without a render: on the fence, at `watchedPoint`, and moving across the arc, in order, as the mock's 0.15 → 0.35 → 0.55 → 0.75 come in.
-- **Drawn** — `<Intruder>`: a column of light standing on the arc, brightest at its foot and along its axis, fading upward, with a ring on the arc at its feet; a thin line from the Enclosure's lens (`lensPoint()`, `lensHeight()`) to the column, about where a head would be. All of it unlit and brighter than white in `INTRUSION_COLOR`, added over the scene, so it reads over a scene lit all in red and the halo takes it for a light. Nothing casts a shadow: the shadows are drawn once, and it moves.
-- **Glides** — a new `x_norm` on the same Alert does not move the column there at once: it glides along the arc, the line following it. `glide(current, target, elapsed)` (`utils/glide.ts`) is that smoothing, on `x_norm` so the column never leaves the arc: it closes the same share of the gap in the same time (`GLIDE`, 6 a second), never overshoots, is all but there well before the next value a second later, and lands at the same place whatever the frame rate. `trackAt(track, intruder, elapsed)` is the column from one frame to the next: it glides while the Alert is the same, and stands where an Alert newly raised sees its intruder, without gliding from where a previous one stood, even one raised again under the same `alert_id`. Both are pure and tested without a render.
-- **Comes and goes** — a newly raised intruder fades in where it stands; when the last `intrusion` is `cleared`, the column, the line and the sector fade out together, the column where it last stood (`useFade`).
+- **Drawn** — `<Intruder>`: a human figurine standing on the arc and facing the Enclosure's lens (`bearingTo(at, lens)`), like the pedestrians of a self-driving car's display: a head, a torso, arms and legs in two segments each. It is built from the maquette's volumes (`boxShape`, `turnedShape`: no model is loaded, no dependency added) to the plan in `FIGURE` (`utils/figure.ts`), and is `figureHeight()` tall, about 0.45 unit, nearly twice the fence: exaggerated like the Enclosure, to read from the back of the room. Its matter is a hologram, unlit, in `INTRUSION_COLOR`: a lit edge all around it and scan lines that rise slowly, which fade out evenly where they would be closer than two pixels apart instead of shimmering. It is drawn in two goes: its shade first, which dims what stands behind it (red on the red of the lit sector, its light alone would not tell it apart) and leaves its depth, then its light, added only where a volume is the nearest of them, so that an arm in front of the torso is not twice as bright. A pin of light over its head, a thin stem up to a gem 0.8 above the ground, where the column of #38 ended, tells it from afar; a ring marks its feet on the arc; a thin line runs from the Enclosure's lens (`lensPoint()`, `lensHeight()`) to the middle of its head (`headHeight()`). All of it is brighter than white, so it reads even while the Status's flash lights the scene all in red, and the halo takes it for lights. Once the flash has passed, it is the red that stands out of a neutral maquette. Nothing casts a shadow: the shadows are drawn once, and it moves.
+- **Glides** — a new `x_norm` on the same Alert does not move the figurine there at once: it glides along the arc, still facing the lens, the line following it. `glide(current, target, elapsed)` (`utils/glide.ts`) is that smoothing, on `x_norm` so the figurine never leaves the arc: it closes the same share of the gap in the same time (`GLIDE`, 6 a second), never overshoots, is all but there well before the next value a second later, and lands at the same place whatever the frame rate. `trackAt(track, intruder, elapsed)` is the figurine from one frame to the next: it glides while the Alert is the same, and stands where an Alert newly raised sees its intruder, without gliding from where a previous one stood, even one raised again under the same `alert_id`. It also counts the seconds the Alert has been shown (`age`, from 0 for each newly raised one, held once it is cleared), which the sweep goes by. Both are pure and tested without a render.
+- **Comes and goes** — a newly raised intruder appears where it stands in a sweep from its feet to its head, `SWEEP_SECONDS` (0.7 s) long, a band of light at its front: `sweptTo(age)` is the share of the way up it has got to, pure and tested. Its pin, its ring and the line fade in meanwhile. When the last `intrusion` is `cleared`, the figurine, its pin, its ring, the line and the sector fade out together, the figurine where it last stood (`useFade`, `fadeTo`).
+- **At rest** — it stands, its arms by its sides and its forearms a little forward, which is how its front is told from its back. Walking, and turning the way it walks, come with #94.
+- **Cost** — ten small volumes drawn twice, in the lit frame and in the halo's. On the Iris Xe at 1920 × 1080, production bundle, frame rate uncapped: a median of 9 to 11 ms a frame with the figurine shown, against 8 to 10 without it and 8 to 10 for the column it replaces, so 90 to 100 images a second where the GPU was free, well over the 60 the screen shows. Other sessions shared the GPU during the runs, which scatter by more than the gap between the two: to measure again on a quiet machine.
 
 **Presence** (#36) — the site knows it is approached before anyone is inside:
 
@@ -209,7 +244,7 @@ const history = useLiveFeed((state) => state.history)
 - **The dome** flashes `FLASHES_PER_SWEEP` (4) times in a sweep, lit for as long as it is dark: `domeFlash(lap)`. A blink has steep edges, but each takes a few frames.
 - **Once it is cleared** the sweep in progress goes to its end and no other starts; a presence that comes back before that end keeps it going. `sweepsAt(sweeps, present, now)` is that rule and `lapAt(sweeps, now)` how far through its sweep the fence is; `useSweep(present)` runs them on every frame, for the fence and for the dome. All of it is pure and tested.
 - **No fade here**: the fence and the dome are both dark as a sweep starts and as it ends, so one sweep follows another, and the last one stops, without a cut. On the mock feed the Alert lasts 2 s: one sweep, which ends 0.4 s after the `cleared`.
-- The sweep is light added over the posts and the rails, unlit: it glows, and it still reads at `elevated`, when the whole model is lit in amber. That is when it shows: a `presence` Alert is a warning, so it takes the Status there on its own.
+- The sweep is light added over the posts and the rails, unlit: it glows, and it still reads while the flash of `elevated` lights the whole model in amber. That is when it starts: a `presence` Alert is a warning, so it takes the Status there on its own. Once the flash has passed, the sweep is the amber that stands out of a neutral fence.
 
 **Noise** (#37) — a clap next to the Sentinel, seen on the maquette:
 
@@ -228,17 +263,17 @@ const history = useLiveFeed((state) => state.history)
 
 - **One ground plan** — `SITE` (`utils/site.ts`) places everything, once: the socle, the generator hall, its two chimneys, the transformer station, the gas tank and the pipe from it to the hall, the fence and its gate, the Enclosure and its camera. Coordinates are scene units from the socle's centre, `x` to the right and `z` to the front; a bearing is an angle around the vertical, 0 to the front. The components only draw what `SITE` says: move a part there, never in a component. Its tests hold the plan together without a render — everything stands on the socle and inside the fence, no two parts on the same ground, the pipe joins the hall to the tank, the Enclosure stands at the gate with nothing of the plant in its field of view.
 - **Who stands where** — the Enclosure is tall enough to throw its shadow across half the socle, and the key light comes from the front right: so it stands on the left by the gate, and the plant on the right, in the light. Keep that in mind before moving either.
-- **Camera sector** — `lensPoint()` is where the Enclosure's lens is over the ground, and `watchedPoint(xNorm)` where its sight meets the fence for what stands at `xNorm` across its image: 0 on the lens's left, 1 on its right (so mirrored when you face the Enclosure). The sector drawn on the ground runs from under the lens to that arc; it lights up on an `intrusion` Alert (#13), and the intruder belongs on its arc (#23, #38). The field of view is `SITE.camera.fov`, 60° until the real lens is measured.
+- **Camera sector** — `lensPoint()` is where the Enclosure's lens is over the ground, and `watchedPoint(xNorm)` where its sight meets the fence for what stands at `xNorm` across its image: 0 on the lens's left, 1 on its right (so mirrored when you face the Enclosure). The sector drawn on the ground runs from under the lens to that arc; it lights up on an `intrusion` Alert (#13), and the intruder belongs on its arc (#23, #38, #92). The field of view is `SITE.camera.fov`, 60° until the real lens is measured.
 - **Socle** — a disc of terrain cut clean, afloat in the black. Its contour lines are drawn by the terrain's material from a relief that exists only there: the ground stays flat. The Status's ring runs around its rim.
-- **Volumes** — `Box` (bevelled edges) and `Turned` (a profile turned around the vertical, every corner crisp) are what the plant is built from; both cast and receive shadows. No model is loaded.
+- **Volumes** — `Box` (bevelled edges) and `Turned` (a profile turned around the vertical, every corner crisp) are what the plant is built from; both cast and receive shadows. No model is loaded. `boxShape` and `turnedShape` give their shapes alone, for what is drawn in a matter of its own: the intruder's figurine.
 - **Materials** — `palette.ts`: graphite and off-white only. Color is kept for the Status and the signals.
-- **Steam** — a slow plume above each chimney, whatever the Status: the plant is idling. `puffAt(age)` is a puff's whole life, pure: it leaves the mouth unseen and is gone when its life ends, so the plume loops without a cut. The puffs are lit, so they take the Status's light and never glow.
+- **Steam** — a slow plume above each chimney, whatever the Status: the plant is idling. `puffAt(age)` is a puff's whole life, pure: it leaves the mouth unseen and is gone when its life ends, so the plume loops without a cut. The puffs are lit, so they take the scene's light, the Status's flash included, and never glow.
 
 **Heat** (#35) shows on the generator hall, so that it is told from a gas leak, which shows on the Enclosure:
 
 ![The generator hall at the peak of the heat](../docs/twin/hall-thermal.png)
 
-- **The roof glows** with `scene.thermal.intensity`, which is `heatLevel(readings.temp)`: dark when calm, a deep red all over at the peak, its skylight far brighter. Like the gas, it follows the telemetry, not the Alerts: it reddens before any `thermal` Alert is raised and cools down after it clears. The glow is emissive, so it has its halo, in `HEAT_COLOR`: more orange than the critical Status, to stay apart from it when the whole model is lit in red.
+- **The roof glows** with `scene.thermal.intensity`, which is `heatLevel(readings.temp)`: dark when calm, a deep red all over at the peak, its skylight far brighter. Like the gas, it follows the telemetry, not the Alerts: it reddens before any `thermal` Alert is raised and cools down after it clears. The glow is emissive, so it has its halo, in `HEAT_COLOR`: more orange than the critical Status, to stay apart from it while the whole model is flooded in red.
 - **One range** — `CALM_TEMP` (31.5 °C) and `PEAK_TEMP` (41 °C), in `utils/heat-level.ts` and nowhere else. They are those of the mock feed: tune them to the site when the Sentinel sends its own Readings (its `thermal` Alert is raised at 40 °C, `firmware/include/config.h`).
 - **The air ripples** above the hall while a `thermal` Alert is active (`scene.thermal.shimmer`), and fades in and out over `FADE_SECONDS` like every change. What stands behind the hot air wavers: the chimneys from the front, the fence and the ground from behind. What stands in front of it does not.
 - **How** — `HeatShimmer` draws no color. It is a box over the hall whose shader works out how much hot air each pixel is seen through (a bell around the middle of the roof, thinning out upward, cut where the sight meets the roof) and writes what it leaves into the **frame's alpha**, which is 1 or more everywhere else. It is depth-tested, so what stands in front hides it. The frame's last pass (`Halo`) then reads that alpha and looks up the image a little to the side, along waves that rise. No extra pass, one more box while the air ripples, nothing while it is still: a frame costs the GPU the same either way (timed on the Iris Xe, at the 3 million pixel budget).
@@ -247,7 +282,7 @@ const history = useLiveFeed((state) => state.history)
 **The stage** (#30) is what every later Twin slice is set on:
 
 - **Full screen** — `OutpostTwin` fills its parent. A route whose `handle` says `stage: true` (the router's `/twin`) gets the whole space under the header; the other routes keep the padded page. `layoutMode(matches, location)` in `app/layout-mode.ts` decides it.
-- **Light** — black background, a key light that casts the soft shadows, a cold rim light from behind, a trace of fill. The key and the fill take the grade's `light`, the rim its `rim`: neutral at `nominal`, the Status's color otherwise. The lights stay put while the camera orbits. Give a new mesh `castShadow` / `receiveShadow`. The shadow map is 2048 wide with a blur of 3 since #32: a wider blur shows its grain on the off-white walls. The shadows are drawn once (`StillShadows`), since nothing that casts one moves: after moving a caster, ask for them again with `gl.shadowMap.needsUpdate = true`.
+- **Light** — black background, a key light that casts the soft shadows, a cold rim light from behind, a trace of fill. The key and the fill take the grade's `light`, neutral at every Status, and the Status's color for a moment as it rises (#91, [the escalation flash](#digital-twin--featurestwin)). The rim takes the grade's `rim`: cold at `nominal`, the Status's color otherwise. Seen from behind, the faces the key light does not reach are lit by the rim alone, so they read in the Status's color for as long as it lasts. The lights stay put while the camera orbits. Give a new mesh `castShadow` / `receiveShadow`. The shadow map is 2048 wide with a blur of 3 since #32: a wider blur shows its grain on the off-white walls. The shadows are drawn once (`StillShadows`), since nothing that casts one moves: after moving a caster, ask for them again with `gl.shadowMap.needsUpdate = true`.
 - **Halo** — only what emits light glows. `Halo` draws the scene a second time with its lights off and blurs that image over the frame: set `emissive` + `emissiveIntensity` on a material and it glows in proportion, in its own color; a lit surface never does, however bright. An unlit material (`meshBasicMaterial`) counts as emitting — the ring around the socle glows in the Status's color that way — so use a standard one for anything that should not glow. Its pass is the last to touch the frame: that is also where the frame turns grey when the signal is lost (`saturation`), and where hot air ripples what is seen through it (#35).
 - **Color** — the frame is rendered in HDR and tone-mapped with `NeutralToneMapping`, which leaves the Status colors as they are.
 - **Camera** — it goes around the Outpost in 80 s. The Operator can turn it and zoom with the mouse, between bounds that keep the Outpost in frame (no panning, never under the ground); 3 s after they let go, the orbit picks up speed again. `autoOrbitSpeed` is that rule, as a pure function.
@@ -270,7 +305,7 @@ const history = useLiveFeed((state) => state.history)
 ![The Outpost at the gas peak](../docs/twin/gas-peak.png)
 
 - **Haze** — a haze settles around the gas pipe and thickens with `readings.air`. `scene.haze` is the gas level (`gasLevel`): none when calm, the most from `CRITICAL_AIR` on. Like the Enclosure's glow it follows the telemetry, not the Alerts: it is there before any `gas` Alert. `<Haze density>` eases toward it slowly enough (`HAZE_EASE`) never to rest on a step between two Readings.
-- **Wisps** — the haze is made of wisps that seep from points spread along the pipe (`alongPipe(share)`), sink to the ground and spread over it. `wispAt(age)` is a wisp's whole life, pure. They are made of what the steam is made of (`VapourMaterial`): lit, so the haze takes the Status's light, red at `critical`, and never glows.
+- **Wisps** — the haze is made of wisps that seep from points spread along the pipe (`alongPipe(share)`), sink to the ground and spread over it. `wispAt(age)` is a wisp's whole life, pure. They are made of what the steam is made of (`VapourMaterial`): lit, so the haze takes the scene's light, the Status's flash included, and never glows.
 - **Alarm** — `scene.enclosure.alarm` is on while a `gas` or `thermal` Alert is active, the Alerts the Sentinel fires its Alarm on. It carries the highest severity among them and its color: green for `info`, amber for `warning`, red for `critical`. The LED ring then blinks in that color instead of breathing, and the buzzer sends out arcs of sound, one on every beat (`ALARM_PERIOD`, 0.5 s): `blink(t)` and `arcsAt(t)` are pure and tested. When none is left, the ring goes back to breathing in the Status's color and the buzzer goes silent. One fades into the other over `FADE_SECONDS`.
 - **Not the real Alarm's state** — the contract does not carry it. An Alarm the Operator silenced keeps sounding on the Twin for as long as its Alert is active.
 - **Arcs** — drawn on a sheet that stands on the buzzer and turns to face the camera. They rise no higher than `ARC_REACH`: the camera frames the Enclosure with little room above it.
@@ -321,11 +356,11 @@ const shown = player.frames ? stateAfter(player.frames) : liveState   // replaye
 - **Live or replay** — always one label at the top left of the stage: `LIVE`, or `REPLAY · Incident #1 · 14:23:12` on a solid violet (`--replay`, a color no Status shares), the whole stage framed in it and the caption showing the replayed Status and gas. **Back to live** leaves the replay; the Twin never goes back on its own.
 - **Scenario mode** — **Play the scenario** plays `scenario(now)`: the reference scenario, scripted (60 s: 5 s of calm, the 50 s Incident, 5 s of calm), one telemetry snapshot a second with the gas rising to 680 and the PIR on while someone is there. It plays the same every time without the network, and is labelled REPLAY like any other.
 - **Not in capture mode** — `/twin?capture` shows neither the label nor the scrubber.
-- **Not yet** — the last N minutes of history (`GET /api/v1/history`) as one free timeline, rather than Incident by Incident. With `OPERATOR_AUTH` on, the Command Post answers only to a session: until the login screen exists, the scrubber falls back on this window's Incidents.
+- **Not yet** — the last N minutes of history (`GET /api/v1/history`) as one free timeline, rather than Incident by Incident.
 
 ## TODO
 - [x] App shell + live feed (WebSocket client, store, hook) — #10
-- [x] Operator login screen (`POST /api/v1/auth/login`, `GET /api/v1/auth/check`)
+- [x] Operator login screen (`POST /api/v1/auth/login`, `GET /api/v1/auth/check`), back when the session ends — #48
 - [x] Charts + Status + Alerts — #21, #11
 - [x] Camera panel + actuator control panel — #14 (the `/camera` route in the reverse proxy and the firmware's siren pattern name are still to agree on)
 - [x] 3D Outpost whose Enclosure reacts to gas — #20
@@ -342,5 +377,7 @@ const shown = player.frames ? stateAfter(player.frames) : liveState   // replaye
 - [x] Heat on the generator hall: its roof glows with the temperature, the air ripples on a `thermal` Alert — #35
 - [x] Noise: a wave from the Enclosure over the socle on each clap — #37
 - [x] Intruder placement (`x_norm` → perimeter arc) — #23
+- [x] The intruder as a human figurine in hologram — #92
 - [x] Time-scrubber + scenario mode — #15
-- [ ] CI: build + smoke render — #16
+- [x] Neutral light, the Status floods the scene as it rises — #91
+- [x] CI: build + smoke render — #16

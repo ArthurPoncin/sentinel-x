@@ -18,10 +18,11 @@ export interface TwinState {
 
 // The overall color grade the Status gives the scene.
 export interface StatusGrade {
+  // The Status itself: as it rises, the light is flooded in its color for a moment (escalation.ts).
   level: StatusLevel
   // The sky behind the Outpost.
   background: string
-  // The light from the front and above: neutral when nominal, the Status's color otherwise.
+  // The light from the front and above, at rest: neutral whatever the Status, so the signals stand out of it.
   light: string
   // The light from behind, on the edges: the studio's cold one when nominal, the Status's color otherwise.
   rim: string
@@ -76,10 +77,10 @@ export interface SceneProps {
 export const CALM_COLOR = '#2c343e'
 export const GAS_COLOR = STATUS_COLORS.critical
 // Metal heated red: what the generator hall's roof glows in. More orange than the critical Status, so heat
-// is told from gas even when the whole model is lit in red.
+// is told from gas even while the whole model is flooded in red.
 export const HEAT_COLOR = '#ff5a1f'
-// The studio's own light, when nothing is wrong: white from the front, cold from behind. Color is kept for
-// the Status.
+// The studio's own light: white from the front whatever the Status, cold from behind when nothing is wrong.
+// Color is kept for the Status and the signals.
 export const NEUTRAL_LIGHT = '#ffffff'
 export const NEUTRAL_RIM = '#9dbcff'
 // What the camera's sector lights in on an intrusion.
@@ -112,10 +113,11 @@ export function driftLabel(score: number): string {
   return `dérive · score ${score.toFixed(2)}`
 }
 
-// A Status that is not nominal colors every light: the whole model is lit in it, whatever side it is seen from.
+// A Status that is not nominal colors what stands for it, the rim light and the ring around the socle, and
+// leaves the light neutral: the whole model is lit in its color only for a moment, as it rises (escalation.ts).
 function inStatusColor(level: Exclude<StatusLevel, 'nominal'>, background: string): StatusGrade {
   const color = STATUS_COLORS[level]
-  return { level, background, light: color, rim: color, perimeter: color }
+  return { level, background, light: NEUTRAL_LIGHT, rim: color, perimeter: color }
 }
 
 export const STATUS_GRADES: Readonly<Record<StatusLevel, StatusGrade>> = {

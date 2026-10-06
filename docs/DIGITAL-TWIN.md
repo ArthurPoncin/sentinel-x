@@ -10,9 +10,9 @@ A **live 3D replica** of the Sentinel-X outpost rendered in the dashboard (Three
 | Gas (`air`) | Sentinel | Box glows red, a haze around the gas pipe thickens with the reading |
 | Presence (`pir`) | Sentinel | The Enclosure's PIR dome blinks, an amber sweep goes round the fence |
 | Noise (`noise`) | Sentinel | A wave of light leaves the box and spreads over the socle on each clap, scaled to the Alert's `value` (share of the cycle that was loud) |
-| Intrusion (vision) | Command Post (`vision`) | **Intruder marker** placed along the perimeter arc from `x_norm` |
+| Intrusion (vision) | Command Post (`vision`) | The camera's sector lights up and the **intruder**, a human figurine in hologram, stands on the perimeter arc where `x_norm` places it, facing the lens that sees it; it glides there as `x_norm` changes |
 | Predictive drift | Command Post (`predictive`) | The drifting **component pulses orange** *before* the critical threshold |
-| `Status` (nominal/elevated/critical) | Command Post | The scene's overall color grade |
+| `Status` (nominal/elevated/critical) | Command Post | When it rises, the whole scene is flooded in its color for 2 s, then the light goes back to neutral so the signals stand out. The rim light, the ring around the socle, the box's LCD and LED ring stay in its color |
 | Alarm (buzzer) | Sentinel | LED ring blinks and buzzer sounds while a `gas` or `thermal` Alert is active. The contract does not carry the Alarm's own state: the Twin does not show it silenced by the Operator |
 
 ## Signature features

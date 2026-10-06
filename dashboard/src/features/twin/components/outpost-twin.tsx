@@ -11,6 +11,7 @@ import {
 import type { Frame } from '@/shared/contract'
 import { useColorFade } from '../hooks/use-fade'
 import { usePixelRatio } from '../hooks/use-pixel-ratio'
+import { useStatusLight } from '../hooks/use-status-light'
 import { FIELD_OF_VIEW } from '../utils/framing'
 import type { SceneProps, StatusGrade } from '../utils/scene'
 import { SITE } from '../utils/site'
@@ -24,17 +25,19 @@ import { Perimeter } from './perimeter'
 import { PowerPlant } from './power-plant'
 import { Socle } from './socle'
 
-// The studio the Outpost stands in, and the Status's color grade over it: every light, the ring around the socle.
-// A new Status fades in, from whatever is on screen when it comes. The lights stay put while the camera
-// orbits, so the shadows do not sweep across the ground.
-function Grade({ light, rim, perimeter }: StatusGrade) {
+// The studio the Outpost stands in, and the Status's color grade over it. The rim light and the ring around the
+// socle are in the Status's color for as long as it lasts. The key light and the fill are neutral, so the
+// signals stand out of the scene: a Status that rises floods them in its color for a moment, then leaves them
+// a slight tint. A new Status fades in, from whatever is on screen when it comes. The lights stay put while
+// the camera orbits, so the shadows do not sweep across the ground.
+function Grade({ level, light, rim, perimeter }: StatusGrade) {
   // Set once, then faded toward the Status's: a color prop would jump past the fade.
   const [initial] = useState({ light, rim, perimeter })
   const key = useRef<SpotLight>(null)
   const back = useRef<DirectionalLight>(null)
   const fill = useRef<AmbientLight>(null)
   const ring = useRef<MeshBasicMaterial>(null)
-  const lightNow = useColorFade(light)
+  const lightNow = useStatusLight(level, light)
   const rimNow = useColorFade(rim)
   const perimeterNow = useColorFade(perimeter)
 
@@ -63,7 +66,8 @@ function Grade({ light, rim, perimeter }: StatusGrade) {
         shadow-radius={3}
         shadow-bias={-0.0004}
       />
-      {/* Rim light: low and from behind, it draws the edges out of the black. Cold until a Status colors it. */}
+      {/* Rim light: low and from behind, it draws the edges out of the black. Cold until a Status colors it,
+          and in that color for as long as the Status lasts. */}
       <directionalLight ref={back} color={initial.rim} position={[-5, 2.2, -4.5]} intensity={2.4} />
       {/* Just enough fill for the faces neither light reaches. */}
       <ambientLight ref={fill} color={initial.light} intensity={0.06} />
@@ -104,12 +108,13 @@ export interface OutpostTwinProps {
 }
 
 // The Outpost in 3D: a maquette of the site on its socle, lit like a product in a studio on a black
-// background. The Status grades the light and the ring around the socle; the Enclosure, at the site's
-// entrance, turns red as gas rises, shows the Status on its LCD and breathes it on its LED ring. A haze
-// thickens around the gas pipe with the gas, and the Enclosure sounds the Alarm while a `gas` or `thermal`
-// Alert is active. The generator hall's roof glows red with the heat, and the air ripples above it. An
-// intrusion lights the camera's sector on the ground and stands the intruder on its arc, a column of light
-// tied to the lens that glides to where `x_norm` places it; a predictive drift pulses the Probes it names, its score on a label; a presence blinks the Enclosure's
+// background. The Status colors the rim light and the ring around the socle, and floods the whole model in its
+// color for a moment as it rises; the Enclosure, at the site's entrance, turns red as gas rises, shows the
+// Status on its LCD and breathes it on its LED ring. A haze thickens around the gas pipe with the gas, and the
+// Enclosure sounds the Alarm while a `gas` or `thermal` Alert is active. The generator hall's roof glows red
+// with the heat, and the air ripples above it.
+// An intrusion lights the camera's sector on the ground and stands the intruder on its arc, a human figurine in
+// hologram tied to the lens, which glides to where `x_norm` places it; a predictive drift pulses the Probes it names, its score on a label; a presence blinks the Enclosure's
 // PIR dome and sends an amber sweep round the fence; a clap sends a wave of light from the Enclosure over the socle. Without its
 // signal it all turns grey and says so: what it shows is no longer live. It fills its parent: give that the
 // size the Twin should have on screen.

@@ -23,6 +23,8 @@ infra/plug-and-play.sh X          # X = table number: the Pi becomes 192.168.X.1
 
 Everything comes back by itself when the Pi reboots. The manual steps follow, for reference.
 
+Before the pentest, [`../cyber/harden.sh`](../cyber/harden.sh) closes the Pi down to what the table needs (SSH by key from the Operator laptop only, UFW, Docker's published ports kept to the table Wi-Fi) — [`../cyber/README.md`](../cyber/README.md#hardensh). Run it again after each `plug-and-play.sh`.
+
 ## Run the Command Post on the Pi
 Everything runs from [`../docker-compose.yml`](../docker-compose.yml). The secrets it needs are made once, on the Pi, by [`setup.sh`](setup.sh), into `infra/secrets/` (git-ignored, never committed).
 

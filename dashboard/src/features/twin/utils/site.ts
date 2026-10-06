@@ -60,6 +60,11 @@ const toward = (bearing: number, distance = 1): GroundPoint => ({
   z: distance * Math.cos(bearing),
 })
 
+// The bearing to face, standing at `from`, to look at `to`.
+export function bearingTo(from: GroundPoint, to: GroundPoint): number {
+  return Math.atan2(to.x - from.x, to.z - from.z)
+}
+
 // Half the angle the gate opens by, seen from the socle's centre.
 export function halfGate(): number {
   const { radius, gate } = SITE.fence

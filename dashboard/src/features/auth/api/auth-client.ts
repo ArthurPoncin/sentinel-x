@@ -1,4 +1,5 @@
 import { postJson } from '@/shared/api/http'
+import type { SessionAnswer } from '../utils/session'
 
 export type LoginOutcome = 'ok' | 'wrong-password' | 'throttled' | 'unreachable'
 
@@ -10,10 +11,21 @@ export function loginOutcome(status: number): LoginOutcome {
   return 'unreachable'
 }
 
-// 204 with a session (or with OPERATOR_AUTH=off), 401 without.
-export async function hasSession(): Promise<boolean> {
-  const response = await fetch('/api/v1/auth/check', { credentials: 'same-origin' })
-  return response.status === 204
+// What a reply of GET /api/v1/auth/check says: 204 with a session (or with OPERATOR_AUTH=off), 401
+// without. Anything else says nothing of the session: the API is restarting behind its proxy.
+export function sessionAnswer(status: number): SessionAnswer {
+  if (status === 204) return 'open'
+  if (status === 401) return 'closed'
+  return 'unknown'
+}
+
+// Asks the Command Post whether the Operator's session stands. Never fails: out of reach is no answer.
+export async function checkSession(): Promise<SessionAnswer> {
+  try {
+    return sessionAnswer((await fetch('/api/v1/auth/check', { credentials: 'same-origin' })).status)
+  } catch {
+    return 'unknown'
+  }
 }
 
 export async function login(password: string): Promise<LoginOutcome> {

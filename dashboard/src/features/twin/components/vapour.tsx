@@ -32,7 +32,8 @@ export interface VapourMaterialProps {
 }
 
 // What the steam and the haze are made of, for a ball to pass for a puff, round or squashed. It is lit like
-// the rest of the maquette, so it takes the Status's light and does not glow. Unseen until given an opacity.
+// the rest of the maquette, so it takes the scene's light, the Status's flash included, and does not glow.
+// Unseen until given an opacity.
 export function VapourMaterial({ edge = 1.6 }: VapourMaterialProps) {
   const defines = useMemo(() => ({ VAPOUR_EDGE: edge.toFixed(2) }), [edge])
 
