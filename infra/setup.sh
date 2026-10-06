@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Makes the Command Post's secrets in infra/secrets/ (never committed), once:
 #   - the team CA, and the certificates it signs for the broker and the reverse proxy;
-#   - one MQTT account per client (sentinel-01, api, predictive) and the broker's ACL;
+#   - one MQTT account per client (sentinel-01, api, predictive, screen) and the broker's ACL;
 #   - one bearer token per AI service (vision, predictive);
 #   - the Operator's password hash;
-#   - the AI services' own files, vision.env and predictive.env: the same tokens and MQTT password.
+#   - the AI services' own files, vision.env and predictive.env: the same tokens and MQTT password;
+#   - screen.env, the MQTT password of the status screen on the Pi's HDMI (infra/screen.py).
 # Run it on the Pi, from the repo root, before the first `docker compose up`:
 #   infra/setup.sh <table number>          e.g. infra/setup.sh 4  → the Pi is 192.168.4.1
 # What exists already is kept: delete a file (sudo: some belong to the containers) to make it again.
@@ -67,6 +68,7 @@ certificate "$secrets/caddy" proxy "IP:$pi_ip,IP:127.0.0.1,DNS:localhost${EXTRA_
 
 echo "Credentials: MQTT accounts, service tokens, Operator password"
 # The api's MQTT password goes in both files: they are made together or not at all.
+passwd_made=false
 if [[ -f "$secrets/mosquitto/passwd" && -f "$secrets/api.env" ]]; then
   kept "passwd and api.env"
 elif [[ -f "$secrets/mosquitto/passwd" || -f "$secrets/api.env" ]]; then
@@ -96,6 +98,7 @@ else
     && mosquitto_passwd -b /secrets/mosquitto/passwd sentinel-01 '$sentinel_password' \
     && mosquitto_passwd -b /secrets/mosquitto/passwd api '$api_password' \
     && mosquitto_passwd -b /secrets/mosquitto/passwd predictive '$predictive_password'" 2>/dev/null
+  passwd_made=true
 
   cat > "$secrets/api.env" <<API
 # Read by the api service (docker-compose.yml). Made by infra/setup.sh.
@@ -165,6 +168,24 @@ PREDICTIVE_TOKEN=$predictive_token
 PREDICTIVE
   )
   made predictive.env
+fi
+
+echo "Status screen: screen.env"
+# Its own account, added to passwd when it is not there yet: an install made before it gets it too.
+if [[ -f "$secrets/screen.env" ]]; then
+  kept screen.env
+else
+  screen_password="$(openssl rand -hex 24)"
+  in_container "mosquitto_passwd -b /secrets/mosquitto/passwd screen '$screen_password'" 2>/dev/null
+  # Made in this very run, passwd is not in the broker's hands yet.
+  $passwd_made || broker_reload=true
+  (umask 077 && cat > "$secrets/screen.env" <<SCREEN
+# Read by infra/screen.py, the status screen on the Pi's HDMI. Made by infra/setup.sh: its MQTT
+# password, as in the broker's passwd. The account may only read the Sentinels' topics.
+MQTT_PASSWORD=$screen_password
+SCREEN
+  )
+  made "screen.env, and the screen account in passwd"
 fi
 
 # The ACL, from infra/mosquitto/acl, each run. The broker runs as 1883 and the reverse proxy as

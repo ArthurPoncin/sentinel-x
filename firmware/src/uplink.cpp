@@ -25,7 +25,7 @@ void onMessage(char *, uint8_t *payload, unsigned int length) {
   commandHandler(reinterpret_cast<const char *>(payload), length);
 }
 
-// What PubSubClient's state means, to fix it from the LCD.
+// What PubSubClient's state means, to fix it from the serial monitor.
 const char *explain(int state) {
   switch (state) {
     case MQTT_CONNECT_BAD_CREDENTIALS:
@@ -98,7 +98,6 @@ bool publish(const char *topic, const char *payload) { return mqtt.connected() &
 bool wifiUp() { return WiFi.status() == WL_CONNECTED; }
 bool timeKnown() { return time(nullptr) > 1700000000; }
 bool brokerUp() { return mqtt.connected(); }
-String ip() { return wifiUp() ? WiFi.localIP().toString() : String("-"); }
 const char *problem() { return mqtt.connected() ? "" : why; }
 
 bool isoNow(char *out, size_t size) {

@@ -6,8 +6,8 @@ We implement the brief's **Option A**: the Local Server ("PC Serveur Local") is 
 
 | Node | Hardware | Role |
 |---|---|---|
-| **Sentinel** | ESP32 + probes + LCD + Alarm | Senses, decides its own local Alerts, fires the Alarm autonomously |
-| **Command Post** | Raspberry Pi 4 + USB webcam | The single server: Wi-Fi AP, MQTT broker, API and its history, dashboard host, vision + predictive AI |
+| **Sentinel** | ESP32 + probes + Alarm | Senses, decides its own local Alerts, fires the Alarm autonomously |
+| **Command Post** | Raspberry Pi 4 + USB webcam + HDMI status screen | The single server: Wi-Fi AP, MQTT broker, API and its history, dashboard host, vision + predictive AI |
 | *Operator laptop* | any laptop | Browser only — nothing of the system runs on it |
 
 The Sentinel and the Command Post live in the same 3D-printed **Enclosure** (see [Physical layout](#physical-layout-option-a)).
@@ -18,7 +18,7 @@ The Sentinel and the Command Post live in the same 3D-printed **Enclosure** (see
 
 - **ESP32 instead of ESP8266.** Same family and toolchain (Arduino/PlatformIO), strictly more capable: RAM headroom for the mandatory TLS handshake (tight on an ESP8266) and several ADC inputs (the ESP8266 has a single 0–1 V analog input, awkward for the MQ-2). An ESP-01S is on hand if the ESP8266 label is required.
 - **Raspberry Pi 4 instead of a Pi 5.** The brief specifies a Pi 5 (4 GB) for Option A; we have a Pi 4. Inference is slower, hence the lightweight vision model and the Monday benchmark.
-- **LCD instead of the OLED.** The brief lists a 0.96" OLED I2C; our status display is a 1.8" 160×128 px color LCD (ST7735S, SPI), sold for the micro:bit.
+- **An HDMI screen on the Pi instead of the OLED on the ESP.** The brief lists a 0.96" OLED I2C on the microcontroller for the IP/Wi-Fi status; ours is an 800×480 HDMI screen on the Command Post, which shows the table Wi-Fi, the Sentinel's link, readings and Alerts, the webcam and the containers ([`../infra/README.md`](../infra/README.md#the-status-screen)). The Sentinel's own reasons, when it cannot connect, are on its serial monitor.
 
 ```mermaid
 flowchart LR
@@ -28,11 +28,11 @@ flowchart LR
             MQ2["MQ-2 · gas"]
             PIR["PIR HC-SR501 · presence"]
             SND["CZN-15E · sound"]
-            LCD["LCD 1.8in 160x128 · IP / Status"]
             ALARM["Alarm · buzzer"]
         end
         subgraph cp["🖥️ Command Post · Raspberry Pi 4 (Wi-Fi AP)"]
             CAM["USB webcam"]
+            SCREEN["HDMI screen 800x480 · IP / Status"]
             subgraph docker["Docker-Compose"]
                 PROXY["reverse-proxy · HTTPS/WSS :443"]
                 BROKER["mosquitto · MQTTS :8883"]
@@ -51,6 +51,7 @@ flowchart LR
     BROKER <--> API
     API <--> DB
     CAM --> VISION
+    BROKER -- "MQTTS: telemetry + alerts (read-only)" --> SCREEN
     VISION -- "POST /api/v1/alerts + token" --> API
     BROKER -- "MQTTS: live telemetry" --> PRED
     DB -. "read-only (training)" .-> PRED
@@ -67,7 +68,7 @@ The Enclosure (Fusion360, 3D-printed, laser-engraved) houses the Sentinel **and*
 
 - **Pi 4 + USB webcam** — active cooling and vents (the Pi runs hot under inference); webcam fixed at the front, lens exposed.
 - **DHT22 and MQ-2 in a separate ventilated compartment**, away from the Pi and from each other (the MQ-2 has a heater). Otherwise the probes measure the Pi's own heat and the predictive model learns inference load as "thermal drift".
-- **LCD visible** through the shell, clean cable passthroughs, no visible wires (brief requirement).
+- **Status screen visible** through the shell, clean cable passthroughs, no visible wires (brief requirement).
 - **Power:** official 15 W USB-C supply (5.1 V / 3 A) for the Pi 4.
 
 ## Alert ownership — who decides what
@@ -263,6 +264,10 @@ topic write command/+/actuator
 
 user predictive
 topic read sentinel/+/telemetry
+
+user screen
+topic read sentinel/+/telemetry
+topic read sentinel/+/alert
 ```
 
 **Never trust the payload:** the `api` derives `sentinel` from the MQTT topic and `source` from the channel (MQTT → `esp32`, token → `vision` / `predictive`), and validates every body against the schemas above.

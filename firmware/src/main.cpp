@@ -6,7 +6,6 @@
 #include "alerts.h"
 #include "buzzer.h"
 #include "config.h"
-#include "display.h"
 #include "probes.h"
 #include "uplink.h"
 
@@ -110,7 +109,6 @@ void cycle(uint32_t now) {
     flushAlerts();
     publishTelemetry();
   }
-  display::show(readings, now);
   Serial.printf("T=%.1f H=%.0f air=%d pir=%d son=%.2f | wifi=%d heure=%d broker=%d %s\n", readings.temp,
                 readings.humidity, readings.air, readings.pir, readings.sound, uplink::wifiUp(), uplink::timeKnown(),
                 uplink::brokerUp(), uplink::problem());
@@ -126,7 +124,6 @@ void setup() {
 
   buzzer::begin();
   buzzer::beep(120);
-  display::begin();
   probes::begin();
   alerts::begin();
   uplink::begin(onCommand, onBrokerConnect);

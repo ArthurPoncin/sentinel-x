@@ -2,12 +2,12 @@
 
 **Node:** Sentinel · **MCU:** ESP32 · **Language:** C++ (PlatformIO)
 
-Firmware for the Sentinel: reads the probes, drives the LCD and the Alarm, **decides its own local Alerts**, and streams secure telemetry to the Command Post (the Pi in the same Enclosure).
+Firmware for the Sentinel: reads the probes, drives the Alarm, **decides its own local Alerts**, and streams secure telemetry to the Command Post (the Pi in the same Enclosure).
 
 ## Hardware (committed core)
 - **MCU:** ESP32 DevKitC V4 by AZ-Delivery (ESP32-WROOM-32, 38 pins; Wi-Fi 2.4 GHz to the Pi's access point) — ESP8266 deviation justified in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#deviations-to-validate-with-the-coach-monday)
 - **Probes:** DHT22 (temp/humidity), MQ-2 (gas — 5 V heater; its analog output needs a divider to stay under 3.3 V), PIR HC-SR501 (presence), CZN-15E sound sensor (digital output only: HIGH/LOW against the threshold set by its potentiometer; the firmware samples it fast and reports the share of the cycle that was loud). Analog probes go on ADC1 pins: ADC2 is unusable while Wi-Fi is on.
-- **Display:** 1.8" LCD 160×128 px, ST7735S over SPI (Wi-Fi/IP, Status, active Alerts) — visible through the Enclosure. Made for the micro:bit: no pin header, one must be soldered on its spare pads
+- **Display:** none on the ESP32. The status screen is the Pi's HDMI screen ([`../infra/README.md`](../infra/README.md#the-status-screen)): it shows whether the Sentinel is online, its readings and its raised Alerts. Why it is not online, the serial monitor says
 - **Alarm:** buzzer (siren pattern)
 
 ## Responsibilities
@@ -33,10 +33,9 @@ By hand, from a laptop with PlatformIO: copy `include/secrets.example.h` to `inc
 | `src/alerts.*` | one state machine per kind; a severity change is raised again on the same `alert_id` |
 | `src/buzzer.*` | the Alarm: siren while an Alert is critical; `on` / `pattern` / `off` from the Operator (`off` silences until the next critical) |
 | `src/uplink.*` | Wi-Fi (hostname `sentinel-01`), time from the Pi, MQTTS with the team CA, commands |
-| `src/display.*` | the LCD: link state, Status, readings, active Alerts |
-| `src/main.cpp` | one cycle per second: read, decide, sound, publish, show |
+| `src/main.cpp` | one cycle per second: read, decide, sound, publish, and a line on the serial monitor |
 
-**What to expect:** a short beep at boot. The LCD then says what it waits for, in this order: `Wi-Fi...`, `MQTT: …` (TLS/network, password), `Heure du Pi...`, then `Command Post OK`. Telemetry starts once the DHT22 has answered and the Pi gave the time: the contract wants every reading and a real `ts`. The MQ-2 and the PIR raise no Alert during their first minute (warm-up). Alert transitions made while the broker is unreachable are queued (16), and every raised Alert is sent again on reconnection.
+**What to expect:** a short beep at boot, then the Pi's HDMI screen shows the Sentinel `EN LIGNE`. Until then, the serial monitor (`pio device monitor`) says what it waits for, a line a second: `T=… H=… air=… pir=… son=… | wifi=… heure=… broker=… <problem>`, the problem being `Wi-Fi...` or `MQTT: …` (TLS/network, password) until the broker is reached. Telemetry starts once the DHT22 has answered and the Pi gave the time: the contract wants every reading and a real `ts`. The MQ-2 and the PIR raise no Alert during their first minute (warm-up). Alert transitions made while the broker is unreachable are queued (16), and every raised Alert is sent again on reconnection.
 
 ## Contract
 Telemetry, Alert and command schemas + topics: [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#json-schemas-the-contract--lock-monday-change-only-by-team-agreement). Lock Monday.
@@ -46,4 +45,3 @@ Telemetry, Alert and command schemas + topics: [`../docs/ARCHITECTURE.md`](../do
 - [x] Probe read loop, telemetry snapshot, Alert state machine (hysteresis), autonomous Alarm
 - [x] MQTTS connection with team CA cert + MQTT credentials, actuator commands
 - [ ] Calibrate the thresholds in `include/config.h` on the real kit (MQ-2 in clean air, a clap, a hand on the DHT22)
-- [ ] Check the LCD init tab (`INITR_BLACKTAB`) on the real screen

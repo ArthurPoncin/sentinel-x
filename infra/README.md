@@ -19,11 +19,12 @@ infra/plug-and-play.sh X          # X = table number: the Pi becomes 192.168.X.1
 2. makes the secrets ([`setup.sh`](setup.sh)) and starts the stack;
 3. builds the Sentinel's firmware with this Pi's secrets: no `handover.txt` to carry for the ESP32;
 4. turns the Pi's Wi-Fi into the table access point `SentinelX-X` (NetworkManager, 2.4 GHz, WPA2/CCMP, passphrase made once in `infra/secrets/wifi.env`), with DHCP only (dnsmasq: no DNS, no gateway, `sentinel-01` always on `.10`) and the time for the table (chrony: the network has no Internet, and every reading is time-stamped);
-5. flashes the ESP32 over USB and waits for its first telemetry snapshot on the broker.
+5. shows the Command Post's status on the Pi's HDMI screen ([below](#the-status-screen));
+6. flashes the ESP32 over USB and waits for its first telemetry snapshot on the broker.
 
 Its images come ready-made: [`.github/workflows/images.yml`](../.github/workflows/images.yml) builds each one for the Pi (linux/arm64, on GitHub's own Arm runners) on every push to `main` and publishes it on GHCR as `ghcr.io/arthurponcin/sentinel-x-<service>:<key>`, the key being that of the code it is built from ([`images.sh`](images.sh): the git trees of its paths, so the same code gives the same key on the CI as on the Pi). `plug-and-play.sh` pulls, all at once, the image whose key matches its checkout and names it as `docker-compose.yml` does; it builds on the Pi only what it cannot pull — code changed on the Pi, a key the CI has not published yet, a package still private — and, offline, keeps the images it has. The packages are private when first published: their owner makes each one public once (*Package settings → Change visibility → Public*). A new path in a Dockerfile's `COPY` goes into its service's paths in `images.sh`, or a stale image could be pulled.
 
-It talks French, through [`ui.sh`](ui.sh): sudo and the Operator password asked first, then 9 numbered steps with a spinner and their time, the commands' output in `~/.local/share/sentinel-x/plug-and-play.log` (its last line shown under the running step), a framed reason and the failed command's last lines when a step fails, a framed summary at the end. Plain lines, without the animation, when its output is not a terminal; `NO_COLOR` turns the colours off.
+It talks French, through [`ui.sh`](ui.sh): sudo and the Operator password asked first, then 10 numbered steps with a spinner and their time, the commands' output in `~/.local/share/sentinel-x/plug-and-play.log` (its last line shown under the running step), a framed reason and the failed command's last lines when a step fails, a framed summary at the end. Plain lines, without the animation, when its output is not a terminal; `NO_COLOR` turns the colours off.
 
 Everything comes back by itself when the Pi reboots. The manual steps follow, for reference.
 
@@ -128,6 +129,12 @@ acl_file      /mosquitto/config/acl
 max_packet_size 4096
 ```
 
+## The status screen
+The Pi's HDMI screen (800×480, either micro-HDMI port) shows what the brief's OLED showed on the Sentinel, and more: the table Wi-Fi and whether its access point is up, the dashboard's address, the Sentinel (`EN LIGNE`, `SUR LE WI-FI`, `MUET`, `ABSENT`), its last readings and raised Alerts, the webcam and the containers. Redrawn every second by [`screen.py`](screen.py), the Pi OS's Python and `python3-paho-mqtt`, on the console in large Terminus letters, without a desktop.
+- **Where it reads:** the broker, with its own MQTT account `screen` (made by `setup.sh`, in `infra/secrets/screen.env`), which may only read `sentinel/+/telemetry` and `sentinel/+/alert`; the DHCP leases, NetworkManager and `docker ps` with the user's own rights. The `intrusion` and `predictive` Alerts go to the api, not to the broker: they are on the dashboard only. Text from the network is stripped of control characters before it reaches the console.
+- **How it runs:** the `sentinel-x-screen` systemd unit, as the user, on `tty1` in place of its login prompt (`getty@tty1` disabled; ctrl+alt+F2 gives one); its errors in `journalctl -u sentinel-x-screen`.
+- **A black screen:** `video=HDMI-A-2:800x480M@60D` at the end of `/boot/firmware/cmdline.txt` forces the second port on, at 800×480.
+
 ## Network topology
 - The **Pi is the Wi-Fi access point** (hostapd, WPA2-PSK CCMP) with DHCP reservations (dnsmasq) for **`192.168.X.0/24`** — IP plan in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#network-topology).
 - The **Sentinel (ESP32)** and the **Operator laptop** join that Wi-Fi.
@@ -145,4 +152,4 @@ max_packet_size 4096
 > Deliverable: the **network schema** for the engineering report.
 
 ## MCO monitoring
-No local console on the Pi (the joystick is dropped). The brief lists MCO monitoring under the Cyber pillar: show `docker stats` (CPU/RAM), container health, the MQTT message rate and the log rotation in the engineering report.
+On the Pi itself, the HDMI status screen shows the containers' state ([above](#the-status-screen)). The brief lists MCO monitoring under the Cyber pillar: show `docker stats` (CPU/RAM), container health, the MQTT message rate and the log rotation in the engineering report.

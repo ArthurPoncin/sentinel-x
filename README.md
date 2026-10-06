@@ -42,11 +42,11 @@ flowchart LR
             MQ2["MQ-2 · gas"]
             PIR["PIR HC-SR501 · presence"]
             SND["CZN-15E · sound"]
-            LCD["LCD 1.8in 160x128 · IP / Status"]
             ALARM["Alarm · buzzer"]
         end
         subgraph cp["🖥️ Command Post · Raspberry Pi 4 (Wi-Fi AP)"]
             CAM["USB webcam"]
+            SCREEN["HDMI screen 800x480 · IP / Status"]
             subgraph docker["Docker-Compose"]
                 PROXY["reverse-proxy · HTTPS/WSS :443"]
                 BROKER["mosquitto · MQTTS :8883"]
@@ -65,6 +65,7 @@ flowchart LR
     BROKER <--> API
     API <--> DB
     CAM --> VISION
+    BROKER -- "MQTTS: telemetry + alerts (read-only)" --> SCREEN
     VISION -- "POST /api/v1/alerts + token" --> API
     BROKER -- "MQTTS: live telemetry" --> PRED
     DB -. "history (training)" .-> PRED
@@ -85,7 +86,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/DIGITAL-TWIN.md`](
 
 | Pillar | What it delivers | Suggested stack | Runs on |
 |---|---|---|---|
-| **Edge / IoT** | ESP32 firmware: cadenced probe reads, LCD status, Alarm (buzzer), its own threshold Alerts, structured payloads | C++ · PlatformIO | Sentinel |
+| **Edge / IoT** | ESP32 firmware: cadenced probe reads, Alarm (buzzer), its own threshold Alerts, structured payloads | C++ · PlatformIO | Sentinel |
 | **Local AI & Data** | Vision person detection on the USB webcam + **correlation-based** predictive maintenance on temp+air drift (no static `if temp>40`) | Python · TFLite ([rpi-object-detection](https://github.com/automaticdai/rpi-object-detection)) / OpenCV · scikit-learn | Command Post |
 | **Infrastructure** | Containerized stack (reverse proxy, broker, DB, API, dashboard, AI services), isolated Wi-Fi AP & IP plan | Docker-Compose · Mosquitto · hostapd | Command Post |
 | **Cybersecurity** | MQTTS/HTTPS + authentication on every channel (MQTT ACL, API tokens, Operator session), Pi & Docker hardening (UFW, SSH keys only), cross-team pentest | OpenSSL · UFW/iptables · Nmap/Wireshark | transversal |
@@ -101,7 +102,7 @@ The **who-does-what split is open** — decided together after brainstorming. Th
 
 | Workstream | Node | Scope |
 |---|---|---|
-| **Edge / IoT** | Sentinel (ESP32) | `firmware/` — probes, LCD, Alarm, local Alerts, telemetry |
+| **Edge / IoT** | Sentinel (ESP32) | `firmware/` — probes, Alarm, local Alerts, telemetry |
 | **AI / Data** | Command Post (Pi) | `ai/` — vision intrusion + predictive drift |
 | **Dashboard / Twin + API** | Command Post (Pi) | `dashboard/` + `backend/` — 3D twin, real-time UI, API, auth |
 | **Platform & Network** | Command Post (Pi) | `infra/` — Docker stack, MQTT, DB, Wi-Fi AP & IP plan |

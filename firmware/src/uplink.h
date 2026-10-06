@@ -17,8 +17,7 @@ bool publish(const char *topic, const char *payload);
 bool wifiUp();
 bool timeKnown();
 bool brokerUp();
-String ip();
-// Why the broker is not reached, in a few words for the LCD; empty when it is.
+// Why the broker is not reached, in a few words for the serial monitor; empty when it is.
 const char *problem();
 // UTC now as 2026-10-05T14:23:00Z; false until the Pi gave the time.
 bool isoNow(char *out, size_t size);

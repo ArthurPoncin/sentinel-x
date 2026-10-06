@@ -13,3 +13,8 @@ topic write command/+/actuator
 
 user predictive
 topic read sentinel/+/telemetry
+
+# The status screen on the Pi's HDMI (infra/screen.py): reads, never writes.
+user screen
+topic read sentinel/+/telemetry
+topic read sentinel/+/alert

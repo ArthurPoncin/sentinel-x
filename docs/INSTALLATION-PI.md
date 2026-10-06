@@ -10,6 +10,7 @@ Dans cette page, la table est la n° **4**. Remplace `4` par ton numéro de tabl
 - Un **câble Ethernet** branché sur un réseau qui a Internet (box, routeur, prise de l'école). Indispensable seulement la première fois.
 - L'ESP32 câblé selon [`firmware/include/pins.h`](../firmware/include/pins.h), avec un **câble USB qui transmet les données**. Beaucoup de câbles ne font que charger : avec eux, le Pi ne voit pas l'ESP32.
 - Une **webcam USB**, pour la détection d'intrusion.
+- L'**écran HDMI** 800×480, branché sur un port micro-HDMI du Pi (le deuxième, côté prise jack, convient) : il affiche le statut du Poste de commande, à la place de l'écran de l'ESP32.
 
 ## 1. Préparer la carte SD (sur ton PC)
 
@@ -37,7 +38,7 @@ Depuis ton PC, sur le même réseau :
 ssh ton-utilisateur@sentinel-x.local
 ```
 
-Si ça ne répond pas (certains réseaux d'école bloquent), branche un écran et un clavier sur le Pi.
+Si ça ne répond pas (certains réseaux d'école bloquent), branche un écran et un clavier sur le Pi. Une fois le script passé, l'écran affiche le statut : **Ctrl+Alt+F2** donne une console de connexion.
 
 ## 4. Mettre le Pi à jour
 
@@ -68,7 +69,7 @@ infra/plug-and-play.sh 4
 - La première fois, c'est surtout des téléchargements : les images Docker arrivent toutes construites de GitHub (voir l'étape 2 ci-dessous). Si elles ne le peuvent pas, le Pi les construit lui-même, et il faut compter **30 à 60 minutes**.
 - Lance-le **en SSH par l'Ethernet** : à l'étape 7, le Wi-Fi du Pi devient le point d'accès de la table, et une session passée par le Wi-Fi serait coupée.
 
-Il déroule 9 étapes numérotées. Chacune affiche un spinner et son temps, avec en gris la dernière ligne de ce qu'elle fait ; une fois finie, elle passe à `✓` (ou à `!` s'il y a une remarque). Ce que disent les commandes (Docker, PlatformIO…) va dans un journal, `~/.local/share/sentinel-x/plug-and-play.log`, au lieu d'inonder l'écran.
+Il déroule 10 étapes numérotées. Chacune affiche un spinner et son temps, avec en gris la dernière ligne de ce qu'elle fait ; une fois finie, elle passe à `✓` (ou à `!` s'il y a une remarque). Ce que disent les commandes (Docker, PlatformIO…) va dans un journal, `~/.local/share/sentinel-x/plug-and-play.log`, au lieu d'inonder l'écran.
 
 1. **Logiciels** : Docker, PlatformIO, dnsmasq (DHCP) et chrony (heure), tant qu'il y a Internet.
 2. **Images Docker** : chaque image construite par GitHub pour ce code exact est téléchargée ; les autres sont construites sur le Pi (code modifié sur le Pi, image pas encore publiée, ou pas d'Internet : alors celles déjà là servent).
@@ -77,8 +78,9 @@ Il déroule 9 étapes numérotées. Chacune affiche un spinner et son temps, ave
 5. **Démarrage de la stack** : les conteneurs, sur les images de l'étape 2.
 6. **Firmware du Sentinel** : compilé avec les secrets de ce Pi ; les mots de passe ne quittent jamais le Pi.
 7. **Wi-Fi de la table** : le Wi-Fi du Pi devient le réseau `SentinelX-4`, en 2,4 GHz, WPA2, sans Internet. L'ESP32 a toujours l'adresse `192.168.4.10`, et le Pi lui donne l'heure.
-8. **Flash de l'ESP32** par USB (`– ignoré` avec `--no-flash`).
-9. **Première mesure du Sentinel** : il attend que l'ESP32 rejoigne le Wi-Fi, puis sa première mesure sur le broker.
+8. **Écran HDMI** : l'écran du Pi affiche en continu le statut du Poste de commande (voir [L'écran de statut](#lécran-de-statut)), à la place de l'invite de connexion.
+9. **Flash de l'ESP32** par USB (`– ignoré` avec `--no-flash`).
+10. **Première mesure du Sentinel** : il attend que l'ESP32 rejoigne le Wi-Fi, puis sa première mesure sur le broker.
 
 Si une étape échoue, le script s'arrête sur un `✗`, avec la raison encadrée en rouge et les dernières lignes de la commande qui a échoué. Ctrl+C l'interrompt proprement ; relancé, il reprend sans rien casser.
 
@@ -87,10 +89,25 @@ Si une étape échoue, le script s'arrête sur un `✗`, avec la raison encadré
 Le script finit sur un encadré : **vert** « Command Post prêt » si tout s'est bien passé, **jaune** « avec des remarques » sinon.
 
 - **Wi-Fi** et **Passphrase** : note la phrase de passe du Wi-Fi de la table. Elle est aussi gardée dans `infra/secrets/wifi.env`.
-- **Sentinel** `✓ 192.168.4.10` et l'étape 9 qui affiche `première mesure : 23.4 °C · humidité 41 % · gaz 312` : **tout marche**, l'ESP32 envoie ses mesures au Pi.
+- **Sentinel** `✓ 192.168.4.10` et l'étape 10 qui affiche `première mesure : 23.4 °C · humidité 41 % · gaz 312` : **tout marche**, l'ESP32 envoie ses mesures au Pi.
 - **Webcam** `✓ donnée à vision` : la webcam va au service `vision`.
+- **Écran HDMI** `✓ statut affiché` : l'écran du Pi montre le statut (ci-dessous).
 - Sous **À voir**, chaque remarque `!` dit ce qui manque : voir aussi [Dépannage](#dépannage).
 - Sous **Ensuite**, les commandes à copier telles quelles : récupérer le certificat, puis les journaux.
+
+### L'écran de statut
+
+Il remplace l'écran de l'ESP32 et se redessine chaque seconde : le Wi-Fi de la table et son point d'accès, l'adresse du dashboard, le Sentinel et ses dernières mesures, ses alertes en cours (en rouge et en capitales quand elles sont critiques), la webcam et les conteneurs. Les alertes d'intrusion et prédictives ne passent pas par le broker : elles sont sur le dashboard.
+
+| Ligne **Sentinel** | Ce que ça veut dire |
+|---|---|
+| `EN LIGNE` | Il envoie ses mesures : tout va bien |
+| `SUR LE WI-FI` | Il a son adresse mais n'envoie rien : le moniteur série dit pourquoi (broker, heure ou DHT22, voir [Dépannage](#dépannage)) |
+| `MUET` | Il envoyait, puis plus rien depuis le temps affiché : alimentation, redémarrage, moniteur série |
+| `ABSENT` | Il n'est pas sur le Wi-Fi de la table : alimentation, puis moniteur série |
+| `BROKER ?` | L'écran ne joint pas le broker : `docker compose ps`, puis relance le script |
+
+L'écran occupe la première console du Pi : pour se connecter avec un clavier, **Ctrl+Alt+F2** ouvre une console de connexion, **Ctrl+Alt+F1** ramène le statut.
 
 ## 8. Connecter le PC Opérateur
 
@@ -128,16 +145,23 @@ Les seuils se règlent dans [`firmware/include/config.h`](../firmware/include/co
 
 ## Dépannage
 
-L'écran de l'ESP32 dit ce qu'il attend :
+L'écran HDMI dit si le Sentinel envoie ses mesures ([L'écran de statut](#lécran-de-statut)). S'il ne les envoie pas, son moniteur série dit ce qu'il attend : branche l'ESP32 en USB sur le Pi, puis `~/.local/share/sentinel-x/platformio/bin/pio device monitor -d firmware`. Chaque seconde, une ligne `T=… H=… air=… pir=… son=… | wifi=… heure=… broker=… <problème>` :
 
-| Écran | Quoi faire |
+| Moniteur série | Quoi faire |
 |---|---|
-| `Wi-Fi...` | Vérifie le point d'accès avec `nmcli connection show --active`, puis relance le script |
+| `wifi=0` et `Wi-Fi...` | Vérifie que l'écran HDMI dit le point d'accès `ACTIF` (sinon `nmcli connection show --active`), puis relance le script |
 | `MQTT: TLS/reseau` | Vérifie avec `docker compose ps` que `mosquitto` tourne, puis relance le script : il refait le certificat si besoin |
 | `MQTT: mot de passe` | Relance le script : il reflashe l'ESP32 avec le bon mot de passe |
-| `Heure du Pi...` | `systemctl status chrony` |
-| `Temp DHT22 ?` | Câblage du DHT22 et sa résistance de 10 kΩ entre DATA et 3V3. Rien n'est envoyé tant qu'il ne répond pas |
-| Couleurs bizarres, bords décalés | Remplace `INITR_BLACKTAB` par `INITR_GREENTAB` dans `firmware/src/display.cpp`, puis relance le script |
+| `heure=0` | `systemctl status chrony` |
+| `T=nan` | Câblage du DHT22 et sa résistance de 10 kΩ entre DATA et 3V3. Rien n'est envoyé tant qu'il ne répond pas |
+
+L'écran HDMI :
+
+| Problème | Quoi faire |
+|---|---|
+| Écran noir | Force la sortie du deuxième port en 800×480 : `sudo sed -i '1 s/$/ video=HDMI-A-2:800x480M@60D/' /boot/firmware/cmdline.txt`, puis `sudo reboot` |
+| Une invite de connexion au lieu du statut | `systemctl status sentinel-x-screen` ; ses erreurs : `journalctl -u sentinel-x-screen` |
+| `BROKER ?` et `paho-mqtt manque` ou `pas de compte screen` | Relance le script (avec Internet la première fois) |
 
 Le script lui-même :
 
@@ -153,7 +177,8 @@ Le script lui-même :
 | `le firmware ne compile pas` | La première fois, PlatformIO télécharge ses outils : il faut Internet |
 | `NetworkManager ne tourne pas` | Le système est trop ancien : réinstalle un Raspberry Pi OS (64-bit) récent |
 | `pas de webcam USB` | Branche la webcam sur un port USB du Pi (elle doit apparaître dans `ls /dev/v4l/by-id`), puis relance avec `--no-flash` |
-| `le Sentinel n'est pas encore sur le Wi-Fi` | Vérifie qu'il est alimenté, et ce que dit son écran (tableau ci-dessus) |
+| `pas d'écran HDMI détecté` | Branche l'écran : le statut s'y affiche seul. Écran noir : tableau ci-dessus |
+| `le Sentinel n'est pas encore sur le Wi-Fi` | Vérifie qu'il est alimenté, puis ce que dit son moniteur série (tableau ci-dessus) |
 
 Journaux :
 

@@ -29,7 +29,7 @@ Beat sheet mapped to our product, following the brief's required structure:
 | Window | Content |
 |---|---|
 | **00–10s · Hook** | The AetherCorp threat: remote plant, alert ambiance, siren. Grab attention. |
-| **10–30s · Product (B-roll)** | Close-ups of the finished Sentinel: 3D-printed shell, laser engraving, LCD status, the probes. |
+| **10–30s · Product (B-roll)** | Close-ups of the finished Sentinel: 3D-printed shell, laser engraving, the status screen, the probes. |
 | **30–50s · The stack (incrustation)** | Team in front, behind them: animated architecture, real firmware C++ / Docker API, the vision model isolating an intruder, the 3D Twin reacting. Vulgarize the embedded intelligence. |
 | **50–60s · Call to action** | Team to camera: *"Sentinel-X — security at the edge."* |
 
@@ -46,7 +46,7 @@ The smallest end-to-end slice that proves the spine. **If only this works, the "
 - One live charts panel.
 
 ### Tier 1 — MVP *(all mandatory brief requirements)*
-- **Firmware:** all core probes (DHT, air, PIR, sound), telemetry snapshots, **own threshold Alerts with hysteresis**, **autonomous Alarm** (buzzer), local LCD status.
+- **Firmware:** all core probes (DHT, air, PIR, sound), telemetry snapshots, **own threshold Alerts with hysteresis**, **autonomous Alarm** (buzzer). The status screen is the Pi's HDMI screen.
 - **AI:** vision person detection on the USB webcam (≤640×480, <100ms; base `automaticdai/rpi-object-detection`) → `intrusion` Alert; predictive model (Isolation Forest on temp+air, **non-static**) → `predictive` Alert.
 - **Backend:** two-path ingress (MQTTS + `POST /api/v1/alerts`), Status engine, WebSocket, actuator command relay.
 - **Dashboard:** 3D Twin reacting to telemetry + Alerts, live charts, `Status`, camera feed, **reactive actuator control panel**.

@@ -10,7 +10,7 @@
 # OPERATOR_PASSWORD (else asked), ESP32_PORT (else the first /dev/ttyUSB*).
 #
 # Its interface is infra/ui.sh, in French like the step-by-step (docs/INSTALLATION-PI.md): everything
-# it needs (sudo, the Operator password) is asked first, then nine steps run on their own, the
+# it needs (sudo, the Operator password) is asked first, then ten steps run on their own, the
 # commands' output kept in ~/.local/share/sentinel-x/plug-and-play.log.
 # The images are pulled from GHCR when the CI published them for this very code (infra/images.sh,
 # .github/workflows/images.yml), and built on the Pi only otherwise: that is most of the time saved.
@@ -98,6 +98,36 @@ CHRONY
   sudo systemctl enable --quiet chrony
   sudo systemctl restart chrony
 }
+# The status screen on the HDMI console, in place of the login prompt of tty1: ctrl+alt+F2 still
+# gives one, with a keyboard.
+install_screen() {
+  sudo tee /etc/systemd/system/sentinel-x-screen.service >/dev/null <<UNIT
+# The Command Post's status screen on the Pi's HDMI console (infra/screen.py). Made by infra/plug-and-play.sh.
+[Unit]
+Description=Sentinel-X status screen (HDMI, tty1)
+After=systemd-user-sessions.service plymouth-quit-wait.service getty@tty1.service docker.service
+Conflicts=getty@tty1.service
+
+[Service]
+User=$USER
+ExecStart=/usr/bin/python3 "$PWD/infra/screen.py" $table
+StandardInput=tty
+StandardOutput=tty
+StandardError=journal
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  sudo systemctl daemon-reload
+  sudo systemctl disable --quiet getty@tty1.service
+  sudo systemctl enable --quiet sentinel-x-screen.service
+  sudo systemctl restart sentinel-x-screen.service
+}
 open_firewall() {
   local rule
   for rule in 67/udp 123/udp 443/tcp 8883/tcp; do
@@ -160,7 +190,7 @@ readable_snapshot() {
   fi
 }
 
-ui_init 9 "$HOME/.local/share/sentinel-x/plug-and-play.log" "infra/plug-and-play.sh $*"
+ui_init 10 "$HOME/.local/share/sentinel-x/plug-and-play.log" "infra/plug-and-play.sh $*"
 ui_banner "SENTINEL-X · Command Post" "Table $table · Pi $pi_ip · Wi-Fi $ssid$($flash || echo " · sans flash")"
 
 # --- Before the steps: what the Pi is, and everything to ask ----------------------------------
@@ -193,7 +223,7 @@ ui_ok "Tout est demandé : la suite se fait seule."
 # --- 1. Software, while there is Internet ---------------------------------------------------
 ui_step "Logiciels"
 missing=()
-for package in dnsmasq chrony python3-venv openssl curl; do
+for package in dnsmasq chrony python3-venv python3-paho-mqtt openssl curl; do
   dpkg -s "$package" >/dev/null 2>&1 || missing+=("$package")
 done
 if ((${#missing[@]})); then
@@ -281,6 +311,9 @@ fi
 if [[ -f "$secrets/caddy/proxy.crt" ]] && ! openssl x509 -in "$secrets/caddy/proxy.crt" -noout -text 2>/dev/null | grep -q "IP Address:$pi_ip"; then
   ui_note "le certificat HTTPS est celui d'une autre table : sudo rm infra/secrets/caddy/proxy.*, puis relance."
 fi
+# The screen's MQTT account, new to a running broker: it must read passwd and the ACL again.
+screen_account_new=false
+[[ -f "$secrets/screen.env" ]] || screen_account_new=true
 # The api image of the step before hashes the Operator's password: setup.sh need not build it again.
 export API_IMAGE=sentinel-x/api
 ui_run "certificats, comptes MQTT, jetons des services IA" with_group docker infra/setup.sh "$table"
@@ -319,7 +352,9 @@ ui_done
 ui_step "Démarrage de la stack"
 ui_task "démarrage des conteneurs" with_group docker docker compose up -d
 ((UI_RC == 0)) || ui_fail "la stack ne démarre pas : la fin du journal dit pourquoi."
-$broker_remade && ui_run "redémarrage du broker" with_group docker docker compose restart mosquitto
+if $broker_remade || $screen_account_new; then
+  ui_run "redémarrage du broker" with_group docker docker compose restart mosquitto
+fi
 ui_detail "en marche : $(with_group docker docker compose ps --format '{{.Service}}' | tr '\n' ' ')"
 ui_done
 
@@ -362,7 +397,21 @@ fi
 ui_detail "$ssid sur $pi_ip · 2,4 GHz, WPA2, sans Internet · le Sentinel en $sentinel_ip"
 ui_done
 
-# --- 8. Flash the Sentinel --------------------------------------------------------------------
+# --- 8. The status screen, on the Pi's HDMI ----------------------------------------------------
+ui_step "Écran HDMI"
+screen_ok=false
+ui_task "écran de statut sur la console" install_screen
+if ((UI_RC != 0)); then
+  ui_note "l'écran de statut ne démarre pas : systemctl status sentinel-x-screen dit pourquoi."
+elif grep -qsx connected /sys/class/drm/card*-HDMI-A-*/status; then
+  screen_ok=true
+  ui_detail "le statut du Poste de commande s'y affiche, en continu"
+else
+  ui_note "pas d'écran HDMI détecté : branche-le, le statut s'y affiche seul (écran noir : voir le dépannage)."
+fi
+ui_done
+
+# --- 9. Flash the Sentinel --------------------------------------------------------------------
 ui_step "Flash de l'ESP32"
 if ! $flash; then
   ui_skip "ignoré (--no-flash)"
@@ -382,7 +431,7 @@ else
 fi
 ui_done
 
-# --- 9. Its first snapshot ---------------------------------------------------------------------
+# --- 10. Its first snapshot ---------------------------------------------------------------------
 ui_step "Première mesure du Sentinel"
 sentinel_ok=false
 ui_task "attente du Sentinel sur le Wi-Fi (2 min au plus)" wait_for_lease
@@ -393,11 +442,11 @@ if ((UI_RC == 0)); then
   if ((UI_RC == 0)) && [[ -s "$snapshot_file" ]]; then
     ui_detail "$(readable_snapshot "$(head -n 1 "$snapshot_file")")"
   else
-    ui_note "pas encore de mesure : son écran et « $pio device monitor -d firmware » disent ce qu'il attend."
+    ui_note "pas encore de mesure : « $pio device monitor -d firmware » dit ce qu'il attend."
   fi
   rm -f "$snapshot_file"
 else
-  ui_note "le Sentinel n'est pas encore sur le Wi-Fi : vérifie qu'il est alimenté, et son écran."
+  ui_note "le Sentinel n'est pas encore sur le Wi-Fi : vérifie qu'il est alimenté ; « $pio device monitor -d firmware » dit ce qu'il attend."
 fi
 ui_done
 
@@ -408,6 +457,7 @@ summary=(
   "Dashboard    https://$pi_ip/"
   "Sentinel     $($sentinel_ok && echo "$G_OK $sentinel_ip" || echo "$G_FAIL pas encore sur le Wi-Fi")"
   "Webcam       $($camera_ok && echo "$G_OK donnée à vision" || echo "$G_FAIL absente")"
+  "Écran HDMI   $($screen_ok && echo "$G_OK statut affiché" || echo "$G_FAIL non détecté")"
   "Durée        $(_ui_duration "$SECONDS")"
   "Journal      $(_ui_home "$UI_LOG")"
 )

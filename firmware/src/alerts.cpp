@@ -14,16 +14,15 @@ const char *severityName(Severity severity) {
 namespace {
 
 struct Tracker {
-  Tracker(const char *kind, const char *label) : kind(kind), label(label) {}
+  explicit Tracker(const char *kind) : kind(kind) {}
   const char *kind;
-  const char *label;  // on the LCD
   Severity severity = Severity::None;
   char alertId[32] = "";
   float value = NAN;
   uint32_t calmSince = 0;  // presence and noise: when the reading last went calm
 };
 
-Tracker gas{"gas", "GAZ"}, thermal{"thermal", "TEMP"}, presence{"presence", "PIR"}, noise{"noise", "SON"};
+Tracker gas{"gas"}, thermal{"thermal"}, presence{"presence"}, noise{"noise"};
 Tracker *const trackers[] = {&gas, &thermal, &presence, &noise};
 
 // Tells this boot's alert_ids from the previous ones'.
@@ -101,16 +100,6 @@ Severity worst() {
   Severity worst = Severity::None;
   for (Tracker *tracker : trackers) worst = max(worst, tracker->severity);
   return worst;
-}
-
-void describe(char *out, size_t size) {
-  out[0] = '\0';
-  for (Tracker *tracker : trackers) {
-    if (tracker->severity == Severity::None) continue;
-    if (out[0]) strlcat(out, " ", size);
-    strlcat(out, tracker->label, size);
-    if (tracker->severity == Severity::Critical) strlcat(out, "!", size);
-  }
 }
 
 }  // namespace alerts

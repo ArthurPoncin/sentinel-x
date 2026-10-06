@@ -24,7 +24,7 @@ Deux conséquences à connaître :
 ## 0. Ce qu'il te faut
 
 - Le **PC Opérateur**, connecté au Wi-Fi de la table `SentinelX-4`. C'est depuis lui qu'on lance tout.
-- Un **écran et un clavier** à portée de main pour le Pi. Le script fait tout pour ne pas t'enfermer dehors, mais si ça arrive, c'est la seule porte : voir [Dépannage](#dépannage).
+- Un **clavier** à portée de main pour le Pi, en plus de son écran HDMI (Ctrl+Alt+F2 y ouvre une console de connexion, à la place du statut). Le script fait tout pour ne pas t'enfermer dehors, mais si ça arrive, c'est la seule porte : voir [Dépannage](#dépannage).
 - La première fois, le **câble Ethernet** sur le Pi : le script installe UFW, il lui faut Internet une fois.
 
 ## 1. Donner ta clé SSH au Pi (sur le PC Opérateur)
@@ -166,7 +166,7 @@ Ce que dit le script quand il s'arrête. Sauf pour la dernière ligne, il n'a al
 | `another file in /etc/ssh/sshd_config.d comes before` | `ls /etc/ssh/sshd_config.d/` : un fichier classé avant `00-sentinel-x.conf` remet les mots de passe. Retire-le, puis relance |
 | `N line(s) of the checklist do not hold` | Lis les lignes `✗` au-dessus, puis relance `cyber/harden.sh 4` |
 
-**SSH ne répond plus.** Branche l'écran et le clavier sur le Pi, connecte-toi, puis :
+**SSH ne répond plus.** Branche un clavier sur le Pi, passe sur une console de connexion avec **Ctrl+Alt+F2** (l'écran HDMI affiche le statut sur la première), connecte-toi, puis :
 
 ```bash
 sudo ufw allow in on wlan0 to any port 22 proto tcp                                # SSH rouvert à toute la table

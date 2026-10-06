@@ -7,7 +7,7 @@ The rules every workstream follows are in [`../docs/ARCHITECTURE.md` § Security
 ## Secure the flows (mandatory)
 - End-to-end encryption: **MQTTS (TLS ≥ 1.2, port 8883)** between the Sentinel and the broker, **HTTPS/WSS** for the dashboard. No plaintext listener (no MQTT 1883, no HTTP 80).
 - **Team CA** (OpenSSL) → broker + reverse-proxy certificates. Broker SAN = `IP:192.168.X.1` (the ESP32 connects by IP) + `DNS:mosquitto` (internal clients `api`, `predictive`). Every client verifies the broker against the CA.
-- **Credentials:** one MQTT account per client (`sentinel-01`, `api`, `predictive`) + ACL, one API token per AI service, one Operator account. Generated here, handed over out of band, **never committed**.
+- **Credentials:** one MQTT account per client (`sentinel-01`, `api`, `predictive`, `screen`) + ACL, one API token per AI service, one Operator account. Generated here, handed over out of band, **never committed**.
 
 ## Harden the Command Post (Pi) — the pentest target
 Applied by [`harden.sh`](harden.sh) (#49), once `infra/plug-and-play.sh` is done — see [below](#hardensh), and step by step in [`../docs/DURCISSEMENT-PI.md`](../docs/DURCISSEMENT-PI.md).

@@ -29,7 +29,5 @@ void evaluate(const Readings &readings, uint32_t now, Emit emit);
 void reemitActive(Emit emit);
 bool critical();
 Severity worst();
-// The active Alerts, short, for the LCD: "GAZ! TEMP PIR".
-void describe(char *out, size_t size);
 
 }  // namespace alerts
