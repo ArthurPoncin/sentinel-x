@@ -106,11 +106,11 @@ export interface OutpostTwinProps {
 // background. The Status grades the light and the ring around the socle; the Enclosure, at the site's
 // entrance, turns red as gas rises, shows the Status on its LCD and breathes it on its LED ring. A haze
 // thickens around the gas pipe with the gas, and the Enclosure sounds the Alarm while a `gas` or `thermal`
-// Alert is active. An intrusion lights the camera's sector on the ground; a predictive drift pulses the
-// Probes it names; a presence blinks the Enclosure's PIR dome and sends an amber sweep round the fence; a clap
-// sends a wave of light from the Enclosure over the socle.
-// Without its signal it all turns grey and says so: what it shows is no longer live. It fills its parent:
-// give that the size the Twin should have on screen.
+// Alert is active. The generator hall's roof glows red with the heat, and the air ripples above it. An
+// intrusion lights the camera's sector on the ground; a predictive drift pulses the Probes it names; a
+// presence blinks the Enclosure's PIR dome and sends an amber sweep round the fence; a clap sends a wave of
+// light from the Enclosure over the socle. Without its signal it all turns grey and says so: what it shows is
+// no longer live. It fills its parent: give that the size the Twin should have on screen.
 export function OutpostTwin({ scene, frames, wholeStage = false }: OutpostTwinProps) {
   const frame = useRef<HTMLDivElement>(null)
   const dpr = usePixelRatio(frame)
@@ -130,7 +130,7 @@ export function OutpostTwin({ scene, frames, wholeStage = false }: OutpostTwinPr
         <Grade {...scene.status} />
         <StillShadows />
         <Socle />
-        <PowerPlant />
+        <PowerPlant {...scene.thermal} />
         <Haze density={scene.haze} />
         <NoiseWaves frames={frames} />
         <Perimeter sectorLit={scene.sector.lit} presence={scene.presence.active} />

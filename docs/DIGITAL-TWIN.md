@@ -6,7 +6,7 @@ A **live 3D replica** of the Sentinel-X outpost rendered in the dashboard (Three
 
 | Real signal (Alert `kind` / telemetry) | Source node | Twin reaction |
 |---|---|---|
-| Temperature / humidity (DHT) | Sentinel | Heat shimmer / color grade on the box; thermal gauge |
+| Temperature (DHT) | Sentinel | The generator hall's roof glows red as `temp` rises; the air above it ripples while a `thermal` Alert is active |
 | Gas (`air`) | Sentinel | Box glows red, a haze around the gas pipe thickens with the reading |
 | Presence (`pir`) | Sentinel | The Enclosure's PIR dome blinks, an amber sweep goes round the fence |
 | Noise (`noise`) | Sentinel | A wave of light leaves the box and spreads over the socle on each clap, scaled to the Alert's `value` (share of the cycle that was loud) |

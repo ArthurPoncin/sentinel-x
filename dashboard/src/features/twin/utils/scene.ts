@@ -2,6 +2,7 @@ import { STATUS_COLORS } from '@/shared/config/status-colors'
 import type { Alert, Severity, StatusLevel, Telemetry } from '@/shared/contract'
 import type { EnclosurePart } from './enclosure-parts'
 import { gasLevel } from './gas-level'
+import { heatLevel } from './heat-level'
 
 // What the Twin reads of the live feed: the fields of the live-feed state it needs, by shape, so
 // the route hands them over without the twin feature importing live-feed.
@@ -46,6 +47,13 @@ export interface SceneProps {
   // How thick the haze around the gas pipe is, 0–1: the gas level.
   haze: number
   status: StatusGrade
+  // The heat of the generator hall.
+  thermal: {
+    // How red its roof glows, 0–1: the heat level.
+    intensity: number
+    // Whether the air ripples above it: while a `thermal` Alert is active.
+    shimmer: boolean
+  }
   // The zone of the perimeter the camera watches, its sector on the ground: lit while an `intrusion` Alert
   // is active, wherever the intruder stands in it.
   sector: { lit: boolean }
@@ -61,6 +69,9 @@ export interface SceneProps {
 // Dark anodized metal: the Enclosure's body when the air is calm.
 export const CALM_COLOR = '#2c343e'
 export const GAS_COLOR = STATUS_COLORS.critical
+// Metal heated red: what the generator hall's roof glows in. More orange than the critical Status, so heat
+// is told from gas even when the whole model is lit in red.
+export const HEAT_COLOR = '#ff5a1f'
 // The studio's own light, when nothing is wrong: white from the front, cold from behind. Color is kept for
 // the Status.
 export const NEUTRAL_LIGHT = '#ffffff'
@@ -136,11 +147,13 @@ export function toScene(state: TwinState): SceneProps {
   const pulses = new Set<DriftingProbe>()
   let intruder: SceneProps['intruder'] = null
   let present = false
+  let shimmer = false
   // The highest severity among the Alerts the Sentinel fires its Alarm on. The contract does not carry the
   // Alarm's own state: an Alarm the Operator silenced still shows here.
   let alarm: Severity | null = null
   for (const alert of state.activeAlerts) {
     if (alert.kind === 'presence') present = true
+    if (alert.kind === 'thermal') shimmer = true
     if (alert.kind === 'predictive') {
       for (const driver of alert.detail.drivers) {
         const probe = DRIVER_PROBES.get(driver)
@@ -167,6 +180,7 @@ export function toScene(state: TwinState): SceneProps {
     // On the range of the Enclosure's glow: both are the gas level.
     haze: glow,
     status,
+    thermal: { intensity: heatLevel(state.latestTelemetry?.readings.temp ?? null), shimmer },
     sector: { lit: intruder !== null },
     intruder,
     presence: { active: present },

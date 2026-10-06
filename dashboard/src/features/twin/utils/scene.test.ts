@@ -3,6 +3,7 @@ import { STATUS_COLORS } from '@/shared/config/status-colors'
 import type { Alert, Severity, StatusLevel } from '@/shared/contract'
 import { ENCLOSURE_PARTS } from './enclosure-parts'
 import { CALM_AIR, CRITICAL_AIR } from './gas-level'
+import { CALM_TEMP, PEAK_TEMP } from './heat-level'
 import {
   CALM_COLOR,
   DRIFT_COLOR,
@@ -38,6 +39,12 @@ function withAir(air: number): TwinState {
   })
 }
 
+function withTemp(temp: number): TwinState {
+  return state({
+    latestTelemetry: { sentinel: 'sentinel-01', ts, readings: { temp, humidity: 44, air: 185, pir: false, sound: 0.02 } },
+  })
+}
+
 const base = { sentinel: 'sentinel-01', state: 'raised', ts } as const
 
 function intrusion(alertId: string, x_norm: number): Alert {
@@ -63,6 +70,7 @@ function predictive(alertId: string, drivers: string[]): Alert {
 }
 
 const gas: Alert = { ...base, alert_id: 'g1', source: 'esp32', kind: 'gas', severity: 'warning', detail: {} }
+const thermal: Alert = { ...base, alert_id: 't1', source: 'esp32', kind: 'thermal', severity: 'warning', detail: {} }
 
 function presence(alertId: string): Alert {
   return { ...base, alert_id: alertId, source: 'esp32', kind: 'presence', severity: 'warning', detail: {} }
@@ -94,6 +102,7 @@ describe('toScene', () => {
       },
       haze: 0,
       status: STATUS_GRADES.nominal,
+      thermal: { intensity: 0, shimmer: false },
       sector: { lit: false },
       intruder: null,
       presence: { active: false },
@@ -222,6 +231,22 @@ describe('toScene', () => {
 
   it('follows the Status, not the gas', () => {
     expect(toScene({ ...withAir(CRITICAL_AIR), status: 'nominal' }).status.level).toBe('nominal')
+  })
+
+  it("makes the hall's roof glow as the temperature rises, neutral when calm and full at the peak", () => {
+    expect(toScene(withTemp(CALM_TEMP)).thermal.intensity).toBe(0)
+    expect(toScene(withTemp((CALM_TEMP + PEAK_TEMP) / 2)).thermal.intensity).toBeCloseTo(0.5)
+    expect(toScene(withTemp(PEAK_TEMP)).thermal.intensity).toBe(1)
+  })
+
+  it('ripples the air above the hall while a thermal Alert is active, and only then', () => {
+    expect(toScene(state({ activeAlerts: [gas] })).thermal.shimmer).toBe(false)
+    expect(toScene(state({ activeAlerts: [gas, thermal] })).thermal.shimmer).toBe(true)
+  })
+
+  it('follows the temperature for the glow and the Alert for the ripple, each on its own', () => {
+    expect(toScene(withTemp(PEAK_TEMP)).thermal).toEqual({ intensity: 1, shimmer: false })
+    expect(toScene({ ...withTemp(CALM_TEMP), activeAlerts: [thermal] }).thermal).toEqual({ intensity: 0, shimmer: true })
   })
 
   it('has no signal to lose before the first connection, even if that one fails', () => {

@@ -32,7 +32,19 @@ const SUM_FRAGMENT = /* glsl */ `
   uniform sampler2D tLit;
   uniform sampler2D tHalo;
   uniform float saturation;
+  uniform float time;
+  uniform float aspect;
+  uniform float unit;
   varying vec2 vUv;
+
+  // How far hot air throws what is seen through it, in scene units, at this point of the frame (in scene
+  // units too): waves that rise, bent by slower ones that run across them.
+  vec2 ripple(vec2 at) {
+    float bend = sin(at.x * 9.0 + time * 1.9) + 0.6 * sin(at.x * 23.0 - time * 2.7);
+    float wave = sin(at.y * 27.0 - time * 9.0 + 1.5 * bend);
+    float fine = sin(at.y * 58.0 - time * 15.0 + at.x * 19.0 + bend);
+    return 0.018 * vec2(wave + 0.5 * fine, 0.4 * (wave - fine));
+  }
 
   // One 8-bit step of the screen (sRGB), as wide as it is in linear light at this level.
   vec3 screenStep(vec3 color) {
@@ -40,7 +52,12 @@ const SUM_FRAGMENT = /* glsl */ `
   }
 
   void main() {
-    vec3 color = max(texture2D(tLit, vUv).rgb + texture2D(tHalo, vUv).rgb, 0.0);
+    // The lit frame's alpha is what hot air leaves of it: 1 or more where there is none (HeatShimmer writes it).
+    float hotAir = 1.0 - texture2D(tLit, vUv).a;
+    vec2 frame = vec2(aspect, 1.0);
+    vec2 seen = vUv;
+    if (hotAir > 0.0) seen += hotAir * unit * ripple(vUv * frame / unit) / frame;
+    vec3 color = max(texture2D(tLit, seen).rgb + texture2D(tHalo, seen).rgb, 0.0);
     // Toward the grey that is as bright as the color: the frame keeps its light and loses its hues.
     color = mix(vec3(dot(color, vec3(0.2126, 0.7152, 0.0722))), color, saturation);
     // A halo fading to black shows the screen's steps as bands: half a step of noise either way hides them.
@@ -52,6 +69,10 @@ const SUM_FRAGMENT = /* glsl */ `
 interface HaloEffect extends Effect {
   // How much of its hues the frame keeps, 0–1.
   saturation: { value: number }
+  // The seconds hot air ripples by, and the share of the frame's height a scene unit takes at the heart of
+  // the scene: the ripples keep their size on the model, however far the camera stands.
+  time: { value: number }
+  unit: { value: number }
   capture: (renderer: WebGLRenderer, scene: Scene, camera: Camera) => void
   dispose: () => void
 }
@@ -70,8 +91,11 @@ function createHalo(): HaloEffect {
 
   const lit: { value: Texture | null } = { value: null }
   const saturation = { value: 1 }
+  const time = { value: 0 }
+  const aspect = { value: 1 }
+  const unit = { value: 1 }
   const sum = new ShaderMaterial({
-    uniforms: { tLit: lit, tHalo: { value: blurred.texture }, saturation },
+    uniforms: { tLit: lit, tHalo: { value: blurred.texture }, saturation, time, aspect, unit },
     vertexShader: SUM_VERTEX,
     fragmentShader: SUM_FRAGMENT,
     depthTest: false,
@@ -83,10 +107,13 @@ function createHalo(): HaloEffect {
 
   return {
     saturation,
+    time,
+    unit,
 
     setSize(width, height) {
       glowing.setSize(Math.round(width / 2), Math.round(height / 2))
       bloom.setSize(width, height)
+      aspect.value = width / height
     },
 
     capture(renderer, scene, camera) {
@@ -134,7 +161,7 @@ export interface HaloProps {
 
 // Takes over the rendering of the Canvas, whose renderer must draw to an HDR buffer (`outputBufferType`):
 // three.js only runs effects there. Its pass is the last to touch the frame, halo included: that is where
-// the whole frame can lose its hues.
+// the whole frame can lose its hues, and where hot air ripples what is seen through it.
 export function Halo({ saturation = 1 }: HaloProps) {
   const gl = useThree((state) => state.gl)
   const halo = useRef<HaloEffect | null>(null)
@@ -153,9 +180,13 @@ export function Halo({ saturation = 1 }: HaloProps) {
   }, [gl])
 
   // After every other frame callback, so that the halo and the lit frame show the same instant.
-  useFrame(({ scene, camera }) => {
+  useFrame(({ scene, camera, clock }) => {
     if (halo.current) {
       halo.current.saturation.value = saturationNow()[0] ?? 1
+      halo.current.time.value = clock.elapsedTime
+      // A perspective's projection holds 1 / tan(half its field of view): what a unit takes of the frame's
+      // height, one unit away.
+      halo.current.unit.value = (camera.projectionMatrix.elements[5] ?? 1) / (2 * camera.position.length())
       halo.current.capture(gl, scene, camera)
     }
     gl.render(scene, camera)

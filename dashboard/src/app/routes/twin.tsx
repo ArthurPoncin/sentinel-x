@@ -5,10 +5,11 @@ import { OutpostTwin, toScene } from '@/features/twin'
 import { captureMode } from '@/shared/config/capture-mode'
 
 // The Digital Twin's screen: the 3D Outpost graded by the Status, its Enclosure showing the Status, reacting
-// to gas and sounding the Alarm, a haze around its gas pipe, on the whole window under the top bar. An
-// intrusion lights the camera's sector, a predictive drift pulses the Probes it names, a presence blinks the
-// PIR dome and sweeps the fence in amber, a clap sends a wave from the Enclosure over the socle. When the feed
-// drops, it all turns grey: nothing here is live any more. Next: the intruder placed on the perimeter (#23).
+// to gas and sounding the Alarm, a haze around its gas pipe, its generator hall reacting to heat, on the whole
+// window under the top bar. An intrusion lights the camera's sector, a predictive drift pulses the Probes it
+// names, a presence blinks the PIR dome and sweeps the fence in amber, a clap sends a wave from the Enclosure
+// over the socle. When the feed drops, it all turns grey: nothing here is live any more. Next: the intruder
+// placed on the perimeter (#23).
 // With `?capture` it is the Twin alone, on the same feed: no top bar, no caption, the whole stage held in
 // frame, to be filmed in a vertical window for the teaser.
 export function TwinRoute() {
