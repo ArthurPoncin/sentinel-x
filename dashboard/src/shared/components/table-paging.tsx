@@ -24,7 +24,8 @@ export function SortByTime({ order, onChange, children }: { order: SortOrder; on
 export function Pager<T>({ page, onChange, noun }: { page: Page<T>; onChange: (page: number) => void; noun: string }) {
   if (page.total === 0) return null
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+    // On a phone the count sits over the buttons, both centred, and the buttons lose their words.
+    <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground sm:flex-row sm:justify-between">
       <span className="tabular-nums">
         {page.first}–{page.last} sur {plural(page.total, noun)}
       </span>
@@ -32,14 +33,14 @@ export function Pager<T>({ page, onChange, noun }: { page: Page<T>; onChange: (p
         <Button size="sm" variant="outline" aria-label="Première page" disabled={page.page === 1} onClick={() => onChange(1)}>
           «
         </Button>
-        <Button size="sm" variant="outline" disabled={page.page === 1} onClick={() => onChange(page.page - 1)}>
-          ‹ Précédente
+        <Button size="sm" variant="outline" aria-label="Page précédente" disabled={page.page === 1} onClick={() => onChange(page.page - 1)}>
+          ‹<span className="hidden sm:inline"> Précédente</span>
         </Button>
-        <span className="px-2 tabular-nums">
+        <span className="px-2 whitespace-nowrap tabular-nums">
           Page {page.page} / {page.pages}
         </span>
-        <Button size="sm" variant="outline" disabled={page.page === page.pages} onClick={() => onChange(page.page + 1)}>
-          Suivante ›
+        <Button size="sm" variant="outline" aria-label="Page suivante" disabled={page.page === page.pages} onClick={() => onChange(page.page + 1)}>
+          <span className="hidden sm:inline">Suivante </span>›
         </Button>
         <Button
           size="sm"

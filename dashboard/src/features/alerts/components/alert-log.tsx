@@ -60,20 +60,26 @@ export function AlertLog({ history }: { history: readonly Frame[] }) {
                 <TableHead className="hidden md:table-cell">Détail</TableHead>
                 <TableHead className="hidden sm:table-cell">Source</TableHead>
                 <TableHead>Gravité</TableHead>
-                <TableHead className="pr-4 text-right">État</TableHead>
+                <TableHead className="hidden pr-4 text-right sm:table-cell">État</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {entries.map((alert) => (
                 <TableRow key={`${alert.alert_id}-${alert.state}-${alert.ts}`}>
                   <TableCell className="pl-4 text-muted-foreground tabular-nums">{clock(alert.ts)}</TableCell>
-                  <TableCell className="font-medium">{KIND_LABEL[alert.kind]}</TableCell>
+                  <TableCell className="font-medium">
+                    {KIND_LABEL[alert.kind]}
+                    {/* On a phone the state column gives way: the state goes under the Alert's name. */}
+                    <span className="block text-xs font-normal text-muted-foreground sm:hidden">
+                      {alert.state === 'raised' ? 'Levée' : 'Résolue'}
+                    </span>
+                  </TableCell>
                   <TableCell className="hidden max-w-72 truncate text-muted-foreground md:table-cell">{describeAlert(alert)}</TableCell>
                   <TableCell className="hidden text-muted-foreground sm:table-cell">{SOURCE_LABEL[alert.source]}</TableCell>
-                  <TableCell>
+                  <TableCell className="pr-4 sm:pr-2">
                     <SeverityBadge severity={alert.severity} />
                   </TableCell>
-                  <TableCell className="pr-4 text-right">
+                  <TableCell className="hidden pr-4 text-right sm:table-cell">
                     <Badge variant={alert.state === 'raised' ? 'secondary' : 'outline'} className="text-muted-foreground">
                       {alert.state === 'raised' ? 'Levée' : 'Résolue'}
                     </Badge>

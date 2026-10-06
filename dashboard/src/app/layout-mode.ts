@@ -18,3 +18,10 @@ export function layoutMode(
   if (!stage) return 'page'
   return captureMode(location) ? 'capture' : 'stage'
 }
+
+// Whether the sidebar starts open: the Operator's last choice, which shadcn's provider writes to the
+// `sidebar_state` cookie but never reads back. Open when nothing was chosen yet.
+export function sidebarOpenFrom(cookie: string): boolean {
+  const match = /(?:^|;\s*)sidebar_state=(true|false)(?:;|$)/.exec(cookie)
+  return match ? match[1] === 'true' : true
+}
