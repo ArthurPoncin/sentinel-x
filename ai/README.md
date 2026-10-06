@@ -28,6 +28,26 @@ The main technical risk of Option A, on a Pi 4 that is slower than the Pi 5 the 
 ## Output
 Both jobs → `POST /api/v1/alerts` over the **internal Docker network**, using the unified Alert schema in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#alert--sentinelidalert-and-body-of-post-apiv1alerts). Each service sends its own token (`Authorization: Bearer …`, from its `.env`) and may only post its own `kind` (`intrusion` / `predictive`).
 
+## Develop & test
+Product requirements: the AI PRD, issue #67. Layout, one import package per directory:
+
+```
+ai/
+├── common/       # sentinel_common: the Alert contract mirror, the Alert client — stdlib only, Python 3.11+
+├── predictive/   # predictive: the predictive service
+└── vision/       # vision: the vision service
+```
+
+Everything is tested without a Pi, a camera, a broker or a network, from `ai/`:
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+.venv/bin/pytest
+```
+
+Every Alert a service emits is checked against `sentinel_common.contract.alert_errors`, the mirror of
+`backend/src/contract.ts`: what it refuses, the api refuses with a `400`.
+
 ## TODO
 - [ ] ZIF camera capture (Picamera2) on the Pi + **latency benchmark (Monday)**
 - [ ] Vision inference + `x_norm` extraction

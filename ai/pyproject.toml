@@ -1,0 +1,9 @@
+# Not a package: the pytest settings of the whole ai/ tree. From ai/:
+#   python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+#   .venv/bin/pytest
+# Each service is a directory holding one import package (common/sentinel_common, predictive/predictive,
+# vision/vision) and its tests; pythonpath makes them importable without installing anything.
+[tool.pytest.ini_options]
+pythonpath = ["common", "predictive", "vision"]
+testpaths = ["common/tests", "predictive/tests", "vision/tests"]
+addopts = "--import-mode=importlib"
