@@ -125,7 +125,7 @@ function Engraving() {
 // The camera: a lens barrel and its glass, the eye the vision service sees through.
 function CameraLens() {
   return (
-    <group name={ENCLOSURE_PARTS.camera} position={[ENCLOSURE_SHAPE.lens.x, -0.17, FRONT]}>
+    <group name={ENCLOSURE_PARTS.camera} position={[ENCLOSURE_SHAPE.lens.x, ENCLOSURE_SHAPE.lens.y - BODY_Y, FRONT]}>
       <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0.05]} castShadow>
         <cylinderGeometry args={[0.14, 0.15, 0.1, 48]} />
         <meshStandardMaterial color="#4a5562" metalness={0.8} roughness={0.3} />

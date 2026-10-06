@@ -103,6 +103,12 @@ export function lensPoint(): GroundPoint {
   }
 }
 
+// How high the camera's lens is above the ground: the end of the line it draws to what it sees.
+export function lensHeight(): number {
+  const { scale, lens } = ENCLOSURE_SHAPE
+  return scale * lens.y
+}
+
 // Where the camera's sight meets the fence, for what stands at `xNorm` across its image: 0 = left edge,
 // 1 = right edge. The intruder of an `intrusion` Alert stands there.
 export function watchedPoint(xNorm: number): GroundPoint {
