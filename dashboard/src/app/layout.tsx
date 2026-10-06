@@ -1,9 +1,11 @@
-import { Outlet, useLocation } from 'react-router'
+import { Outlet, useLocation, useMatches } from 'react-router'
 import { ConnectionIndicator, useLiveFeed } from '@/features/live-feed'
 import { StatusBadge } from '@/features/status'
+import { cn } from '@/shared/lib/utils'
 import { Separator } from '@/shared/ui/separator'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/shared/ui/sidebar'
 import { AppSidebar, NAV } from './app-sidebar'
+import { layoutMode } from './layout-mode'
 
 function SiteHeader() {
   const { pathname } = useLocation()
@@ -26,14 +28,38 @@ function SiteHeader() {
 }
 
 export function Layout() {
+  const mode = layoutMode(useMatches(), useLocation())
+
+  // Filmed for the teaser: the stage alone on the window, nothing of the interface around it.
+  if (mode === 'capture') {
+    return (
+      <div className="h-dvh">
+        <Outlet />
+      </div>
+    )
+  }
+
+  const stage = mode === 'stage'
   return (
-    <SidebarProvider style={{ '--sidebar-width': '15rem' } as React.CSSProperties}>
+    <SidebarProvider
+      className={cn(stage && 'h-svh')}
+      style={{ '--sidebar-width': '15rem' } as React.CSSProperties}
+    >
       <AppSidebar />
-      <SidebarInset>
+      <SidebarInset className={cn(stage && 'overflow-hidden')}>
         <SiteHeader />
-        <div className="flex flex-1 flex-col p-4 lg:p-6">
-          <Outlet />
-        </div>
+        {stage ? (
+          // The stage's height: 100% needs a definite box, which a flex-grown one is not: hence the absolute fill.
+          <div className="relative min-h-0 flex-1">
+            <div className="absolute inset-0">
+              <Outlet />
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-1 flex-col p-4 lg:p-6">
+            <Outlet />
+          </div>
+        )}
       </SidebarInset>
     </SidebarProvider>
   )

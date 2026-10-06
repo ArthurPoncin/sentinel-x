@@ -236,7 +236,7 @@ const history = useLiveFeed((state) => state.history)
 
 **The stage** (#30) is what every later Twin slice is set on:
 
-- **Full screen** — `OutpostTwin` fills its parent. A route that renders a `.stage` gets the whole window under the top bar (`styles.css`); the other routes keep the padded page.
+- **Full screen** — `OutpostTwin` fills its parent. A route whose `handle` says `stage: true` (the router's `/twin`) gets the whole space under the header; the other routes keep the padded page. `layoutMode(matches, location)` in `app/layout-mode.ts` decides it.
 - **Light** — black background, a key light that casts the soft shadows, a cold rim light from behind, a trace of fill. The key and the fill take the grade's `light`, the rim its `rim`: neutral at `nominal`, the Status's color otherwise. The lights stay put while the camera orbits. Give a new mesh `castShadow` / `receiveShadow`. The shadow map is 2048 wide with a blur of 3 since #32: a wider blur shows its grain on the off-white walls. The shadows are drawn once (`StillShadows`), since nothing that casts one moves: after moving a caster, ask for them again with `gl.shadowMap.needsUpdate = true`.
 - **Halo** — only what emits light glows. `Halo` draws the scene a second time with its lights off and blurs that image over the frame: set `emissive` + `emissiveIntensity` on a material and it glows in proportion, in its own color; a lit surface never does, however bright. An unlit material (`meshBasicMaterial`) counts as emitting — the ring around the socle glows in the Status's color that way — so use a standard one for anything that should not glow. Its pass is the last to touch the frame: that is also where the frame turns grey when the signal is lost (`saturation`), and where hot air ripples what is seen through it (#35).
 - **Color** — the frame is rendered in HDR and tone-mapped with `NeutralToneMapping`, which leaves the Status colors as they are.
@@ -268,7 +268,7 @@ const history = useLiveFeed((state) => state.history)
 
 **Capture mode** (#40) — `/twin?capture` is the Twin alone, to be filmed for the teaser:
 
-- **No interface** — no top bar, no connection indicator, no caption: the canvas takes the whole window, on black. `captureMode(location)` reads the parameter (being there is enough, whatever its value); without it `/twin` is the normal view.
+- **No interface** — no sidebar, no header (so no connection indicator or Status badge), no caption: the canvas takes the whole window, on black. `captureMode(location)` reads the parameter (being there is enough, whatever its value); without it `/twin` is the normal view.
 - **Same feed** — mock or live, it plays what the normal view plays.
 - **Whole in frame** — `<OutpostTwin wholeStage />` stands the camera back until the whole stage holds in the frame, whatever its shape: `wholeStageDistance(aspect)` fits a sphere around the stage (`STAGE_RADIUS`, the ring around the socle plus room for its halo) in the narrower field of view, so it holds all the way around the orbit and at any tilt. The camera can still be turned by hand; it no longer zooms.
 - Anything added to the stage further out than the ring around the socle needs a larger `STAGE_RADIUS`.
