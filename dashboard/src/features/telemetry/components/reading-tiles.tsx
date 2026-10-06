@@ -1,4 +1,3 @@
-import { TrendingDown, TrendingUp } from 'lucide-react'
 import { useMemo } from 'react'
 import type { Telemetry } from '@/shared/contract'
 import { decimal } from '@/shared/lib/format'
@@ -18,7 +17,6 @@ interface TileProps {
 }
 
 function Tile({ label, value, change, headline, detail }: TileProps) {
-  const Trend = change?.rising ? TrendingUp : TrendingDown
   return (
     <Card className="@container/card">
       <CardHeader>
@@ -26,8 +24,8 @@ function Tile({ label, value, change, headline, detail }: TileProps) {
         <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">{value}</CardTitle>
         {change?.moving && (
           <CardAction>
-            <Badge variant="outline">
-              <Trend />
+            <Badge variant="outline" className="tabular-nums">
+              <span aria-hidden>{change.rising ? '▲' : '▼'}</span>
               {change.text}
             </Badge>
           </CardAction>

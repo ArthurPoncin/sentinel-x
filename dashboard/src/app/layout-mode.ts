@@ -7,7 +7,7 @@ export interface RouteHandle {
 }
 
 // page: the padded page under the header. stage: the whole space under the header. capture: the stage alone on
-// the window, no sidebar, no header, to be filmed for the teaser (`?capture`, on a stage route only).
+// the window, no top bar, to be filmed for the teaser (`?capture`, on a stage route only).
 export type LayoutMode = 'page' | 'stage' | 'capture'
 
 export function layoutMode(

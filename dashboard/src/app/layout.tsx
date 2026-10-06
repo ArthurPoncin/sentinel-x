@@ -1,28 +1,48 @@
-import { Outlet, useLocation, useMatches } from 'react-router'
+import { NavLink, Outlet, useLocation, useMatches } from 'react-router'
+import { useSignOut } from '@/features/auth'
 import { ConnectionIndicator, useLiveFeed } from '@/features/live-feed'
 import { StatusBadge } from '@/features/status'
 import { cn } from '@/shared/lib/utils'
-import { Separator } from '@/shared/ui/separator'
-import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/shared/ui/sidebar'
-import { AppSidebar, NAV } from './app-sidebar'
 import { layoutMode } from './layout-mode'
 
-function SiteHeader() {
-  const { pathname } = useLocation()
+// The two surfaces, one per screen for the demo.
+const NAV = [
+  { to: '/', label: 'Opérateur' },
+  { to: '/twin', label: 'Jumeau numérique' },
+] as const
+
+// One bar across the top, on every screen: the brand, the two surfaces, then the Status and whether
+// the feed is live, where the eye lands first.
+function TopBar() {
   const status = useLiveFeed((state) => state.status)
-  const title = NAV.find((item) => item.to === pathname)?.title ?? 'Sentinel-X'
+  const signOut = useSignOut()
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 border-b">
-      <div className="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
-        <SidebarTrigger className="-ml-1" />
-        <Separator orientation="vertical" className="mx-2 data-[orientation=vertical]:h-4" />
-        <h1 className="text-base font-medium">{title}</h1>
-        <div className="ml-auto flex items-center gap-4">
-          <ConnectionIndicator />
-          <StatusBadge status={status} />
-        </div>
-      </div>
+    <header className="flex h-12 shrink-0 items-center gap-6 border-b bg-card px-5">
+      <span className="font-bold tracking-[0.08em]">Sentinel-X</span>
+      <nav className="flex flex-1 gap-4">
+        {NAV.map(({ to, label }) => (
+          <NavLink
+            key={to}
+            to={to}
+            end
+            className={({ isActive }) =>
+              cn('text-muted-foreground transition-colors hover:text-foreground', isActive && 'text-foreground')
+            }
+          >
+            {label}
+          </NavLink>
+        ))}
+      </nav>
+      <StatusBadge status={status} />
+      <ConnectionIndicator />
+      <button
+        type="button"
+        onClick={signOut}
+        className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        Déconnexion
+      </button>
     </header>
   )
 }
@@ -41,26 +61,20 @@ export function Layout() {
 
   const stage = mode === 'stage'
   return (
-    <SidebarProvider
-      className={cn(stage && 'h-svh')}
-      style={{ '--sidebar-width': '15rem' } as React.CSSProperties}
-    >
-      <AppSidebar />
-      <SidebarInset className={cn(stage && 'overflow-hidden')}>
-        <SiteHeader />
-        {stage ? (
-          // The stage's height: 100% needs a definite box, which a flex-grown one is not: hence the absolute fill.
-          <div className="relative min-h-0 flex-1">
-            <div className="absolute inset-0">
-              <Outlet />
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-1 flex-col p-4 lg:p-6">
+    <div className={cn('flex min-h-svh flex-col', stage && 'h-svh overflow-hidden')}>
+      <TopBar />
+      {stage ? (
+        // The stage's height: 100% needs a definite box, which a flex-grown one is not: hence the absolute fill.
+        <div className="relative min-h-0 flex-1">
+          <div className="absolute inset-0">
             <Outlet />
           </div>
-        )}
-      </SidebarInset>
-    </SidebarProvider>
+        </div>
+      ) : (
+        <main className="flex flex-1 flex-col p-4 lg:p-6">
+          <Outlet />
+        </main>
+      )}
+    </div>
   )
 }

@@ -110,7 +110,6 @@ src/
     ├── api/                 # getJson / postJson on the app's own origin
     ├── lib/                 # cn(), French labels, Status/severity colors, fr-FR formats
     ├── components/          # LevelBadge: the outline badge with a colored dot
-    ├── hooks/               # use-mobile (shadcn sidebar)
     └── ui/                  # shadcn/ui components (components.json points the CLI here)
 ```
 
@@ -121,9 +120,9 @@ src/
 - Logic goes in pure functions next to their tests (`*.test.ts`), so it is tested without a browser; components stay thin.
 - Imports use the `@/` alias for `src/`.
 
-- UI building blocks come from shadcn/ui: `npx shadcn@latest add <component>` writes them to `src/shared/ui/` (check that its imports say `@/shared/lib/utils`). Icons are lucide-react, shadcn's icon library. The theme is shadcn's neutral one, dark only, in `app/styles.css`; `nominal` / `elevated` / `critical` are Tailwind colors too (`text-critical`, `bg-nominal`…), kept to dots and figures.
+- UI building blocks come from shadcn/ui: `npx shadcn@latest add <component>` writes them to `src/shared/ui/` (check that its imports say `@/shared/lib/utils`). No icon library: a state is said with a colored `●` and words, a trend with `▲` / `▼` — the top bar's `● En direct` sets the tone. A shadcn component added later comes with lucide icons: swap them for that. The theme is shadcn's neutral one, dark only, in `app/styles.css`; `nominal` / `elevated` / `critical` are Tailwind colors too (`text-critical`, `bg-nominal`…), kept to dots and figures.
 - The UI text is in French (the Operator and the jury are); code, comments and docs stay in English. Labels shared by several features live in `shared/lib/labels.ts`.
-- `app/` holds the shell: the shadcn sidebar (`app-sidebar.tsx`) and the header with the connection and the Status (`layout.tsx`).
+- `app/` holds the shell (`layout.tsx`): one top bar on every screen — `Sentinel-X`, the two surfaces, then the Status, `● En direct` and the sign-out.
 
 **Features to come**
 
@@ -278,7 +277,7 @@ const history = useLiveFeed((state) => state.history)
 
 **Capture mode** (#40) — `/twin?capture` is the Twin alone, to be filmed for the teaser:
 
-- **No interface** — no sidebar, no header (so no connection indicator or Status badge), no caption: the canvas takes the whole window, on black. `captureMode(location)` reads the parameter (being there is enough, whatever its value); without it `/twin` is the normal view.
+- **No interface** — no top bar (so no connection indicator or Status badge), no caption: the canvas takes the whole window, on black. `captureMode(location)` reads the parameter (being there is enough, whatever its value); without it `/twin` is the normal view.
 - **Same feed** — mock or live, it plays what the normal view plays.
 - **Whole in frame** — `<OutpostTwin wholeStage />` stands the camera back until the whole stage holds in the frame, whatever its shape: `wholeStageDistance(aspect)` fits a sphere around the stage (`STAGE_RADIUS`, the ring around the socle plus room for its halo) in the narrower field of view, so it holds all the way around the orbit and at any tilt. The camera can still be turned by hand; it no longer zooms.
 - Anything added to the stage further out than the ring around the socle needs a larger `STAGE_RADIUS`.

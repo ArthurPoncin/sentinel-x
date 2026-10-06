@@ -1,14 +1,13 @@
-import { ShieldAlert, ShieldCheck, ShieldOff, ShieldX } from 'lucide-react'
 import { LevelBadge } from '@/shared/components/level-badge'
 import type { StatusLevel } from '@/shared/contract'
 import { plural, STATUS_LABEL } from '@/shared/lib/labels'
 import { toneOfStatus, toneText } from '@/shared/lib/tone'
 import { Card, CardAction, CardDescription, CardFooter, CardHeader, CardTitle } from '@/shared/ui/card'
 
-const MEANING: Record<StatusLevel, { headline: string; icon: typeof ShieldCheck }> = {
-  nominal: { headline: 'Aucune menace en cours', icon: ShieldCheck },
-  elevated: { headline: 'Un avertissement à surveiller', icon: ShieldAlert },
-  critical: { headline: 'Intervention requise', icon: ShieldX },
+const HEADLINE: Record<StatusLevel, string> = {
+  nominal: 'Aucune menace en cours',
+  elevated: 'Un avertissement à surveiller',
+  critical: 'Intervention requise',
 }
 
 interface StatusCardProps {
@@ -21,7 +20,7 @@ interface StatusCardProps {
 // The Outpost's headline state, as the Command Post computes it.
 export function StatusCard({ status, feed, activeAlerts }: StatusCardProps) {
   const live = feed === 'open'
-  const { headline, icon: Icon } = live ? MEANING[status] : { headline: 'Flux interrompu', icon: ShieldOff }
+  const headline = live ? HEADLINE[status] : 'Flux interrompu'
 
   return (
     <Card className="@container/card">
@@ -36,8 +35,10 @@ export function StatusCard({ status, feed, activeAlerts }: StatusCardProps) {
       </CardHeader>
       <CardFooter className="flex-col items-start gap-1.5 text-sm">
         <div className="flex gap-2 font-medium">
+          <span aria-hidden className={live ? toneText[toneOfStatus[status]] : 'text-muted-foreground'}>
+            ●
+          </span>
           {headline}
-          <Icon className={live ? `size-4 ${toneText[toneOfStatus[status]]}` : 'size-4 text-muted-foreground'} />
         </div>
         <div className="text-muted-foreground">
           {live ? 'Calculé par le poste de commande' : 'Dernier état inconnu'}

@@ -1,4 +1,3 @@
-import { CircleCheck, Loader } from 'lucide-react'
 import { useMemo } from 'react'
 import { LevelBadge } from '@/shared/components/level-badge'
 import type { Incident } from '@/shared/contract'
@@ -45,12 +44,16 @@ export function IncidentTable({ incidents }: { incidents: readonly Incident[] | 
                 <Badge variant="outline" className="text-muted-foreground">
                   {incident.end === null ? (
                     <>
-                      <Loader />
+                      <span aria-hidden className="animate-pulse text-elevated">
+                        ●
+                      </span>
                       En cours
                     </>
                   ) : (
                     <>
-                      <CircleCheck className="fill-nominal text-background" />
+                      <span aria-hidden className="text-nominal">
+                        ●
+                      </span>
                       Neutralisé en {duration(Date.parse(incident.end) - Date.parse(incident.start))}
                     </>
                   )}

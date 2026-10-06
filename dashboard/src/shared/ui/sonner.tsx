@@ -1,5 +1,11 @@
 import { Toaster as Sonner, type ToasterProps } from "sonner"
-import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
+
+// A colored dot says what kind of toast it is, as everywhere else in the app.
+const dot = (className: string) => (
+  <span aria-hidden className={className}>
+    ●
+  </span>
+)
 
 const Toaster = ({ ...props }: ToasterProps) => {
 
@@ -8,21 +14,11 @@ const Toaster = ({ ...props }: ToasterProps) => {
       theme="dark"
       className="toaster group"
       icons={{
-        success: (
-          <CircleCheckIcon className="size-4" />
-        ),
-        info: (
-          <InfoIcon className="size-4" />
-        ),
-        warning: (
-          <TriangleAlertIcon className="size-4" />
-        ),
-        error: (
-          <OctagonXIcon className="size-4" />
-        ),
-        loading: (
-          <Loader2Icon className="size-4 animate-spin" />
-        ),
+        success: dot("text-nominal"),
+        info: dot("text-muted-foreground"),
+        warning: dot("text-elevated"),
+        error: dot("text-critical"),
+        loading: dot("animate-pulse text-muted-foreground"),
       }}
       style={
         {
