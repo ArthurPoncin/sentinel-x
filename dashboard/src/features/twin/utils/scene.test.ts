@@ -8,6 +8,7 @@ import {
   CALM_COLOR,
   DRIFT_COLOR,
   DRIVER_PROBES,
+  driftLabel,
   GAS_COLOR,
   LCD_TEXT,
   mix,
@@ -59,14 +60,14 @@ function intrusion(alertId: string, x_norm: number): Alert {
   }
 }
 
-function predictive(alertId: string, drivers: string[]): Alert {
+function predictive(alertId: string, drivers: string[], anomaly_score = 0.91): Alert {
   return {
     ...base,
     alert_id: alertId,
     source: 'predictive',
     kind: 'predictive',
     severity: 'warning',
-    detail: { anomaly_score: 0.91, drivers },
+    detail: { anomaly_score, drivers },
   }
 }
 
@@ -100,6 +101,7 @@ describe('toScene', () => {
         ring: { color: STATUS_GRADES.nominal.perimeter },
         alarm: null,
         pulses: [],
+        drift: null,
       },
       haze: 0,
       status: STATUS_GRADES.nominal,
@@ -302,6 +304,49 @@ describe('toScene', () => {
     expect(pulsesFor(predictive('p1', ['humidity_slope', 'constructor']))).toEqual([])
     expect(pulsesFor(predictive('p1', ['humidity_slope', 'air_slope']))).toEqual(['mq2'])
     expect(pulsesFor(predictive('p1', []))).toEqual([])
+  })
+
+  const driftFor = (...activeAlerts: Alert[]) => toScene(state({ activeAlerts })).enclosure.drift
+
+  it('labels the drift with the score of the predictive Alert: « dérive · score 0.91 »', () => {
+    expect(driftFor(predictive('p1', ['temp_slope', 'air_slope']))).toEqual({
+      score: 0.91,
+      label: 'dérive · score 0.91',
+    })
+  })
+
+  it('gives the score to two decimals', () => {
+    expect(driftLabel(0.9)).toBe('dérive · score 0.90')
+    expect(driftLabel(0.876)).toBe('dérive · score 0.88')
+    expect(driftLabel(1)).toBe('dérive · score 1.00')
+  })
+
+  it('labels nothing without an active predictive Alert, whatever else is raised', () => {
+    expect(driftFor()).toBeNull()
+    expect(driftFor(gas, thermal, intrusion('i1', 0.2), presence('pr1'))).toBeNull()
+  })
+
+  it('labels nothing for a predictive Alert that pulses no Probe: no driver, or none it knows', () => {
+    expect(driftFor(predictive('p1', []))).toBeNull()
+    expect(driftFor(predictive('p1', ['humidity_slope', 'constructor']))).toBeNull()
+  })
+
+  it('labels the score of the last raised predictive Alert that pulses a Probe', () => {
+    expect(driftFor(predictive('p1', ['temp_slope'], 0.72), predictive('p2', ['air_slope'], 0.94))?.label).toBe(
+      'dérive · score 0.94',
+    )
+    expect(driftFor(predictive('p1', ['temp_slope'], 0.72), predictive('p2', ['wind_slope'], 0.94))?.label).toBe(
+      'dérive · score 0.72',
+    )
+  })
+
+  it('labels and pulses the drift the same at nominal as at elevated', () => {
+    const alerts = [predictive('p1', ['temp_slope', 'air_slope'])]
+    const nominal = toScene(state({ status: 'nominal', activeAlerts: alerts })).enclosure
+    const elevated = toScene(state({ status: 'elevated', activeAlerts: alerts })).enclosure
+
+    expect(elevated.pulses).toEqual(nominal.pulses)
+    expect(elevated.drift).toEqual(nominal.drift)
   })
 
   it('pulses in a color of its own, not a Status color', () => {

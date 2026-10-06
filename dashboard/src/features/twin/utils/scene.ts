@@ -44,6 +44,9 @@ export interface SceneProps {
     alarm: { severity: Severity; color: string } | null
     // The Probes that pulse: those the `drivers` of the active `predictive` Alerts say are drifting, each once.
     pulses: readonly DriftingProbe[]
+    // The label over the Probe compartment while Probes pulse: the `anomaly_score` of the last raised of the
+    // `predictive` Alerts that pulse one, and the text that gives it. Null while none pulses.
+    drift: { score: number; label: string } | null
   }
   // How thick the haze around the gas pipe is, 0–1: the gas level.
   haze: number
@@ -97,6 +100,11 @@ export const DRIVER_PROBES: ReadonlyMap<string, DriftingProbe> = new Map([
   ['air_slope', 'mq2'],
 ])
 
+// What the label over the drifting Probes reads: the model's score, as the Alert gives it, to two decimals.
+export function driftLabel(score: number): string {
+  return `dérive · score ${score.toFixed(2)}`
+}
+
 // A Status that is not nominal colors every light: the whole model is lit in it, whatever side it is seen from.
 function inStatusColor(level: Exclude<StatusLevel, 'nominal'>, background: string): StatusGrade {
   const color = STATUS_COLORS[level]
@@ -147,6 +155,7 @@ const SEVERITY_LEVEL: Readonly<Record<Severity, StatusLevel>> = {
 export function toScene(state: TwinState): SceneProps {
   const glow = gasLevel(state.latestTelemetry?.readings.air ?? null)
   const pulses = new Set<DriftingProbe>()
+  let driftScore: number | null = null
   let intruder: SceneProps['intruder'] = null
   let present = false
   let shimmer = false
@@ -157,10 +166,10 @@ export function toScene(state: TwinState): SceneProps {
     if (alert.kind === 'presence') present = true
     if (alert.kind === 'thermal') shimmer = true
     if (alert.kind === 'predictive') {
-      for (const driver of alert.detail.drivers) {
-        const probe = DRIVER_PROBES.get(driver)
-        if (probe) pulses.add(probe)
-      }
+      const probes = alert.detail.drivers.flatMap((driver) => DRIVER_PROBES.get(driver) ?? [])
+      for (const probe of probes) pulses.add(probe)
+      // An Alert that names no Probe the Twin knows has nothing to label.
+      if (probes.length > 0) driftScore = alert.detail.anomaly_score
     }
     if (alert.kind === 'intrusion') intruder = { x_norm: alert.detail.x_norm, at: watchedPoint(alert.detail.x_norm) }
     if (alert.kind === 'gas' || alert.kind === 'thermal') {
@@ -178,6 +187,7 @@ export function toScene(state: TwinState): SceneProps {
       ring: { color: status.perimeter },
       alarm: alarm && { severity: alarm, color: STATUS_COLORS[SEVERITY_LEVEL[alarm]] },
       pulses: [...pulses],
+      drift: driftScore === null ? null : { score: driftScore, label: driftLabel(driftScore) },
     },
     // On the range of the Enclosure's glow: both are the gas level.
     haze: glow,
