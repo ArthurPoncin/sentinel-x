@@ -8,7 +8,7 @@ import { captureMode } from '@/shared/config/capture-mode'
 // The Digital Twin's screen: the 3D Outpost graded by the Status, its Enclosure showing the Status, reacting
 // to gas and sounding the Alarm, a haze around its gas pipe, its generator hall reacting to heat, on the whole
 // space under the header. An intrusion lights the camera's sector and stands the intruder on the perimeter, a
-// figurine in hologram gliding along the arc, tied to the lens, in the brackets of its detection and labelled
+// figurine in hologram walking along the arc, tied to the lens, in the brackets of its detection and labelled
 // with the vision model's confidence; a predictive drift pulses the Probes it names and
 // labels them with its score, a presence blinks the PIR dome and sweeps the fence in amber,
 // a clap sends a wave from the Enclosure over the socle. When the feed drops, it all turns grey: nothing here

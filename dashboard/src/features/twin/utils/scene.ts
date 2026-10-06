@@ -65,7 +65,7 @@ export interface SceneProps {
   sector: { lit: boolean }
   // The intruder the last raised of the active `intrusion` Alerts sees: where it stands across the camera's
   // image, 0 = left, 1 = right, and so where on the perimeter, on the arc of the fence the camera watches. The
-  // Alert's id tells the same intruder moving from a new one: the first glides, the second appears. With it,
+  // Alert's id tells the same intruder moving from a new one: the first walks, the second appears. With it,
   // how sure the vision model is of what it sees, 0–1, and the label that says so. `x_norm` alone places it:
   // the Alert's `bbox` is not read.
   intruder: { alertId: string; x_norm: number; confidence: number; label: string; at: GroundPoint } | null

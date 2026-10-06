@@ -29,9 +29,10 @@ import {
   sweptTo,
   torsoSpan,
 } from '../utils/figure'
-import { type Track, trackAt } from '../utils/glide'
 import { INTRUSION_COLOR, type SceneProps } from '../utils/scene'
-import { bearingTo, lensHeight, lensPoint, watchedPoint } from '../utils/site'
+import { bearingAlongFence, bearingTo, lensHeight, lensPoint, watchedPoint } from '../utils/site'
+import { type Track, trackAt } from '../utils/track'
+import { type LimbPose, turnedTo, walkCycle, walkPhase } from '../utils/walk'
 import { LabelCard } from './label-card'
 import { boxShape, type Profile, turnedShape } from './volumes'
 
@@ -44,9 +45,8 @@ const LINE = { radius: 0.005, glow: 2.5 } as const
 // The marker over its head, which tells it from afar: a pin of light, a thin stem from `clear` above the head
 // up to a gem whose tip is at `top`, three fences high.
 const MARKER = { clear: 0.04, top: 0.8, stem: 0.004, gem: { radius: 0.022, height: 0.07 }, glow: 4 } as const
-// How the figurine stands at rest: its arms a little off its sides, its forearms a little forward, which tells
-// its front from its back. In radians.
-const REST = { lean: 0.07, bend: 0.3 } as const
+// How far off its sides the figurine holds its arms, in radians.
+const LEAN = 0.07
 const TORSO_BEVEL = 0.022
 // How far below its front the sweep that brings the figurine in still shows, as a band of light.
 const BAND = 0.05
@@ -218,6 +218,31 @@ function createFigurine() {
 type Figurine = ReturnType<typeof createFigurine>
 type Triple = readonly [number, number, number]
 
+// What a limb is posed by: the joint it hangs from, and the one its second segment hangs from the first by.
+interface Joints {
+  upper: Group | null
+  lower: Group | null
+}
+
+// What the figurine is posed by: its body, which its hips carry, and its limbs, left then right.
+interface Skeleton {
+  body: Group | null
+  arms: readonly [Joints, Joints]
+  legs: readonly [Joints, Joints]
+}
+
+function createSkeleton(): Skeleton {
+  const joints = (): Joints => ({ upper: null, lower: null })
+  return { body: null, arms: [joints(), joints()], legs: [joints(), joints()] }
+}
+
+// Puts a limb in its pose: it swings forward from its joint, and its second segment folds on the first,
+// `fold` 1 backward like a knee, -1 forward like an elbow.
+function pose({ upper, lower }: Joints, { swing, bend }: LimbPose, fold: 1 | -1) {
+  if (upper) upper.rotation.x = -swing
+  if (lower) lower.rotation.x = fold * bend
+}
+
 // One of the figurine's volumes, at `at`: its shade, then its light.
 function Volume({ drawn, shape, at }: { drawn: Figurine; shape: BufferGeometry; at?: Triple }) {
   return (
@@ -236,37 +261,56 @@ interface LimbProps {
   upper: BufferGeometry
   lower: BufferGeometry
   length: number
-  // How far it leans off the figurine's side, and how far its second segment bends forward. In radians.
+  // How far it leans off the figurine's side, in radians.
   lean?: number
-  bend?: number
+  // Its two joints, for whoever poses it.
+  joints: Joints
 }
 
-// An arm or a leg: two segments, the second jointed to the first.
-function Limb({ drawn, at, upper, lower, length, lean = 0, bend = 0 }: LimbProps) {
+// An arm or a leg: two segments, the second jointed to the first. It hangs straight until it is posed.
+function Limb({ drawn, at, upper, lower, length, lean = 0, joints }: LimbProps) {
   return (
-    <group position={at} rotation={[0, 0, lean]}>
+    <group
+      ref={(joint) => {
+        joints.upper = joint
+      }}
+      position={at}
+      rotation={[0, 0, lean]}
+    >
       <Volume drawn={drawn} shape={upper} />
-      <group position={[0, -length, 0]} rotation={[-bend, 0, 0]}>
+      <group
+        ref={(joint) => {
+          joints.lower = joint
+        }}
+        position={[0, -length, 0]}
+      >
         <Volume drawn={drawn} shape={lower} />
       </group>
     </group>
   )
 }
 
-// Its left, then its right.
-const SIDES = [1, -1] as const
+// Its left, then its right: the side of its axis each is on, and its place among the limbs.
+const SIDES = [
+  { side: 1, limb: 0 },
+  { side: -1, limb: 1 },
+] as const
 
-// The figurine, standing at rest on the ground at its feet and looking down its own z: a head, a torso, two
-// arms and two legs of two segments each, from the maquette's volumes.
-function Standing({ drawn }: { drawn: Figurine }) {
+// The figurine's body, on the ground at its feet and looking down its own z: a head, a torso, two arms and two
+// legs of two segments each, from the maquette's volumes. `skeleton` is what it is posed by.
+function Body({ drawn, skeleton }: { drawn: Figurine; skeleton: Skeleton }) {
   const { hip, thigh, torso, shoulder, upperArm } = FIGURE
   const { shapes } = drawn
 
   return (
-    <>
+    <group
+      ref={(body) => {
+        skeleton.body = body
+      }}
+    >
       <Volume drawn={drawn} shape={shapes.head} at={[0, headBase(), 0]} />
       <Volume drawn={drawn} shape={shapes.torso} at={[0, torsoSpan().base + torso.height / 2, 0]} />
-      {SIDES.map((side) => (
+      {SIDES.map(({ side, limb }) => (
         <Fragment key={side}>
           <Limb
             drawn={drawn}
@@ -274,8 +318,8 @@ function Standing({ drawn }: { drawn: Figurine }) {
             upper={shapes.upperArm}
             lower={shapes.forearm}
             length={upperArm.length}
-            lean={side * REST.lean}
-            bend={REST.bend}
+            lean={side * LEAN}
+            joints={skeleton.arms[limb]}
           />
           <Limb
             drawn={drawn}
@@ -283,10 +327,11 @@ function Standing({ drawn }: { drawn: Figurine }) {
             upper={shapes.thigh}
             lower={shapes.shin}
             length={thigh.length}
+            joints={skeleton.legs[limb]}
           />
         </Fragment>
       ))}
-    </>
+    </group>
   )
 }
 
@@ -306,10 +351,11 @@ export interface IntruderProps {
 // vision service sees, it sees through there. Four brackets frame it like a detection in an image, always
 // facing the Twin's camera, and a label over the marker reads what the model sees and how sure it is of it,
 // « PERSONNE · 88 % »: both are drawn over whatever stands in front of the figurine. As `x_norm` changes the
-// figurine glides along the arc to its new place, the line, the brackets and the label following it. A newly
-// raised intruder appears where it stands, in a sweep from its feet to its head; once the last `intrusion`
-// Alert is cleared, it fades out where it last stood. Unlit and brighter than white, so the halo takes it all
-// for lights. Nothing casts a shadow: the shadows are drawn once, and it moves.
+// figurine walks along the arc to its new place, arms and legs in opposition, turned the way it goes, the
+// line, the brackets and the label following it; once there it comes back to rest and turns to the lens again.
+// A newly raised intruder appears where it stands, at rest, in a sweep from its feet to its head; once the
+// last `intrusion` Alert is cleared, it fades out where it last stood. Unlit and brighter than white, so the
+// halo takes it all for lights. Nothing casts a shadow: the shadows are drawn once, and it moves.
 export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
   const group = useRef<Group>(null)
   const standing = useRef<Group>(null)
@@ -323,6 +369,7 @@ export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
   const shownNow = useFade([intruder ? 1 : 0])
   const drawn = useMemo(createFigurine, [])
   useEffect(() => () => drawn.dispose(), [drawn])
+  const skeleton = useMemo(createSkeleton, [])
   const red = useMemo(() => new Color(INTRUSION_COLOR).multiplyScalar(GLOW), [])
   const lineRed = useMemo(() => new Color(INTRUSION_COLOR).multiplyScalar(LINE.glow), [])
   const lens = useMemo(() => {
@@ -348,7 +395,18 @@ export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
 
     const at = watchedPoint(tracked.x_norm)
     standing.current?.position.set(at.x, 0, at.z)
-    standing.current?.rotation.set(0, bearingTo(at, lens), 0)
+    // It faces the lens at rest and the way it goes in full stride, and turns from one to the other as it gets
+    // into its stride and out of it. Its walk cycle goes by the ground it has covered.
+    const stride = Math.abs(tracked.walking)
+    const toLens = bearingTo(at, lens)
+    const facing = stride === 0 ? toLens : turnedTo(toLens, bearingAlongFence(at, tracked.walking), stride)
+    const walk = walkCycle(walkPhase(tracked.walked), stride)
+    skeleton.body?.position.setY(-walk.drop)
+    skeleton.body?.rotation.set(0, facing, 0)
+    for (const { limb } of SIDES) {
+      pose(skeleton.legs[limb], walk.legs[limb], 1)
+      pose(skeleton.arms[limb], walk.arms[limb], -1)
+    }
     drawn.uniforms.level.value = figurine
     // Past the top of its head, so that the band of light leaves it.
     drawn.uniforms.swept.value = sweptTo(tracked.age) * (figureHeight() + BAND)
@@ -367,7 +425,7 @@ export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
 
     const rod = line.current
     if (!rod) return
-    toHead.set(at.x, headHeight(), at.z).sub(lens)
+    toHead.set(at.x, headHeight() - walk.drop, at.z).sub(lens)
     rod.scale.set(1, toHead.length(), 1)
     rod.quaternion.setFromUnitVectors(UP, toHead.normalize())
   })
@@ -375,7 +433,7 @@ export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
   return (
     <group ref={group} visible={false}>
       <group ref={standing}>
-        <Standing drawn={drawn} />
+        <Body drawn={drawn} skeleton={skeleton} />
         <mesh geometry={drawn.stem} material={drawn.pin} />
         <mesh geometry={drawn.gem} material={drawn.pin} />
         {/* On the arc itself, just above the camera's sector so it does not flicker into it. */}
