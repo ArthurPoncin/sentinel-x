@@ -32,6 +32,13 @@ The main technical risk of Option A, on a Pi 4 that is slower than the Pi 5 the 
 - Train on **nominal data only**, captured Tuesday (2–4 h). No labelled incidents needed.
 - Data quality: the DHT22/MQ-2 sit in their own ventilated compartment, away from the Pi — otherwise the model learns the Pi's inference heat as "thermal drift".
 
+**Without a Sentinel:** `PYTHONPATH=common:predictive .venv/bin/python -m predictive simulate` (from `ai/`, ~3 s) trains on 2 h of synthetic nominal, replays a slow heat + gas drift and prints when the Alert is raised against `THERMAL_WARNING` / `GAS_WARNING` (~43 min ahead), then when it clears.
+- **Vector** (`predictive.features`, the same code for training and live): a 120 s window per Sentinel, scored from 20 snapshots spanning ≥ 60 s — `temp`, `humidity`, `air`, `temp_slope`, `air_slope` (least squares, per minute), `temp_mean`, `air_mean`. A snapshot that is invalid, older than or as old as the last one is dropped.
+- **Model** (`predictive.model`): `StandardScaler` + `IsolationForest` (200 trees, fixed seed); `anomaly_score` is its 0–1 score. Learned levels: raise ≥ quantile 0.999, clear < quantile 0.99 of **held-out** nominal scores — each 10 min block scored by a forest that never saw it; the forest's scores of its own training windows are too kind and gave a false Alert about once a day. Refuses < 100 vectors; saved with joblib, its format version and scikit-learn version, and refused if either differs.
+- **Alert** (`predictive.detector`): `raised` after 5 scores in a row at or above the raise level, `cleared` after 10 in a row under the clear level, a new `alert_id` per episode, `ts` of the snapshot that tipped it; `drivers` as in [`ARCHITECTURE.md`](../docs/ARCHITECTURE.md#alert--sentinelidalert-and-body-of-post-apiv1alerts).
+- **Live:** `Model.load(path)`, one `Monitor(model, sentinel)` per Sentinel, `monitor.push(sample_of(payload))` → an Alert to post, or `None`.
+- The synthetic room is stationary and bounded (ventilation cycles, drafts, probe noise): the Tuesday capture must cover the demo's conditions likewise, or the model will rightly find them odd.
+
 ## Output
 Both jobs → `POST /api/v1/alerts` over the **internal Docker network**, using the unified Alert schema in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#alert--sentinelidalert-and-body-of-post-apiv1alerts). Each service sends its own token (`Authorization: Bearer …`, from its `.env`) and may only post its own `kind` (`intrusion` / `predictive`).
 

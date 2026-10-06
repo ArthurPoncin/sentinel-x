@@ -1,0 +1,4 @@
+# The versions the tests ran with. Wheels exist for the Pi (aarch64): nothing to compile.
+numpy==2.5.3
+scikit-learn==1.9.1
+joblib==1.6.0
