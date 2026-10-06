@@ -34,7 +34,8 @@ cd backend && npm install && OPERATOR_AUTH=off MOCK_FEED=true HISTORY_FILE=:memo
 # terminal 2 — the app on http://localhost:5173 (/ and /twin)
 cd dashboard && npm install && npm run dev
 
-npm test            # store, feed client, config, gas level, scene mapper, fades, automatic orbit, pixel ratio, framing
+npm test            # store, feed client, config, gas level, scene mapper, site plan, steam, fades, automatic orbit,
+                    # pixel ratio, framing
 npm run build       # typecheck + production bundle in dist/
 ```
 
@@ -63,10 +64,14 @@ src/
 │   │   ├── hooks/           # useLiveFeed(selector)
 │   │   ├── components/      # LiveFeedProvider, ConnectionIndicator, FeedInspector
 │   │   └── index.ts         # the feature's public API
-│   └── twin/                # #20, #12, #30, #33, #40 — the 3D Outpost, on its studio stage
-│       ├── components/      # OutpostTwin: the scene, drawn from SceneProps · OrbitCamera · Halo
+│   └── twin/                # #20, #12, #30, #31, #32, #33, #40 — the Outpost as a maquette, on its studio stage
+│       ├── components/      # OutpostTwin: the scene, drawn from SceneProps · Enclosure · OrbitCamera · Halo
+│       │                    # Socle · PowerPlant · Perimeter · Steam: the site, drawn from SITE
+│       │                    # Box · Turned: the bevelled volumes it is built from · palette
 │       ├── hooks/           # usePixelRatio(element) · useFade(target), useColorFade(color)
 │       ├── utils/           # toScene(state): the scene's props, pure · gasLevel(air): 0–1
+│       │                    # SITE: the ground plan · lensPoint() · watchedPoint(xNorm) · fencePosts()
+│       │                    # puffAt(age): a puff of steam's life · ENCLOSURE_PARTS, ENCLOSURE_SHAPE
 │       │                    # autoOrbitSpeed(touch, now) · pixelRatio(density, width, height)
 │       │                    # wholeStageDistance(aspect) · fadeTo(fade, to, now), fadeValue(fade, now)
 │       └── index.ts
@@ -128,24 +133,36 @@ const scene = useMemo(
 ```
 
 - `toScene(state)` turns the live state into what the scene shows, and is all the scene reads: pure, tested without WebGL. It gives the Enclosure's color and glow (gas), what its LCD reads and the color its LED ring breathes in (the Status), the Status's color grade, the drivers to pulse (active `predictive` Alerts), where the intruder stands (last active `intrusion`'s `x_norm`) and whether the signal is lost. The pulse and the intruder are not drawn yet (#13).
-- The `Status` grades the whole scene. At `nominal` the studio keeps its neutral light, and only the perimeter ring, the LCD and the LED ring are green. At `elevated` and `critical` every light takes the Status's color: the whole model is lit in amber, in red. It follows the Command Post's Status, never the readings. The sky stays black on the stage (#30): the grade's `background` is no longer drawn.
-- **Nothing cuts** (#33). A new Status fades in over `FADE_SECONDS` (0.8 s), lights, perimeter ring, LCD and LED ring together, and one that comes during a fade starts from the color on screen. `fadeTo(fade, to, now)` and `fadeValue(fade, now)` are that rule, pure and tested; `useFade` / `useColorFade` run it on every frame.
+- The `Status` grades the whole scene. At `nominal` the studio keeps its neutral light, and only the ring around the socle, the LCD and the LED ring are green. At `elevated` and `critical` every light takes the Status's color: the whole model is lit in amber, in red. It follows the Command Post's Status, never the readings. The sky stays black on the stage (#30): the grade's `background` is no longer drawn.
+- **Nothing cuts** (#33). A new Status fades in over `FADE_SECONDS` (0.8 s), lights, ring around the socle, LCD and LED ring together, and one that comes during a fade starts from the color on screen. `fadeTo(fade, to, now)` and `fadeValue(fade, now)` are that rule, pure and tested; `useFade` / `useColorFade` run it on every frame.
 - **Signal lost** (#33). When the feed closes after having been open, `scene.signalLost` is true until it is open again, the retries in between included: the whole frame fades to grey (`<Halo saturation>`), "Signal lost" shows over the scene and the caption loses its colors, so that a stale state never passes for a live one. Before the first connection there is no signal to lose: the scene is neutral, with no notice. To see it, stop the backend.
 - The Enclosure goes from dark anodized to red as `readings.air` rises, and lights the ground around it. It follows the telemetry, not the Alerts: it moves before any `gas` Alert is raised.
 - `gasLevel(air)` gives the share of the way from calm to critical, 0–1. Its two bounds, `CALM_AIR` (200) and `CRITICAL_AIR` (620), are those of the mock feed: tune them to the MQ-2's calibration when the Sentinel sends its own Readings.
 - What follows the Readings (the Enclosure's gas color and glow) eases toward them (`EASE`): a snapshot a second flows into the next, it does not jump.
 - The feature takes its data as props: `app/routes/twin.tsx` reads the feed, maps it with `toScene` and hands it over. `TwinState` asks for the live-feed state's fields by shape, so a replayed state (time-scrubber) feeds it the same way.
 
+**The site** (#32) is what the Enclosure watches over, and what every reaction is anchored on:
+
+![The Outpost, nominal](../docs/twin/outpost-nominal.png)
+
+- **One ground plan** — `SITE` (`utils/site.ts`) places everything, once: the socle, the generator hall, its two chimneys, the transformer station, the gas tank and the pipe from it to the hall, the fence and its gate, the Enclosure and its camera. Coordinates are scene units from the socle's centre, `x` to the right and `z` to the front; a bearing is an angle around the vertical, 0 to the front. The components only draw what `SITE` says: move a part there, never in a component. Its tests hold the plan together without a render — everything stands on the socle and inside the fence, no two parts on the same ground, the pipe joins the hall to the tank, the Enclosure stands at the gate with nothing of the plant in its field of view.
+- **Who stands where** — the Enclosure is tall enough to throw its shadow across half the socle, and the key light comes from the front right: so it stands on the left by the gate, and the plant on the right, in the light. Keep that in mind before moving either.
+- **Camera sector** — `lensPoint()` is where the Enclosure's lens is over the ground, and `watchedPoint(xNorm)` where its sight meets the fence for what stands at `xNorm` across its image: 0 on the lens's left, 1 on its right (so mirrored when you face the Enclosure). The sector drawn on the ground runs from under the lens to that arc, and the intruder of an `intrusion` Alert belongs on it (#23, #38). The field of view is `SITE.camera.fov`, 60° until the real lens is measured.
+- **Socle** — a disc of terrain cut clean, afloat in the black. Its contour lines are drawn by the terrain's material from a relief that exists only there: the ground stays flat. The Status's ring runs around its rim.
+- **Volumes** — `Box` (bevelled edges) and `Turned` (a profile turned around the vertical, every corner crisp) are what the plant is built from; both cast and receive shadows. No model is loaded.
+- **Materials** — `palette.ts`: graphite and off-white only. Color is kept for the Status and the signals.
+- **Steam** — a slow plume above each chimney, whatever the Status: the plant is idling. `puffAt(age)` is a puff's whole life, pure: it leaves the mouth unseen and is gone when its life ends, so the plume loops without a cut. The puffs are lit, so they take the Status's light and never glow.
+
 **The stage** (#30) is what every later Twin slice is set on:
 
 - **Full screen** — `OutpostTwin` fills its parent. A route that renders a `.stage` gets the whole window under the top bar (`styles.css`); the other routes keep the padded page.
-- **Light** — black background, a key light that casts the soft shadows, a cold rim light from behind, a trace of fill. The key and the fill take the grade's `light`, the rim its `rim`: neutral at `nominal`, the Status's color otherwise. The lights stay put while the camera orbits. Give a new mesh `castShadow` / `receiveShadow`.
-- **Halo** — only what emits light glows. `Halo` draws the scene a second time with its lights off and blurs that image over the frame: set `emissive` + `emissiveIntensity` on a material and it glows in proportion, in its own color; a lit surface never does, however bright. An unlit material (`meshBasicMaterial`) counts as emitting — the perimeter ring glows in the Status's color that way — so use a standard one for anything that should not glow. Its pass is the last to touch the frame: that is also where the frame turns grey when the signal is lost (`saturation`).
+- **Light** — black background, a key light that casts the soft shadows, a cold rim light from behind, a trace of fill. The key and the fill take the grade's `light`, the rim its `rim`: neutral at `nominal`, the Status's color otherwise. The lights stay put while the camera orbits. Give a new mesh `castShadow` / `receiveShadow`. The shadow map is 2048 wide with a blur of 3 since #32: a wider blur shows its grain on the off-white walls. The shadows are drawn once (`StillShadows`), since nothing that casts one moves: after moving a caster, ask for them again with `gl.shadowMap.needsUpdate = true`.
+- **Halo** — only what emits light glows. `Halo` draws the scene a second time with its lights off and blurs that image over the frame: set `emissive` + `emissiveIntensity` on a material and it glows in proportion, in its own color; a lit surface never does, however bright. An unlit material (`meshBasicMaterial`) counts as emitting — the ring around the socle glows in the Status's color that way — so use a standard one for anything that should not glow. Its pass is the last to touch the frame: that is also where the frame turns grey when the signal is lost (`saturation`).
 - **Color** — the frame is rendered in HDR and tone-mapped with `NeutralToneMapping`, which leaves the Status colors as they are.
 - **Camera** — it goes around the Outpost in 80 s. The Operator can turn it and zoom with the mouse, between bounds that keep the Outpost in frame (no panning, never under the ground); 3 s after they let go, the orbit picks up speed again. `autoOrbitSpeed` is that rule, as a pure function.
 - **Resolution** — `pixelRatio` caps the rendering at a pixel ratio of 2 and at 3 million pixels (`MAX_PIXELS`), whatever the screen. That budget was measured on an Iris Xe, where the Twin holds 60 images per second up to about 3.4 million pixels: raise it on a stronger GPU.
 
-**The Enclosure** (#31) — the Sentinel-X product itself, on a mast, at an exaggerated scale (`SCALE`) to stay readable from the back of the room. Built in code from bevelled volumes (`RoundedBoxGeometry`) and canvas-drawn textures, no external model.
+**The Enclosure** (#31) — the Sentinel-X product itself, on a mast, at an exaggerated scale (`ENCLOSURE_SHAPE.scale`) to stay readable from the back of the room. Built in code from bevelled volumes (`RoundedBoxGeometry`) and canvas-drawn textures, no external model.
 
 ![The Enclosure, nominal](../docs/twin/enclosure-nominal.png)
 
@@ -154,14 +171,15 @@ const scene = useMemo(
 - **LCD:** shows `scene.enclosure.lcd.text` (`LCD_TEXT`: `NOMINAL`, `ELEVATED`, `CRITICAL`) in the Status's color. The text switches like a real LCD's, the color fades. Unlit, so it glows.
 - **LED ring:** breathes in the Status's color, one breath every `BREATH_PERIOD` (4 s), never below `BREATH_FLOOR` — `breath(t)` is pure and tested. The kit has no LED any more (`docs/ARCHITECTURE.md`): on the Twin, the ring is the Status light.
 - **Gas:** the body carries the glow of #20, and lights the ground from inside it.
+- **Where it stands:** the site plan says (`SITE.enclosure`: the foot of its mast, the way it faces), and `OutpostTwin` puts it there. What the plan needs of its shape is in `ENCLOSURE_SHAPE` (`utils/enclosure-parts.ts`), which the model is drawn from: its scale, the radius of its foot, where its lens is. Move the lens there and the camera sector follows.
 - **Camera:** the orbit now turns around the Enclosure's height (`TARGET` y = 1.2).
 
 **Capture mode** (#40) — `/twin?capture` is the Twin alone, to be filmed for the teaser:
 
 - **No interface** — no top bar, no connection indicator, no caption: the canvas takes the whole window, on black. `captureMode(location)` reads the parameter (being there is enough, whatever its value); without it `/twin` is the normal view.
 - **Same feed** — mock or live, it plays what the normal view plays.
-- **Whole in frame** — `<OutpostTwin wholeStage />` stands the camera back until the whole stage holds in the frame, whatever its shape: `wholeStageDistance(aspect)` fits a sphere around the stage (`STAGE_RADIUS`, the perimeter ring plus room for its halo) in the narrower field of view, so it holds all the way around the orbit and at any tilt. The camera can still be turned by hand; it no longer zooms.
-- Anything added to the stage further out than the perimeter ring needs a larger `STAGE_RADIUS`.
+- **Whole in frame** — `<OutpostTwin wholeStage />` stands the camera back until the whole stage holds in the frame, whatever its shape: `wholeStageDistance(aspect)` fits a sphere around the stage (`STAGE_RADIUS`, the ring around the socle plus room for its halo) in the narrower field of view, so it holds all the way around the orbit and at any tilt. The camera can still be turned by hand; it no longer zooms.
+- Anything added to the stage further out than the ring around the socle needs a larger `STAGE_RADIUS`.
 
 ## TODO
 - [x] App shell + live feed (WebSocket client, store, hook) — #10
@@ -174,6 +192,7 @@ const scene = useMemo(
 - [x] The Enclosure, with its LCD and LED ring alive — #31
 - [x] Status fades and "signal lost" — #33
 - [x] Capture mode for the teaser (`/twin?capture`) — #40
+- [x] The Outpost as a maquette: socle, micro power plant, perimeter, camera sector — #32
 - [ ] Intruder placement (`x_norm` → perimeter arc), pulse — #13, #23
 - [ ] Time-scrubber + scenario mode — #15
 - [ ] CI: build + smoke render — #16

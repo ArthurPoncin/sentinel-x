@@ -13,11 +13,11 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { useColorFade } from '../hooks/use-fade'
 import { breath } from '../utils/breathing'
 import { EASE, ease } from '../utils/easing'
-import { ENCLOSURE_PARTS, ENGRAVING } from '../utils/enclosure-parts'
+import { ENCLOSURE_PARTS, ENCLOSURE_SHAPE, ENGRAVING } from '../utils/enclosure-parts'
 import { GAS_COLOR, type SceneProps } from '../utils/scene'
 
 // The Enclosure stands on a mast at an exaggerated scale, to stay readable from the back of the room.
-const SCALE = 1.25
+const SCALE = ENCLOSURE_SHAPE.scale
 const MAST_HEIGHT = 1.15
 const BODY = { width: 1.4, height: 1, depth: 0.9 } as const
 // The Probe compartment (0.34 high, 0.02 under the body) sits right on the mast.
@@ -113,12 +113,12 @@ function Engraving() {
 // The camera: a lens barrel and its glass, the eye the vision service sees through.
 function CameraLens() {
   return (
-    <group name={ENCLOSURE_PARTS.camera} position={[-0.38, -0.17, FRONT]}>
+    <group name={ENCLOSURE_PARTS.camera} position={[ENCLOSURE_SHAPE.lens.x, -0.17, FRONT]}>
       <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0.05]} castShadow>
         <cylinderGeometry args={[0.14, 0.15, 0.1, 48]} />
         <meshStandardMaterial color="#4a5562" metalness={0.8} roughness={0.3} />
       </mesh>
-      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0.1]}>
+      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, ENCLOSURE_SHAPE.lens.z - FRONT]}>
         <cylinderGeometry args={[0.1, 0.1, 0.012, 48]} />
         <meshStandardMaterial color="#13304f" metalness={0.6} roughness={0.12} />
       </mesh>
@@ -297,7 +297,7 @@ export function Enclosure({ color, glow, lcd, ring }: SceneProps['enclosure']) {
     <group scale={SCALE}>
       {/* Foot and mast */}
       <mesh position={[0, 0.03, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[0.42, 0.48, 0.06, 48]} />
+        <cylinderGeometry args={[0.42, ENCLOSURE_SHAPE.foot, 0.06, 48]} />
         <meshStandardMaterial {...TRIM} />
       </mesh>
       <mesh position={[0, MAST_HEIGHT / 2, 0]} castShadow>
