@@ -1,5 +1,6 @@
 // The Enclosure's parts that react, by the name they carry in the scene: the later Twin slices find
-// and drive them by it (scene.getObjectByName), the predictive pulse, the PIR flash, the alarm.
+// and drive them by it (scene.getObjectByName), the PIR flash, the alarm. The predictive pulse names the
+// Probes it drives by their key here (DRIVER_PROBES, scene.ts).
 export const ENCLOSURE_PARTS = {
   // Probes
   dht22: 'probe-dht22',

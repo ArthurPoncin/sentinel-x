@@ -1,20 +1,23 @@
 import { useFrame } from '@react-three/fiber'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import {
   CanvasTexture,
   Color,
+  type Group,
   MathUtils,
+  type Mesh,
   type MeshBasicMaterial,
-  type MeshStandardMaterial,
+  MeshStandardMaterial,
   type PointLight,
   SRGBColorSpace,
 } from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
-import { useColorFade } from '../hooks/use-fade'
+import { useColorFade, useFade } from '../hooks/use-fade'
 import { breath } from '../utils/breathing'
 import { EASE, ease } from '../utils/easing'
 import { ENCLOSURE_PARTS, ENCLOSURE_SHAPE, ENGRAVING } from '../utils/enclosure-parts'
-import { GAS_COLOR, type SceneProps } from '../utils/scene'
+import { pulse } from '../utils/pulse'
+import { DRIFT_COLOR, type DriftingProbe, GAS_COLOR, type SceneProps } from '../utils/scene'
 
 // The Enclosure stands on a mast at an exaggerated scale, to stay readable from the back of the room.
 const SCALE = ENCLOSURE_SHAPE.scale
@@ -177,9 +180,43 @@ function MicGrille() {
   )
 }
 
+// How bright a pulsing Probe emits at the top of a beat.
+const PULSE_GLOW = 3
+// What every material of a Probe carries to pulse with: the drift's color, dark until it does.
+const DRIFT = { emissive: DRIFT_COLOR, emissiveIntensity: 0 } as const
+
+interface ProbeProps {
+  part: DriftingProbe
+  pulsing: boolean
+  position: [x: number, y: number, z: number]
+  children: ReactNode
+}
+
+// A Probe in its compartment, under its name in the scene. While the predictive model says it drifts, the
+// whole of it emits the drift's color in beats, and the halo takes it for a light. The pulse comes and goes
+// in a fade.
+function Probe({ part, pulsing, position, children }: ProbeProps) {
+  const parts = useRef<Group>(null)
+  const pulsingNow = useFade([pulsing ? 1 : 0])
+
+  useFrame(({ clock }) => {
+    const glow = PULSE_GLOW * (pulsingNow()[0] ?? 0) * pulse(clock.elapsedTime)
+    parts.current?.traverse((object) => {
+      const material = (object as Mesh).material
+      if (material instanceof MeshStandardMaterial) material.emissiveIntensity = glow
+    })
+  })
+
+  return (
+    <group ref={parts} name={ENCLOSURE_PARTS[part]} position={position}>
+      {children}
+    </group>
+  )
+}
+
 // Under the body, the ventilated compartment that keeps the Probes away from the electronics' heat:
-// louvres front and back, the DHT22 and the MQ-2 visible between them.
-function ProbeCompartment() {
+// louvres front and back, the DHT22 and the MQ-2 visible between them. Those of `pulses` pulse.
+function ProbeCompartment({ pulses }: Pick<SceneProps['enclosure'], 'pulses'>) {
   const height = 0.34
   const louvres = [-0.11, -0.04, 0.03, 0.1]
 
@@ -208,29 +245,29 @@ function ProbeCompartment() {
         )),
       )}
       {/* DHT22: the white perforated case */}
-      <group name={ENCLOSURE_PARTS.dht22} position={[-0.22, -0.02, 0.05]}>
+      <Probe part="dht22" pulsing={pulses.includes('dht22')} position={[-0.22, -0.02, 0.05]}>
         <mesh castShadow>
           <boxGeometry args={[0.15, 0.22, 0.07]} />
-          <meshStandardMaterial color="#f1efe8" roughness={0.6} />
+          <meshStandardMaterial color="#f1efe8" roughness={0.6} {...DRIFT} />
         </mesh>
         {[-0.05, -0.01, 0.03, 0.07].map((y) => (
           <mesh key={y} position={[0, y, 0.036]}>
             <boxGeometry args={[0.1, 0.012, 0.002]} />
-            <meshStandardMaterial color="#9c9a93" />
+            <meshStandardMaterial color="#9c9a93" {...DRIFT} />
           </mesh>
         ))}
-      </group>
+      </Probe>
       {/* MQ-2: the steel mesh can on its blue board */}
-      <group name={ENCLOSURE_PARTS.mq2} position={[0.22, -0.06, 0.05]}>
+      <Probe part="mq2" pulsing={pulses.includes('mq2')} position={[0.22, -0.06, 0.05]}>
         <mesh position={[0, -0.05, 0]} castShadow>
           <boxGeometry args={[0.2, 0.012, 0.16]} />
-          <meshStandardMaterial color="#1f4fa8" roughness={0.6} />
+          <meshStandardMaterial color="#1f4fa8" roughness={0.6} {...DRIFT} />
         </mesh>
         <mesh position={[0, 0.02, 0]} castShadow>
           <cylinderGeometry args={[0.07, 0.07, 0.13, 32]} />
-          <meshStandardMaterial color="#b9c0c6" metalness={0.85} roughness={0.35} />
+          <meshStandardMaterial color="#b9c0c6" metalness={0.85} roughness={0.35} {...DRIFT} />
         </mesh>
-      </group>
+      </Probe>
     </group>
   )
 }
@@ -273,8 +310,8 @@ function Crown({ color }: SceneProps['enclosure']['ring']) {
 
 // The Sentinel-X product: a dark bevelled module on a mast, its Probes and actuators each a part of its
 // own (ENCLOSURE_PARTS). The body turns red and glows as gas rises; the LCD shows the Status and the
-// LED ring breathes in its color.
-export function Enclosure({ color, glow, lcd, ring }: SceneProps['enclosure']) {
+// LED ring breathes in its color; the Probes the predictive model says are drifting pulse.
+export function Enclosure({ color, glow, lcd, ring, pulses }: SceneProps['enclosure']) {
   const body = useRef<MeshStandardMaterial>(null)
   const light = useRef<PointLight>(null)
   const target = useMemo(() => new Color(color), [color])
@@ -321,7 +358,7 @@ export function Enclosure({ color, glow, lcd, ring }: SceneProps['enclosure']) {
         <PirDome />
         <MicGrille />
         <Engraving />
-        <ProbeCompartment />
+        <ProbeCompartment pulses={pulses} />
         <Crown {...ring} />
         {/* What the gas throws on the ground around the Enclosure: from inside the body, it lights what
             is around without burning its own faces. */}

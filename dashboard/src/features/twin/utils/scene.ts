@@ -1,5 +1,6 @@
 import { STATUS_COLORS } from '@/shared/config/status-colors'
 import type { Alert, StatusLevel, Telemetry } from '@/shared/contract'
+import type { EnclosurePart } from './enclosure-parts'
 import { gasLevel } from './gas-level'
 
 // What the Twin reads of the live feed: the fields of the live-feed state it needs, by shape, so
@@ -36,10 +37,13 @@ export interface SceneProps {
     lcd: { text: string; color: string }
     // The color the LED ring breathes in: the Status's.
     ring: { color: string }
+    // The Probes that pulse: those the `drivers` of the active `predictive` Alerts say are drifting, each once.
+    pulses: readonly DriftingProbe[]
   }
   status: StatusGrade
-  // The signals an active `predictive` Alert says are drifting (its `drivers`), each once.
-  pulses: readonly string[]
+  // The zone of the perimeter the camera watches, its sector on the ground: lit while an `intrusion` Alert
+  // is active, wherever the intruder stands in it.
+  sector: { lit: boolean }
   // Where the last raised of the active `intrusion` Alerts places the intruder, 0 = left, 1 = right.
   intruder: { x_norm: number } | null
   // The feed was open and no longer is: the scene shows what it last knew, not the Outpost as it is now.
@@ -53,6 +57,19 @@ export const GAS_COLOR = STATUS_COLORS.critical
 // the Status.
 export const NEUTRAL_LIGHT = '#ffffff'
 export const NEUTRAL_RIM = '#9dbcff'
+// What the camera's sector lights in on an intrusion.
+export const INTRUSION_COLOR = STATUS_COLORS.critical
+// What a drifting Probe pulses in: an orange of its own, to be told from the amber of an elevated Status.
+export const DRIFT_COLOR = '#ff6a1a'
+
+// The Probes the predictive model watches, by their key in ENCLOSURE_PARTS.
+export type DriftingProbe = Extract<EnclosurePart, 'dht22' | 'mq2'>
+
+// The Probe each `driver` of a `predictive` Alert is read from. A driver that is not here pulses nothing.
+export const DRIVER_PROBES: ReadonlyMap<string, DriftingProbe> = new Map([
+  ['temp_slope', 'dht22'],
+  ['air_slope', 'mq2'],
+])
 
 // A Status that is not nominal colors every light: the whole model is lit in it, whatever side it is seen from.
 function inStatusColor(level: Exclude<StatusLevel, 'nominal'>, background: string): StatusGrade {
@@ -94,10 +111,15 @@ export const LCD_TEXT: Readonly<Record<StatusLevel, string>> = {
 // The live state as the scene shows it: pure, no WebGL, so it is tested without a render.
 export function toScene(state: TwinState): SceneProps {
   const glow = gasLevel(state.latestTelemetry?.readings.air ?? null)
-  const pulses = new Set<string>()
+  const pulses = new Set<DriftingProbe>()
   let intruder: SceneProps['intruder'] = null
   for (const alert of state.activeAlerts) {
-    if (alert.kind === 'predictive') for (const driver of alert.detail.drivers) pulses.add(driver)
+    if (alert.kind === 'predictive') {
+      for (const driver of alert.detail.drivers) {
+        const probe = DRIVER_PROBES.get(driver)
+        if (probe) pulses.add(probe)
+      }
+    }
     if (alert.kind === 'intrusion') intruder = { x_norm: alert.detail.x_norm }
   }
 
@@ -109,9 +131,10 @@ export function toScene(state: TwinState): SceneProps {
       glow,
       lcd: { text: LCD_TEXT[state.status], color: status.perimeter },
       ring: { color: status.perimeter },
+      pulses: [...pulses],
     },
     status,
-    pulses: [...pulses],
+    sector: { lit: intruder !== null },
     intruder,
     // Not open is not enough: before the first connection, and while that one is still being tried,
     // there is no signal to have lost. After it, a retry in progress is still a signal lost.

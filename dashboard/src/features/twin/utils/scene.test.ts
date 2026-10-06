@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { STATUS_COLORS } from '@/shared/config/status-colors'
 import type { Alert, StatusLevel } from '@/shared/contract'
+import { ENCLOSURE_PARTS } from './enclosure-parts'
 import { CALM_AIR, CRITICAL_AIR } from './gas-level'
 import {
   CALM_COLOR,
+  DRIFT_COLOR,
+  DRIVER_PROBES,
   GAS_COLOR,
   LCD_TEXT,
   mix,
@@ -76,9 +79,10 @@ describe('toScene', () => {
         glow: 0,
         lcd: { text: 'NOMINAL', color: STATUS_GRADES.nominal.perimeter },
         ring: { color: STATUS_GRADES.nominal.perimeter },
+        pulses: [],
       },
       status: STATUS_GRADES.nominal,
-      pulses: [],
+      sector: { lit: false },
       intruder: null,
       signalLost: false,
     })
@@ -172,12 +176,54 @@ describe('toScene', () => {
     expect(lost).toEqual({ ...live, signalLost: true })
   })
 
-  it('pulses the drivers of the active predictive Alerts, each once', () => {
-    const scene = toScene(
-      state({ activeAlerts: [predictive('p1', ['temp_slope', 'air_slope']), gas, predictive('p2', ['air_slope'])] }),
-    )
+  const pulsesFor = (...activeAlerts: Alert[]) => toScene(state({ activeAlerts })).enclosure.pulses
 
-    expect(scene.pulses).toEqual(['temp_slope', 'air_slope'])
+  it('pulses the Probe a predictive Alert says is drifting: the DHT22 on temp_slope, the MQ-2 on air_slope', () => {
+    expect(pulsesFor(predictive('p1', ['temp_slope']))).toEqual(['dht22'])
+    expect(pulsesFor(predictive('p1', ['air_slope']))).toEqual(['mq2'])
+  })
+
+  it('pulses nothing without an active predictive Alert, whatever else is raised', () => {
+    expect(pulsesFor()).toEqual([])
+    expect(pulsesFor(gas, intrusion('i1', 0.2))).toEqual([])
+  })
+
+  it('pulses the Probes of every active predictive Alert, each once', () => {
+    expect(pulsesFor(predictive('p1', ['temp_slope', 'air_slope']), gas, predictive('p2', ['air_slope']))).toEqual([
+      'dht22',
+      'mq2',
+    ])
+  })
+
+  it('names the Probes it pulses as the Enclosure does', () => {
+    for (const probe of DRIVER_PROBES.values()) expect(ENCLOSURE_PARTS).toHaveProperty(probe)
+  })
+
+  it('pulses nothing on a driver it does not know, and still pulses the others', () => {
+    expect(pulsesFor(predictive('p1', ['humidity_slope', 'constructor']))).toEqual([])
+    expect(pulsesFor(predictive('p1', ['humidity_slope', 'air_slope']))).toEqual(['mq2'])
+    expect(pulsesFor(predictive('p1', []))).toEqual([])
+  })
+
+  it('pulses in a color of its own, not a Status color', () => {
+    expect(Object.values(STATUS_COLORS)).not.toContain(DRIFT_COLOR)
+  })
+
+  it('lights the camera sector while an intrusion Alert is active, wherever the intruder stands', () => {
+    expect(toScene(state({ activeAlerts: [intrusion('i1', 0.15)] })).sector).toEqual({ lit: true })
+    expect(toScene(state({ activeAlerts: [gas, intrusion('i1', 0.75)] })).sector).toEqual({ lit: true })
+  })
+
+  it('leaves the camera sector dark without an intrusion Alert: before one is raised, once it is cleared', () => {
+    // A cleared Alert is no longer among the active ones: the store takes it out.
+    expect(toScene(state()).sector).toEqual({ lit: false })
+    expect(toScene(state({ activeAlerts: [gas, predictive('p1', ['air_slope'])] })).sector).toEqual({ lit: false })
+  })
+
+  it('keeps the camera sector lit until the last of several intrusions is cleared', () => {
+    expect(toScene(state({ activeAlerts: [intrusion('i1', 0.2), intrusion('i2', 0.7)] })).sector.lit).toBe(true)
+    expect(toScene(state({ activeAlerts: [intrusion('i2', 0.7)] })).sector.lit).toBe(true)
+    expect(toScene(state({ activeAlerts: [] })).sector.lit).toBe(false)
   })
 
   it('places the intruder of the last raised intrusion Alert', () => {

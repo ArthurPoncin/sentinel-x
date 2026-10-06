@@ -1,5 +1,14 @@
+import { useFrame } from '@react-three/fiber'
 import { memo, useLayoutEffect, useMemo, useRef } from 'react'
-import { BufferGeometry, Float32BufferAttribute, type InstancedMesh, Object3D } from 'three'
+import {
+  BufferGeometry,
+  Float32BufferAttribute,
+  type InstancedMesh,
+  type MeshStandardMaterial,
+  Object3D,
+} from 'three'
+import { useFade } from '../hooks/use-fade'
+import { INTRUSION_COLOR, type SceneProps } from '../utils/scene'
 import { fencePosts, type GroundPoint, halfGate, lensPoint, SITE, watchedPoint } from '../utils/site'
 import { OFF_WHITE, STEEL } from './palette'
 import { Box } from './volumes'
@@ -78,10 +87,23 @@ const ARC_STEPS = 32
 const LINE = 0.014
 // How opaque the sector is under the lens, and where it reaches the fence.
 const SHADE = { lens: 0.15, fence: 0.03 }
+// How bright the lit sector emits, before its opacity: the field is a wash of light, the line its edge.
+const LIT = { field: 6, line: 4 }
 
 // The camera's field of view, drawn on the ground: a sector from under the lens to the arc of the fence
-// where `x_norm` places the intruder. Neutral until an intrusion lights it.
-function CameraSector() {
+// where `x_norm` places the intruder. Neutral until an intrusion lights it: it then emits the intrusion's
+// color, so the halo takes it for a light, and goes out when the Alert is cleared. Both in a fade.
+function CameraSector({ lit }: SceneProps['sector']) {
+  const fieldMaterial = useRef<MeshStandardMaterial>(null)
+  const lineMaterial = useRef<MeshStandardMaterial>(null)
+  const litNow = useFade([lit ? 1 : 0])
+
+  useFrame(() => {
+    const level = litNow()[0] ?? 0
+    if (fieldMaterial.current) fieldMaterial.current.emissiveIntensity = level * LIT.field
+    if (lineMaterial.current) lineMaterial.current.emissiveIntensity = level * LIT.line
+  })
+
   const [field, outline] = useMemo(() => {
     const lens = lensPoint()
     const arc = Array.from({ length: ARC_STEPS + 1 }, (_, step) => watchedPoint(step / ARC_STEPS))
@@ -117,21 +139,46 @@ function CameraSector() {
     // Just above the ground, the line just above the field, so neither flickers into the other.
     <group position={[0, 0.004, 0]}>
       <mesh geometry={field} renderOrder={1} receiveShadow>
-        <meshStandardMaterial color={OFF_WHITE} roughness={1} vertexColors transparent depthWrite={false} />
+        <meshStandardMaterial
+          ref={fieldMaterial}
+          color={OFF_WHITE}
+          roughness={1}
+          emissive={INTRUSION_COLOR}
+          emissiveIntensity={0}
+          vertexColors
+          transparent
+          depthWrite={false}
+        />
       </mesh>
       <mesh geometry={outline} position={[0, 0.002, 0]} renderOrder={2} receiveShadow>
-        <meshStandardMaterial color={OFF_WHITE} roughness={1} vertexColors transparent opacity={0.5} depthWrite={false} />
+        <meshStandardMaterial
+          ref={lineMaterial}
+          color={OFF_WHITE}
+          roughness={1}
+          emissive={INTRUSION_COLOR}
+          emissiveIntensity={0}
+          vertexColors
+          transparent
+          opacity={0.5}
+          depthWrite={false}
+        />
       </mesh>
     </group>
   )
 }
 
-// The Outpost's perimeter: the fence around the site and, on the ground, what the camera watches of it.
-export const Perimeter = memo(function Perimeter() {
+export interface PerimeterProps {
+  // Whether the camera's sector is lit: an intrusion is going on in it.
+  sectorLit: boolean
+}
+
+// The Outpost's perimeter: the fence around the site and, on the ground, what the camera watches of it,
+// which lights up on an intrusion.
+export const Perimeter = memo(function Perimeter({ sectorLit }: PerimeterProps) {
   return (
     <group>
       <Fence />
-      <CameraSector />
+      <CameraSector lit={sectorLit} />
     </group>
   )
 })
