@@ -10,11 +10,11 @@ const STATE_LABEL = { all: 'Toutes', raised: 'Levées', cleared: 'Résolues' } a
 
 // shadcn has no native select here: a plain one, dressed as its Input.
 const selectClass =
-  'h-8 rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 [&>option]:bg-popover'
+  'h-8 w-full rounded-lg sm:w-auto border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 [&>option]:bg-popover'
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className={cn('flex min-w-0 flex-col gap-1.5', className)}>
       <span className="text-xs text-muted-foreground">{label}</span>
       {children}
     </div>
@@ -26,17 +26,18 @@ export function AlertLogFilters({ filter, onChange }: { filter: LogFilter; onCha
   const set = (patch: Partial<LogFilter>) => onChange({ ...filter, ...patch })
 
   return (
-    <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
-      <Field label="Heures">
+    // On a phone, two columns, hours and severity across both; from sm on, one row that wraps.
+    <div className="grid grid-cols-2 items-end gap-3 sm:flex sm:flex-wrap sm:gap-x-4">
+      <Field label="Heures" className="col-span-2 sm:col-auto">
         <div className="flex items-center gap-1.5">
-          <Input type="time" aria-label="De" className="w-28" value={filter.from} onChange={(e) => set({ from: e.target.value })} />
+          <Input type="time" aria-label="De" className="min-w-0 flex-1 sm:w-28 sm:flex-none" value={filter.from} onChange={(e) => set({ from: e.target.value })} />
           <span className="text-sm text-muted-foreground">à</span>
-          <Input type="time" aria-label="À" className="w-28" value={filter.to} onChange={(e) => set({ to: e.target.value })} />
+          <Input type="time" aria-label="À" className="min-w-0 flex-1 sm:w-28 sm:flex-none" value={filter.to} onChange={(e) => set({ to: e.target.value })} />
         </div>
       </Field>
 
-      <Field label="Gravité">
-        <div className="flex gap-1.5" role="group" aria-label="Gravité">
+      <Field label="Gravité" className="col-span-2 sm:col-auto">
+        <div className="grid grid-cols-3 gap-1.5 sm:flex" role="group" aria-label="Gravité">
           {SeveritySchema.options.map((severity) => {
             const on = filter.severities.includes(severity)
             return (
@@ -103,7 +104,7 @@ export function AlertLogFilters({ filter, onChange }: { filter: LogFilter; onCha
         </select>
       </Field>
 
-      <Button size="sm" variant="ghost" className="h-8" disabled={!isFiltering(filter)} onClick={() => onChange(NO_FILTER)}>
+      <Button size="sm" variant="ghost" className="col-span-2 h-8 sm:col-auto" disabled={!isFiltering(filter)} onClick={() => onChange(NO_FILTER)}>
         Réinitialiser
       </Button>
     </div>
