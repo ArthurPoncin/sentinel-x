@@ -46,6 +46,9 @@ export interface SceneProps {
   sector: { lit: boolean }
   // Where the last raised of the active `intrusion` Alerts places the intruder, 0 = left, 1 = right.
   intruder: { x_norm: number } | null
+  // Someone is near the site: a `presence` Alert is active. The Enclosure's PIR dome blinks and an amber
+  // sweep goes round the fence for as long.
+  presence: { active: boolean }
   // The feed was open and no longer is: the scene shows what it last knew, not the Outpost as it is now.
   signalLost: boolean
 }
@@ -59,6 +62,8 @@ export const NEUTRAL_LIGHT = '#ffffff'
 export const NEUTRAL_RIM = '#9dbcff'
 // What the camera's sector lights in on an intrusion.
 export const INTRUSION_COLOR = STATUS_COLORS.critical
+// What the PIR dome blinks in and the fence is swept in on a presence: the amber of a warning.
+export const PRESENCE_COLOR = STATUS_COLORS.elevated
 // What a drifting Probe pulses in: an orange of its own, to be told from the amber of an elevated Status.
 export const DRIFT_COLOR = '#ff6a1a'
 
@@ -113,7 +118,9 @@ export function toScene(state: TwinState): SceneProps {
   const glow = gasLevel(state.latestTelemetry?.readings.air ?? null)
   const pulses = new Set<DriftingProbe>()
   let intruder: SceneProps['intruder'] = null
+  let present = false
   for (const alert of state.activeAlerts) {
+    if (alert.kind === 'presence') present = true
     if (alert.kind === 'predictive') {
       for (const driver of alert.detail.drivers) {
         const probe = DRIVER_PROBES.get(driver)
@@ -136,6 +143,7 @@ export function toScene(state: TwinState): SceneProps {
     status,
     sector: { lit: intruder !== null },
     intruder,
+    presence: { active: present },
     // Not open is not enough: before the first connection, and while that one is still being tried,
     // there is no signal to have lost. After it, a retry in progress is still a signal lost.
     signalLost: state.connectedOnce && state.connection !== 'open',

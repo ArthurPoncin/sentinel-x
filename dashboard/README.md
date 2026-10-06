@@ -35,7 +35,7 @@ cd backend && npm install && OPERATOR_AUTH=off MOCK_FEED=true HISTORY_FILE=:memo
 cd dashboard && npm install && npm run dev
 
 npm test            # store, feed client, config, gas level, scene mapper, site plan, steam, fades, pulse,
-                    # automatic orbit, pixel ratio, framing
+                    # presence sweep, automatic orbit, pixel ratio, framing
 npm run build       # typecheck + production bundle in dist/
 ```
 
@@ -64,17 +64,19 @@ src/
 │   │   ├── hooks/           # useLiveFeed(selector)
 │   │   ├── components/      # LiveFeedProvider, ConnectionIndicator, FeedInspector
 │   │   └── index.ts         # the feature's public API
-│   └── twin/                # #20, #12, #30, #31, #32, #33, #40, #13 — the Outpost as a maquette, on its studio stage
+│   └── twin/                # #20, #12, #30, #31, #32, #33, #40, #13, #36 — the Outpost as a maquette, on its studio stage
 │       ├── components/      # OutpostTwin: the scene, drawn from SceneProps · Enclosure · OrbitCamera · Halo
 │       │                    # Socle · PowerPlant · Perimeter · Steam: the site, drawn from SITE
 │       │                    # Box · Turned: the bevelled volumes it is built from · palette
-│       ├── hooks/           # usePixelRatio(element) · useFade(target), useColorFade(color)
+│       ├── hooks/           # usePixelRatio(element) · useFade(target), useColorFade(color) · useSweep(present)
 │       ├── utils/           # toScene(state): the scene's props, pure · gasLevel(air): 0–1
 │       │                    # SITE: the ground plan · lensPoint() · watchedPoint(xNorm) · fencePosts()
 │       │                    # puffAt(age): a puff of steam's life · ENCLOSURE_PARTS, ENCLOSURE_SHAPE
 │       │                    # autoOrbitSpeed(touch, now) · pixelRatio(density, width, height)
 │       │                    # wholeStageDistance(aspect) · fadeTo(fade, to, now), fadeValue(fade, now)
 │       │                    # DRIVER_PROBES: driver → Probe · pulse(t): a drifting Probe's beat
+│       │                    # sweepsAt(sweeps, present, now), lapAt(sweeps, now): the fence's sweeps on a presence
+│       │                    # sweepGlow(place, lap) · domeFlash(lap)
 │       └── index.ts
 └── shared/
     ├── contract/            # re-exports backend/src/contract.ts — never redeclare a schema
@@ -133,7 +135,7 @@ const scene = useMemo(
 <OutpostTwin scene={scene} />
 ```
 
-- `toScene(state)` turns the live state into what the scene shows, and is all the scene reads: pure, tested without WebGL. It gives the Enclosure's color and glow (gas), what its LCD reads and the color its LED ring breathes in (the Status), the Probes to pulse (active `predictive` Alerts), the Status's color grade, whether the camera sector is lit (an active `intrusion`), where the intruder stands (last active `intrusion`'s `x_norm`) and whether the signal is lost. The intruder itself is not drawn yet (#23).
+- `toScene(state)` turns the live state into what the scene shows, and is all the scene reads: pure, tested without WebGL. It gives the Enclosure's color and glow (gas), what its LCD reads and the color its LED ring breathes in (the Status), the Probes to pulse (active `predictive` Alerts), the Status's color grade, whether the camera sector is lit (an active `intrusion`), where the intruder stands (last active `intrusion`'s `x_norm`), whether someone is near the site (an active `presence`) and whether the signal is lost. The intruder itself is not drawn yet (#23).
 - The `Status` grades the whole scene. At `nominal` the studio keeps its neutral light, and only the ring around the socle, the LCD and the LED ring are green. At `elevated` and `critical` every light takes the Status's color: the whole model is lit in amber, in red. It follows the Command Post's Status, never the readings. The sky stays black on the stage (#30): the grade's `background` is no longer drawn.
 - **Nothing cuts** (#33). A new Status fades in over `FADE_SECONDS` (0.8 s), lights, ring around the socle, LCD and LED ring together, and one that comes during a fade starts from the color on screen. `fadeTo(fade, to, now)` and `fadeValue(fade, now)` are that rule, pure and tested; `useFade` / `useColorFade` run it on every frame.
 - **Signal lost** (#33). When the feed closes after having been open, `scene.signalLost` is true until it is open again, the retries in between included: the whole frame fades to grey (`<Halo saturation>`), "Signal lost" shows over the scene and the caption loses its colors, so that a stale state never passes for a live one. Before the first connection there is no signal to lose: the scene is neutral, with no notice. To see it, stop the backend.
@@ -152,6 +154,17 @@ const scene = useMemo(
 - **Predictive drift** — an active `predictive` Alert names what drifts in `detail.drivers`, and `DRIVER_PROBES` gives the Probe each one is read from: `temp_slope` → the DHT22, `air_slope` → the MQ-2. `scene.enclosure.pulses` lists them, each once; a driver that is not in `DRIVER_PROBES` pulses nothing. Those Probes emit `DRIFT_COLOR` in beats, an orange of its own that is not a Status color, so it shows at `nominal` as well as in the amber of `elevated`. `pulse(t)` is the beat, pure and tested: one every `PULSE_PERIOD` (1.2 s), never below `PULSE_FLOOR`.
 - Both come and go in a fade (`useFade`), like everything in the Twin, and both glow: they are emissive, so the halo takes them for lights.
 - **What it does not show yet** — the Probes sit in their compartment, which is open front and back only: seen from the Enclosure's side, the pulse is hidden behind the compartment's cheek until the orbit comes round. The label of #39 is what will say it from every side.
+
+**Presence** (#36) — the site knows it is approached before anyone is inside:
+
+![The PIR dome lit and the amber sweep on the fence](../docs/twin/presence-sweep.png)
+
+- While a `presence` Alert is active, `scene.presence.active` is true: the Enclosure's PIR dome blinks and a sweep goes round the fence, both in `PRESENCE_COLOR`, the amber of the `elevated` Status.
+- **The sweep** leaves the gate's first post as the Alert is raised and reaches the last one `SWEEP_PERIOD` (2.4 s) later: a bright head and a tail behind it (`SWEEP_TAIL`, a share of the fence). Another follows, for as long as the Alert is active. `sweepGlow(place, lap)` is how bright the fence is at each place along it, `lap` of the way through a sweep.
+- **The dome** flashes `FLASHES_PER_SWEEP` (4) times in a sweep, lit for as long as it is dark: `domeFlash(lap)`. A blink has steep edges, but each takes a few frames.
+- **Once it is cleared** the sweep in progress goes to its end and no other starts; a presence that comes back before that end keeps it going. `sweepsAt(sweeps, present, now)` is that rule and `lapAt(sweeps, now)` how far through its sweep the fence is; `useSweep(present)` runs them on every frame, for the fence and for the dome. All of it is pure and tested.
+- **No fade here**: the fence and the dome are both dark as a sweep starts and as it ends, so one sweep follows another, and the last one stops, without a cut. On the mock feed the Alert lasts 2 s: one sweep, which ends 0.4 s after the `cleared`.
+- The sweep is light added over the posts and the rails, unlit: it glows, and it still reads at `elevated`, when the whole model is lit in amber. That is when it shows: a `presence` Alert is a warning, so it takes the Status there on its own.
 
 **The site** (#32) is what the Enclosure watches over, and what every reaction is anchored on:
 
@@ -179,7 +192,7 @@ const scene = useMemo(
 ![The Enclosure, nominal](../docs/twin/enclosure-nominal.png)
 
 - **Front:** the LCD band, then the camera lens, the PIR dome, the mic grille. **Under the body:** the ventilated Probe compartment, louvres front and back, the DHT22 and the MQ-2 visible between them. **On top:** the buzzer and the LED ring around it. **Right side:** the engraving, *AetherCorp / SENTINEL-X / serial* (`ENGRAVING`).
-- **Parts to drive:** every Probe and actuator is a named object — `scene.getObjectByName(ENCLOSURE_PARTS.mq2)` — for the later slices: PIR flash, alarm on `ledRing` / `buzzer`. The predictive pulse (#13) drives `dht22` and `mq2` from `scene.enclosure.pulses`.
+- **Parts to drive:** every Probe and actuator is a named object — `scene.getObjectByName(ENCLOSURE_PARTS.mq2)` — for the later slices: alarm on `ledRing` / `buzzer`. The predictive pulse (#13) drives `dht22` and `mq2` from `scene.enclosure.pulses`, the presence (#36) blinks `pir`.
 - **LCD:** shows `scene.enclosure.lcd.text` (`LCD_TEXT`: `NOMINAL`, `ELEVATED`, `CRITICAL`) in the Status's color. The text switches like a real LCD's, the color fades. Unlit, so it glows.
 - **LED ring:** breathes in the Status's color, one breath every `BREATH_PERIOD` (4 s), never below `BREATH_FLOOR` — `breath(t)` is pure and tested. The kit has no LED any more (`docs/ARCHITECTURE.md`): on the Twin, the ring is the Status light.
 - **Gas:** the body carries the glow of #20, and lights the ground from inside it.
@@ -206,6 +219,7 @@ const scene = useMemo(
 - [x] Capture mode for the teaser (`/twin?capture`) — #40
 - [x] The Outpost as a maquette: socle, micro power plant, perimeter, camera sector — #32
 - [x] Intrusion zone lit, predictive pulse on the drifting Probes — #13
+- [x] Presence: PIR dome blinking, amber sweep round the fence — #36
 - [ ] Intruder placement (`x_norm` → perimeter arc) — #23
 - [ ] Time-scrubber + scenario mode — #15
 - [ ] CI: build + smoke render — #16

@@ -12,6 +12,7 @@ import {
   mix,
   NEUTRAL_LIGHT,
   NEUTRAL_RIM,
+  PRESENCE_COLOR,
   STATUS_GRADES,
   type TwinState,
   toScene,
@@ -63,6 +64,10 @@ function predictive(alertId: string, drivers: string[]): Alert {
 
 const gas: Alert = { ...base, alert_id: 'g1', source: 'esp32', kind: 'gas', severity: 'warning', detail: {} }
 
+function presence(alertId: string): Alert {
+  return { ...base, alert_id: alertId, source: 'esp32', kind: 'presence', severity: 'warning', detail: {} }
+}
+
 describe('mix', () => {
   it('goes from one color to the other', () => {
     expect(mix('#000000', '#ffffff', 0)).toBe('#000000')
@@ -84,6 +89,7 @@ describe('toScene', () => {
       status: STATUS_GRADES.nominal,
       sector: { lit: false },
       intruder: null,
+      presence: { active: false },
       signalLost: false,
     })
   })
@@ -231,6 +237,29 @@ describe('toScene', () => {
     expect(toScene(state({ activeAlerts: [intrusion('i1', 0.2), gas, intrusion('i2', 0.7)] })).intruder).toEqual({
       x_norm: 0.7,
     })
+  })
+
+  const presenceFor = (...activeAlerts: Alert[]) => toScene(state({ activeAlerts })).presence
+
+  it('shows a presence while a presence Alert is active, whatever else is raised', () => {
+    expect(presenceFor(presence('p1'))).toEqual({ active: true })
+    expect(presenceFor(gas, presence('p1'), intrusion('i1', 0.2))).toEqual({ active: true })
+  })
+
+  it('shows no presence without a presence Alert: before one is raised, once it is cleared', () => {
+    // A cleared Alert is no longer among the active ones: the store takes it out.
+    expect(presenceFor()).toEqual({ active: false })
+    expect(presenceFor(gas, intrusion('i1', 0.2), predictive('d1', ['air_slope']))).toEqual({ active: false })
+  })
+
+  it('shows a presence until the last of several presence Alerts is cleared', () => {
+    expect(presenceFor(presence('p1'), presence('p2')).active).toBe(true)
+    expect(presenceFor(presence('p2')).active).toBe(true)
+    expect(presenceFor().active).toBe(false)
+  })
+
+  it('shows a presence in amber, the color of the elevated Status', () => {
+    expect(PRESENCE_COLOR).toBe(STATUS_COLORS.elevated)
   })
 
   it('does not change the state it is given', () => {
