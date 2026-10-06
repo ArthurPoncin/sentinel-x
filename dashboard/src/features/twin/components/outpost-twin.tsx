@@ -98,7 +98,8 @@ export interface OutpostTwinProps {
 
 // The Outpost in 3D: a maquette of the site on its socle, lit like a product in a studio on a black
 // background. The Status grades the light and the ring around the socle; the Enclosure, at the site's
-// entrance, turns red as gas rises, shows the Status on its LCD and breathes it on its LED ring. Without its
+// entrance, turns red as gas rises, shows the Status on its LCD and breathes it on its LED ring. An intrusion
+// lights the camera's sector on the ground; a predictive drift pulses the Probes it names. Without its
 // signal it all turns grey and says so: what it shows is no longer live. It fills its parent: give that the
 // size the Twin should have on screen.
 export function OutpostTwin({ scene, wholeStage = false }: OutpostTwinProps) {
@@ -121,7 +122,7 @@ export function OutpostTwin({ scene, wholeStage = false }: OutpostTwinProps) {
         <StillShadows />
         <Socle />
         <PowerPlant />
-        <Perimeter />
+        <Perimeter sectorLit={scene.sector.lit} />
         {/* Where the site plan stands it, turned the way its lens looks. */}
         <group position={[SITE.enclosure.x, 0, SITE.enclosure.z]} rotation={[0, SITE.enclosure.heading, 0]}>
           <Enclosure {...scene.enclosure} />
