@@ -1,4 +1,3 @@
-import { BellOff, Lightbulb, LightbulbOff, Siren } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import type { Command } from '@/shared/contract'
@@ -7,14 +6,6 @@ import { Button } from '@/shared/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/shared/ui/card'
 import { sendCommand } from '../api/commands-client'
 import { buildCommand, type Preset, type PresetId, PRESETS } from '../utils/commands'
-
-const ICON: Record<PresetId, typeof Siren> = {
-  siren: Siren,
-  'buzzer-off': BellOff,
-  'led-red': Lightbulb,
-  'led-green': Lightbulb,
-  'leds-off': LightbulbOff,
-}
 
 const byId = (id: PresetId) => PRESETS.find((preset) => preset.id === id) as Preset
 
@@ -38,10 +29,8 @@ export function ActuatorPanel({ sentinel, className }: { sentinel: string | null
 
   const button = (id: PresetId, variant: 'outline' | 'destructive' = 'outline', className?: string) => {
     const preset = byId(id)
-    const Icon = ICON[id]
     return (
       <Button variant={variant} className={className} disabled={sentinel === null || pending !== null} onClick={() => press(preset)}>
-        <Icon />
         {pending === id ? 'Envoi…' : preset.label}
       </Button>
     )

@@ -9,16 +9,19 @@ const LABEL: Record<ConnectionState, string> = {
 }
 
 const DOT: Record<ConnectionState, string> = {
-  connecting: 'bg-elevated',
-  open: 'bg-nominal',
-  closed: 'bg-critical',
+  connecting: 'text-elevated',
+  open: 'text-nominal',
+  closed: 'text-critical',
 }
 
+// Whether the feed is live, in the top bar: a colored dot and the word, at full strength.
 export function ConnectionIndicator() {
   const connection = useLiveFeed((state) => state.connection)
   return (
-    <span className="flex items-center gap-2 text-sm text-muted-foreground" data-connection={connection}>
-      <span className={cn('size-1.5 rounded-full', DOT[connection])} />
+    <span className="flex items-center gap-1.5 font-medium" data-connection={connection}>
+      <span aria-hidden className={cn(DOT[connection], connection === 'connecting' && 'animate-pulse')}>
+        ●
+      </span>
       {LABEL[connection]}
     </span>
   )

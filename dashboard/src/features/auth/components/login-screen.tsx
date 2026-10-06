@@ -1,4 +1,3 @@
-import { Shield } from 'lucide-react'
 import { type FormEvent, useState } from 'react'
 import { Button } from '@/shared/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/card'
@@ -29,12 +28,7 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
 
   return (
     <div className="flex min-h-svh flex-col items-center justify-center gap-6 p-6">
-      <div className="flex items-center gap-2 font-medium">
-        <div className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
-          <Shield className="size-4" />
-        </div>
-        Sentinel-X
-      </div>
+      <span className="text-lg font-bold tracking-[0.08em]">Sentinel-X</span>
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
           <CardTitle className="text-xl">Connexion opérateur</CardTitle>

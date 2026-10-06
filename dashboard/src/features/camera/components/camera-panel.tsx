@@ -1,4 +1,3 @@
-import { CameraOff, ScanEye } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { LevelBadge } from '@/shared/components/level-badge'
 import type { Alert } from '@/shared/contract'
@@ -57,7 +56,6 @@ export function CameraPanel({ intrusion, className }: { intrusion: Intrusion | n
 
           {feed !== 'live' && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
-              <CameraOff className="size-6" />
               {feed === 'loading' ? 'Connexion à la caméra…' : 'Flux caméra indisponible, nouvelle tentative…'}
             </div>
           )}
@@ -66,7 +64,9 @@ export function CameraPanel({ intrusion, className }: { intrusion: Intrusion | n
             <>
               <div className="absolute inset-y-0 w-px bg-critical" style={{ left: `${intrusion.detail.x_norm * 100}%` }} />
               <Badge className="absolute top-3 left-3 bg-background/90 text-foreground">
-                <ScanEye className="text-critical" />
+                <span aria-hidden className="text-critical">
+                  ●
+                </span>
                 Intrus détecté · {Math.round(intrusion.detail.confidence * 100)} %
               </Badge>
             </>

@@ -13,7 +13,7 @@ import { captureMode } from '@/shared/config/capture-mode'
 // a clap sends a wave from the Enclosure over the socle. When the feed drops, it all turns grey: nothing here
 // is live any more. The time-scrubber replays a past Incident or the scripted scenario in it, second by second,
 // labelled REPLAY: the Twin is then rebuilt from the replayed frames, not the live ones.
-// With `?capture` it is the Twin alone, on the same feed: no sidebar, no header, no caption, no scrubber, the whole stage
+// With `?capture` it is the Twin alone, on the same feed: no top bar, no caption, no scrubber, the whole stage
 // held in frame, to be filmed in a vertical window for the teaser.
 export function TwinRoute() {
   const capture = captureMode(useLocation())
