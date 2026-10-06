@@ -13,11 +13,13 @@ import {
 } from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { useColorFade, useFade } from '../hooks/use-fade'
+import { useSweep } from '../hooks/use-sweep'
 import { breath } from '../utils/breathing'
 import { EASE, ease } from '../utils/easing'
 import { ENCLOSURE_PARTS, ENCLOSURE_SHAPE, ENGRAVING } from '../utils/enclosure-parts'
+import { domeFlash } from '../utils/presence'
 import { pulse } from '../utils/pulse'
-import { DRIFT_COLOR, type DriftingProbe, GAS_COLOR, type SceneProps } from '../utils/scene'
+import { DRIFT_COLOR, type DriftingProbe, GAS_COLOR, PRESENCE_COLOR, type SceneProps } from '../utils/scene'
 
 // The Enclosure stands on a mast at an exaggerated scale, to stay readable from the back of the room.
 const SCALE = ENCLOSURE_SHAPE.scale
@@ -133,8 +135,20 @@ function CameraLens() {
   )
 }
 
-// The PIR's faceted white dome.
-function PirDome() {
+// How bright the PIR dome emits at the top of a flash.
+const PIR_GLOW = 3
+
+// The PIR's faceted white dome. While someone is near the site it blinks in the presence's amber, in time
+// with the sweep of the fence: it starts with the first sweep and goes dark as the last one ends.
+function PirDome({ presence }: Pick<EnclosureProps, 'presence'>) {
+  const dome = useRef<MeshStandardMaterial>(null)
+  const lapNow = useSweep(presence)
+
+  useFrame(() => {
+    const lap = lapNow()
+    if (dome.current) dome.current.emissiveIntensity = lap === null ? 0 : PIR_GLOW * domeFlash(lap)
+  })
+
   return (
     <group position={[0.02, -0.19, FRONT]}>
       <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0.012]}>
@@ -143,7 +157,14 @@ function PirDome() {
       </mesh>
       <mesh name={ENCLOSURE_PARTS.pir} rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0.024]} castShadow>
         <sphereGeometry args={[0.105, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2]} />
-        <meshStandardMaterial color="#e9e6de" roughness={0.55} flatShading />
+        <meshStandardMaterial
+          ref={dome}
+          color="#e9e6de"
+          roughness={0.55}
+          flatShading
+          emissive={PRESENCE_COLOR}
+          emissiveIntensity={0}
+        />
       </mesh>
     </group>
   )
@@ -308,10 +329,16 @@ function Crown({ color }: SceneProps['enclosure']['ring']) {
   )
 }
 
+export type EnclosureProps = SceneProps['enclosure'] & {
+  // Whether someone is near the site: a `presence` Alert is active.
+  presence: boolean
+}
+
 // The Sentinel-X product: a dark bevelled module on a mast, its Probes and actuators each a part of its
 // own (ENCLOSURE_PARTS). The body turns red and glows as gas rises; the LCD shows the Status and the
-// LED ring breathes in its color; the Probes the predictive model says are drifting pulse.
-export function Enclosure({ color, glow, lcd, ring, pulses }: SceneProps['enclosure']) {
+// LED ring breathes in its color; the Probes the predictive model says are drifting pulse; the PIR dome
+// blinks while someone is near.
+export function Enclosure({ color, glow, lcd, ring, pulses, presence }: EnclosureProps) {
   const body = useRef<MeshStandardMaterial>(null)
   const light = useRef<PointLight>(null)
   const target = useMemo(() => new Color(color), [color])
@@ -355,7 +382,7 @@ export function Enclosure({ color, glow, lcd, ring, pulses }: SceneProps['enclos
         </mesh>
         <Lcd {...lcd} />
         <CameraLens />
-        <PirDome />
+        <PirDome presence={presence} />
         <MicGrille />
         <Engraving />
         <ProbeCompartment pulses={pulses} />

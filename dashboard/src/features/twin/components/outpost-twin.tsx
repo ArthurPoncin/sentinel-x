@@ -99,9 +99,10 @@ export interface OutpostTwinProps {
 // The Outpost in 3D: a maquette of the site on its socle, lit like a product in a studio on a black
 // background. The Status grades the light and the ring around the socle; the Enclosure, at the site's
 // entrance, turns red as gas rises, shows the Status on its LCD and breathes it on its LED ring. An intrusion
-// lights the camera's sector on the ground; a predictive drift pulses the Probes it names. Without its
-// signal it all turns grey and says so: what it shows is no longer live. It fills its parent: give that the
-// size the Twin should have on screen.
+// lights the camera's sector on the ground; a predictive drift pulses the Probes it names; a presence blinks
+// the Enclosure's PIR dome and sends an amber sweep round the fence. Without its signal it all turns grey
+// and says so: what it shows is no longer live. It fills its parent: give that the size the Twin should have
+// on screen.
 export function OutpostTwin({ scene, wholeStage = false }: OutpostTwinProps) {
   const frame = useRef<HTMLDivElement>(null)
   const dpr = usePixelRatio(frame)
@@ -122,10 +123,10 @@ export function OutpostTwin({ scene, wholeStage = false }: OutpostTwinProps) {
         <StillShadows />
         <Socle />
         <PowerPlant />
-        <Perimeter sectorLit={scene.sector.lit} />
+        <Perimeter sectorLit={scene.sector.lit} presence={scene.presence.active} />
         {/* Where the site plan stands it, turned the way its lens looks. */}
         <group position={[SITE.enclosure.x, 0, SITE.enclosure.z]} rotation={[0, SITE.enclosure.heading, 0]}>
-          <Enclosure {...scene.enclosure} />
+          <Enclosure {...scene.enclosure} presence={scene.presence.active} />
         </group>
         <OrbitCamera wholeStage={wholeStage} />
         <Halo saturation={scene.signalLost ? 0 : 1} />
