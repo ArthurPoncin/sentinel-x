@@ -95,10 +95,16 @@ export const DRIFT_COLOR = '#ff6a1a'
 // The Probes the predictive model watches, by their key in ENCLOSURE_PARTS.
 export type DriftingProbe = Extract<EnclosurePart, 'dht22' | 'mq2'>
 
-// The Probe each `driver` of a `predictive` Alert is read from. A driver that is not here pulses nothing.
+// The Probe each `driver` of a `predictive` Alert is read from: the model's 7 features, the closed vocabulary
+// of docs/ARCHITECTURE.md. A driver that is not here pulses nothing.
 export const DRIVER_PROBES: ReadonlyMap<string, DriftingProbe> = new Map([
+  ['temp', 'dht22'],
   ['temp_slope', 'dht22'],
+  ['temp_mean', 'dht22'],
+  ['humidity', 'dht22'],
+  ['air', 'mq2'],
   ['air_slope', 'mq2'],
+  ['air_mean', 'mq2'],
 ])
 
 // What the label over the drifting Probes reads: the model's score, as the Alert gives it, to two decimals.

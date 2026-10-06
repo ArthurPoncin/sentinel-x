@@ -279,9 +279,24 @@ describe('toScene', () => {
 
   const pulsesFor = (...activeAlerts: Alert[]) => toScene(state({ activeAlerts })).enclosure.pulses
 
-  it('pulses the Probe a predictive Alert says is drifting: the DHT22 on temp_slope, the MQ-2 on air_slope', () => {
-    expect(pulsesFor(predictive('p1', ['temp_slope']))).toEqual(['dht22'])
-    expect(pulsesFor(predictive('p1', ['air_slope']))).toEqual(['mq2'])
+  // The model's 7 features, the closed vocabulary of `drivers` (docs/ARCHITECTURE.md), and the Probe each is
+  // read from.
+  const FEATURE_PROBES = [
+    ['temp', 'dht22'],
+    ['temp_slope', 'dht22'],
+    ['temp_mean', 'dht22'],
+    ['humidity', 'dht22'],
+    ['air', 'mq2'],
+    ['air_slope', 'mq2'],
+    ['air_mean', 'mq2'],
+  ] as const
+
+  it.each(FEATURE_PROBES)('pulses the Probe a predictive Alert says is drifting: on %s, the %s', (driver, probe) => {
+    expect(pulsesFor(predictive('p1', [driver]))).toEqual([probe])
+  })
+
+  it('knows the drivers the model can name, and no other', () => {
+    expect(Object.fromEntries(DRIVER_PROBES)).toEqual(Object.fromEntries(FEATURE_PROBES))
   })
 
   it('pulses nothing without an active predictive Alert, whatever else is raised', () => {
@@ -294,6 +309,8 @@ describe('toScene', () => {
       'dht22',
       'mq2',
     ])
+    expect(pulsesFor(predictive('p1', ['temp_mean', 'temp', 'humidity']))).toEqual(['dht22'])
+    expect(pulsesFor(predictive('p1', ['air_mean', 'air', 'temp']))).toEqual(['mq2', 'dht22'])
   })
 
   it('names the Probes it pulses as the Enclosure does', () => {
@@ -313,6 +330,11 @@ describe('toScene', () => {
       score: 0.91,
       label: 'dérive · score 0.91',
     })
+  })
+
+  it('labels the drift of an Alert that names a Reading or a mean, not only a slope', () => {
+    expect(driftFor(predictive('p1', ['temp'], 0.83))?.label).toBe('dérive · score 0.83')
+    expect(driftFor(predictive('p1', ['air_mean'], 0.77))?.label).toBe('dérive · score 0.77')
   })
 
   it('gives the score to two decimals', () => {
