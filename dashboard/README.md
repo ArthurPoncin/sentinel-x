@@ -13,7 +13,7 @@ The face of Sentinel-X and our **"wow" centerpiece**. See [`../docs/DIGITAL-TWIN
 - Reactive control panel to trigger the actuator (buzzer) remotely — `POST /api/v1/commands`.
 
 ## Security
-- **Operator login** screen; every view, the WebSocket (`wss://`) and the camera feed sit behind the session.
+- **Operator login** screen; every view, the WebSocket (`wss://`) and the camera feed sit behind the session. A session that ends brings the login screen back — see [Operator session](#operator-session--featuresauth).
 - No token or secret in the front-end bundle.
 
 ## Our extra — the Digital Twin
@@ -62,7 +62,7 @@ Run the backend with `OPERATOR_AUTH=on` (and an `OPERATOR_PASSWORD_HASH`) to get
 src/
 ├── main.tsx
 ├── app/                     # composition only: shell, router, routes
-│   ├── app.tsx              # LiveFeedProvider + router
+│   ├── app.tsx              # AuthGate + LiveFeedProvider + router
 │   ├── router.tsx           # /  and  /twin (lazy)
 │   ├── layout.tsx
 │   └── routes/              # operator.tsx, twin.tsx — assemble features, no logic
@@ -73,7 +73,8 @@ src/
 │   │   ├── hooks/           # useLiveFeed(selector)
 │   │   ├── components/      # LiveFeedProvider, ConnectionIndicator
 │   │   └── index.ts         # the feature's public API
-│   ├── auth/                # AuthGate (login screen until a session exists), useSignOut()
+│   ├── auth/                # #48 — AuthGate (login screen until a session exists, and again once it is gone)
+│   │                        # useSignOut(), useSessionCheck() · afterCheck(session, answer): pure
 │   ├── status/              # StatusCard, StatusBadge — the Status the backend computes
 │   ├── telemetry/           # #21 #11 — ReadingTiles, Gas / Climate / Sound charts, toSeries()
 │   ├── alerts/              # #11 — ActiveAlerts, AlertLog (+ filters: filterLog()), AlertToasts
@@ -114,7 +115,7 @@ src/
 └── shared/
     ├── contract/            # re-exports backend/src/contract.ts — never redeclare a schema
     ├── config/              # feedUrl() · captureMode() · STATUS_COLORS
-    ├── api/                 # getJson / postJson on the app's own origin
+    ├── api/                 # getJson / postJson on the app's own origin · onUnauthorized(listener): a 401
     ├── lib/                 # cn(), French labels, Status/severity colors, fr-FR formats · paginate(), inOrder()
     ├── components/          # LevelBadge: the outline badge with a colored dot · Pager, SortByTime
     ├── hooks/               # use-mobile (shadcn sidebar)
@@ -157,6 +158,23 @@ const history = useLiveFeed((state) => state.history)                // every fr
 - `connection` is the socket as it is now (`connecting`, `open`, `closed`), `connectedOnce` whether it has ever been open. Together they tell a signal lost (not open any more) from a first connection still being tried.
 - Types come from `@/shared/contract`: `Telemetry`, `Alert`, `Status`, `Frame`…
 - The Status colors are defined once, in `shared/config/status-colors.ts` (`STATUS_COLORS`). `main.tsx` hands them to the stylesheet as `--nominal`, `--elevated` and `--critical`; the Twin lights its scene with the same.
+
+## Operator session — `features/auth`
+
+```tsx
+import { AuthGate, useSessionCheck, useSignOut } from '@/features/auth'
+
+<AuthGate>{/* the login screen until there is a session: nothing below mounts without one */}</AuthGate>
+const signOut = useSignOut()             // POST /api/v1/auth/logout, then the login screen
+const checkSession = useSessionCheck()   // asks GET /api/v1/auth/check again
+```
+
+- **At load**, `GET /api/v1/auth/check`: `204` → the app, anything else → the login screen, on `/` as on `/twin`. `POST /api/v1/auth/login`: `204` lets in and the feed opens; `401` « Mot de passe incorrect. », `429` « Trop de tentatives. Patientez une minute. » (5 tries a minute), no answer « Le poste de commande est injoignable. ». **Se déconnecter**, at the foot of the sidebar, signs out.
+- **A session that ends** (#48) — after 12 h, or when the API restarts (it keeps its sessions in memory) — brings the login screen back, and everything under the gate stops with it: the feed no longer retries. Two things say the session is gone:
+  - **the feed going down.** A socket that closes does not say why, so `app.tsx` asks for the session again each time (`LiveFeedProvider`'s `onDown` → `useSessionCheck()`). `401` → the login screen. `204`, or no answer at all (the Command Post is out of reach, or restarting behind its proxy) → still in: the Twin says "Signal lost" and the feed keeps retrying. `afterCheck(session, answer)` is that rule, pure and tested.
+  - **any call the API answers `401`** (`onUnauthorized` in `shared/api/http.ts`): the Incidents asked for every 15 s on `/`, a command.
+- **Not covered** — a socket already open outlives its session: the API checks the session when the socket opens, not after. On `/twin`, where nothing else is asked through `shared/api`, the login screen comes back when that socket drops.
+- With `OPERATOR_AUTH=off` the check always answers `204`: nothing changes in development.
 
 ## Digital Twin — `features/twin`
 
@@ -333,11 +351,11 @@ const shown = player.frames ? stateAfter(player.frames) : liveState   // replaye
 - **Live or replay** — always one label at the top left of the stage: `LIVE`, or `REPLAY · Incident #1 · 14:23:12` on a solid violet (`--replay`, a color no Status shares), the whole stage framed in it and the caption showing the replayed Status and gas. **Back to live** leaves the replay; the Twin never goes back on its own.
 - **Scenario mode** — **Play the scenario** plays `scenario(now)`: the reference scenario, scripted (60 s: 5 s of calm, the 50 s Incident, 5 s of calm), one telemetry snapshot a second with the gas rising to 680 and the PIR on while someone is there. It plays the same every time without the network, and is labelled REPLAY like any other.
 - **Not in capture mode** — `/twin?capture` shows neither the label nor the scrubber.
-- **Not yet** — the last N minutes of history (`GET /api/v1/history`) as one free timeline, rather than Incident by Incident. With `OPERATOR_AUTH` on, the Command Post answers only to a session: until the login screen exists, the scrubber falls back on this window's Incidents.
+- **Not yet** — the last N minutes of history (`GET /api/v1/history`) as one free timeline, rather than Incident by Incident.
 
 ## TODO
 - [x] App shell + live feed (WebSocket client, store, hook) — #10
-- [x] Operator login screen (`POST /api/v1/auth/login`, `GET /api/v1/auth/check`)
+- [x] Operator login screen (`POST /api/v1/auth/login`, `GET /api/v1/auth/check`), back when the session ends — #48
 - [x] Charts + Status + Alerts — #21, #11
 - [x] Camera panel + actuator control panel — #14 (the `/camera` route in the reverse proxy and the firmware's siren pattern name are still to agree on)
 - [x] 3D Outpost whose Enclosure reacts to gas — #20
