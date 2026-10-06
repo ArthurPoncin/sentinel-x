@@ -35,7 +35,7 @@ cd backend && npm install && OPERATOR_AUTH=off MOCK_FEED=true HISTORY_FILE=:memo
 cd dashboard && npm install && npm run dev
 
 npm test            # store, feed client, config, gas level, scene mapper, site plan, steam, haze, Alarm, fades,
-                    # pulse, presence sweep, automatic orbit, pixel ratio, framing
+                    # pulse, presence sweep, noise wave, automatic orbit, pixel ratio, framing
 npm run build       # typecheck + production bundle in dist/
 ```
 
@@ -64,12 +64,14 @@ src/
 │   │   ├── hooks/           # useLiveFeed(selector)
 │   │   ├── components/      # LiveFeedProvider, ConnectionIndicator, FeedInspector
 │   │   └── index.ts         # the feature's public API
-│   └── twin/                # #20, #12, #30, #31, #32, #33, #40, #13, #36, #34 — the Outpost as a maquette, on its studio stage
+│   └── twin/                # #20, #12, #30, #31, #32, #33, #40, #13, #36, #34, #37 — the Outpost as a maquette, on its studio stage
 │       ├── components/      # OutpostTwin: the scene, drawn from SceneProps · Enclosure · OrbitCamera · Halo
 │       │                    # Socle · PowerPlant · Perimeter · Steam: the site, drawn from SITE
 │       │                    # Haze: the gas around the pipe · VapourMaterial: what steam and haze are made of
+│       │                    # NoiseWaves: a clap's wave over the socle
 │       │                    # Box · Turned: the bevelled volumes it is built from · palette
 │       ├── hooks/           # usePixelRatio(element) · useFade(target), useColorFade(color) · useSweep(present)
+│       │                    # useWaves(frames)
 │       ├── utils/           # toScene(state): the scene's props, pure · gasLevel(air): 0–1
 │       │                    # SITE: the ground plan · lensPoint() · watchedPoint(xNorm) · fencePosts()
 │       │                    # alongPipe(share) · puffAt(age): a puff of steam's life · wispAt(age): a wisp
@@ -79,6 +81,8 @@ src/
 │       │                    # DRIVER_PROBES: driver → Probe · pulse(t): a drifting Probe's beat
 │       │                    # sweepsAt(sweeps, present, now), lapAt(sweeps, now): the fence's sweeps on a presence
 │       │                    # sweepGlow(place, lap) · domeFlash(lap)
+│       │                    # framesSince(seen, frames), clapsIn(frames), wavesAt(waves, claps, now): the waves a
+│       │                    # clap sends · waveShape(elapsed, amplitude): a wave's radius, width and glow
 │       └── index.ts
 └── shared/
     ├── contract/            # re-exports backend/src/contract.ts — never redeclare a schema
@@ -134,7 +138,8 @@ const scene = useMemo(
   () => toScene({ connection, connectedOnce, status, latestTelemetry, activeAlerts }),
   [connection, connectedOnce, status, latestTelemetry, activeAlerts],
 )
-<OutpostTwin scene={scene} />
+const history = useLiveFeed((state) => state.history)
+<OutpostTwin scene={scene} frames={history} />
 ```
 
 - `toScene(state)` turns the live state into what the scene shows, and is all the scene reads: pure, tested without WebGL. It gives the Enclosure's color and glow (gas), what its LCD reads and the color its LED ring breathes in (the Status), its Alarm (active `gas` and `thermal` Alerts), the Probes to pulse (active `predictive` Alerts), how thick the haze around the gas pipe is (gas), the Status's color grade, whether the camera sector is lit (an active `intrusion`), where the intruder stands (last active `intrusion`'s `x_norm`), whether someone is near the site (an active `presence`) and whether the signal is lost. The intruder itself is not drawn yet (#23).
@@ -144,7 +149,7 @@ const scene = useMemo(
 - The Enclosure goes from dark anodized to red as `readings.air` rises, and lights the ground around it. It follows the telemetry, not the Alerts: it moves before any `gas` Alert is raised.
 - `gasLevel(air)` gives the share of the way from calm to critical, 0–1. Its two bounds, `CALM_AIR` (200) and `CRITICAL_AIR` (620), are those of the mock feed: tune them to the MQ-2's calibration when the Sentinel sends its own Readings. The Enclosure's glow and the haze both run over that range: it is set there, once.
 - What follows the Readings (the Enclosure's gas color and glow, the haze) eases toward them (`EASE`, `HAZE_EASE`): a snapshot a second flows into the next, it does not jump.
-- The feature takes its data as props: `app/routes/twin.tsx` reads the feed, maps it with `toScene` and hands it over. `TwinState` asks for the live-feed state's fields by shape, so a replayed state (time-scrubber) feeds it the same way.
+- The feature takes its data as props: `app/routes/twin.tsx` reads the feed, maps it with `toScene` and hands it over, with the feed's frames (`frames`) for what is an event rather than a state: a clap. `TwinState` asks for the live-feed state's fields by shape, so a replayed state (time-scrubber) feeds it the same way.
 
 **The threats** (#13) — what the vision and predictive services see, shown on the maquette:
 
@@ -167,6 +172,17 @@ const scene = useMemo(
 - **Once it is cleared** the sweep in progress goes to its end and no other starts; a presence that comes back before that end keeps it going. `sweepsAt(sweeps, present, now)` is that rule and `lapAt(sweeps, now)` how far through its sweep the fence is; `useSweep(present)` runs them on every frame, for the fence and for the dome. All of it is pure and tested.
 - **No fade here**: the fence and the dome are both dark as a sweep starts and as it ends, so one sweep follows another, and the last one stops, without a cut. On the mock feed the Alert lasts 2 s: one sweep, which ends 0.4 s after the `cleared`.
 - The sweep is light added over the posts and the rails, unlit: it glows, and it still reads at `elevated`, when the whole model is lit in amber. That is when it shows: a `presence` Alert is a warning, so it takes the Status there on its own.
+
+**Noise** (#37) — a clap next to the Sentinel, seen on the maquette:
+
+![A clap's wave spreading over the socle](../docs/twin/noise-wave.png)
+
+- **A wave a clap** — each `noise` Alert `raised` sends a wave of light from the foot of the Enclosure's mast over the socle: it spreads for `WAVE_LIFE` (1.5 s), fast as it leaves and slower as it goes, lights up within its first tenth and fades out to nothing as it ends. `waveShape(elapsed, amplitude)` is that envelope — the band's radius, its width, how bright it is — pure and tested.
+- **As loud as the clap** — the amplitude is the Alert's `value` (the share of the cycle the sound sensor heard sound), held to 0–1, and 1 when the Alert does not carry one: `amplitudeOf(value)`. The loudest wave crosses the whole socle (`WAVE_REACH`, from the Enclosure to the farthest point of the rim) at full brightness; the faintest still goes `QUIET_REACH` of the way, at `QUIET_GLOW` of the brightness.
+- **An event, not a state** — a `noise` Alert can be `cleared` on the next cycle, so the wave does not follow the active Alerts: it starts from the `raised` frame itself and plays to its end whatever comes after. `OutpostTwin` takes the feed's history as `frames`; `framesSince(seen, frames)` gives what came in since the last frame, `clapsIn(frames)` the claps among it, `wavesAt(waves, claps, now)` the waves still going plus one for each new clap. Two claps close together give two waves, the second never cuts the first (up to `MAX_WAVES` at once, the oldest going first past that). `useWaves(frames)` runs them on every frame.
+- **Nothing replayed** — the frames already in the history when the Twin opens are past, and so is a history that does not follow on from the last one seen: no wave plays for them. A reconnection only brings the Command Post's snapshot (Status and latest telemetry): it sends no wave either.
+- **Drawn** — one disc over the whole socle, whose shader draws every wave as a band around the Enclosure, sharper at its front than at its back, fading out at the socle's cut edge. In `NOISE_COLOR`, an ice white no Status shares (the Alert is only `info`: something was heard, nothing is wrong), unlit and added over the ground, so the halo takes it for a light and the buildings it passes behind hide it. It is not drawn at all while the site is quiet. Its cost, while a wave is on, is one disc's fragments, twice (the lit frame and the halo's): not measured on the Iris Xe yet, but far below the haze's.
+- **On the real Sentinel** — the firmware raises `noise` once and holds it for `NOISE_HOLD_MS` (3 s) of quiet before clearing it: claps closer than that make one Alert, so one wave. On the mock feed, the clap is raised at 0.82 and cleared on the next tick.
 
 **The site** (#32) is what the Enclosure watches over, and what every reaction is anchored on:
 
@@ -234,6 +250,7 @@ const scene = useMemo(
 - [x] Intrusion zone lit, predictive pulse on the drifting Probes — #13
 - [x] Presence: PIR dome blinking, amber sweep round the fence — #36
 - [x] Gas haze around the pipe, the Alarm on the Enclosure's LED ring and buzzer — #34
+- [x] Noise: a wave from the Enclosure over the socle on each clap — #37
 - [ ] Intruder placement (`x_norm` → perimeter arc) — #23
 - [ ] Time-scrubber + scenario mode — #15
 - [ ] CI: build + smoke render — #16

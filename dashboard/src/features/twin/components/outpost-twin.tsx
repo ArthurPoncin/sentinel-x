@@ -8,6 +8,7 @@ import {
   NeutralToneMapping,
   type SpotLight,
 } from 'three'
+import type { Frame } from '@/shared/contract'
 import { useColorFade } from '../hooks/use-fade'
 import { usePixelRatio } from '../hooks/use-pixel-ratio'
 import { FIELD_OF_VIEW } from '../utils/framing'
@@ -16,6 +17,7 @@ import { SITE } from '../utils/site'
 import { Enclosure } from './enclosure'
 import { Halo } from './halo'
 import { Haze } from './haze'
+import { NoiseWaves } from './noise-waves'
 import { OrbitCamera } from './orbit-camera'
 import { Perimeter } from './perimeter'
 import { PowerPlant } from './power-plant'
@@ -92,6 +94,9 @@ function StillShadows() {
 export interface OutpostTwinProps {
   // What the scene shows, from toScene(state).
   scene: SceneProps
+  // The feed's frames, oldest first, as they come in: a `noise` Alert raised among them sends a wave over the
+  // socle. Those already there as the Twin opens are past: none is replayed.
+  frames: readonly Frame[]
   // Keeps the whole stage in frame whatever the shape of the window, a vertical one included: the camera
   // stands back as far as that takes, and no longer zooms.
   wholeStage?: boolean
@@ -102,10 +107,11 @@ export interface OutpostTwinProps {
 // entrance, turns red as gas rises, shows the Status on its LCD and breathes it on its LED ring. A haze
 // thickens around the gas pipe with the gas, and the Enclosure sounds the Alarm while a `gas` or `thermal`
 // Alert is active. An intrusion lights the camera's sector on the ground; a predictive drift pulses the
-// Probes it names; a presence blinks the Enclosure's PIR dome and sends an amber sweep round the fence.
+// Probes it names; a presence blinks the Enclosure's PIR dome and sends an amber sweep round the fence; a clap
+// sends a wave of light from the Enclosure over the socle.
 // Without its signal it all turns grey and says so: what it shows is no longer live. It fills its parent:
 // give that the size the Twin should have on screen.
-export function OutpostTwin({ scene, wholeStage = false }: OutpostTwinProps) {
+export function OutpostTwin({ scene, frames, wholeStage = false }: OutpostTwinProps) {
   const frame = useRef<HTMLDivElement>(null)
   const dpr = usePixelRatio(frame)
 
@@ -126,6 +132,7 @@ export function OutpostTwin({ scene, wholeStage = false }: OutpostTwinProps) {
         <Socle />
         <PowerPlant />
         <Haze density={scene.haze} />
+        <NoiseWaves frames={frames} />
         <Perimeter sectorLit={scene.sector.lit} presence={scene.presence.active} />
         {/* Where the site plan stands it, turned the way its lens looks. */}
         <group position={[SITE.enclosure.x, 0, SITE.enclosure.z]} rotation={[0, SITE.enclosure.heading, 0]}>
