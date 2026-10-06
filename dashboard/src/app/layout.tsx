@@ -1,6 +1,5 @@
 import { NavLink, Outlet, useLocation, useMatches } from 'react-router'
 import { ConnectionIndicator } from '@/features/live-feed'
-import { cn } from '@/shared/lib/utils'
 import { SidebarInset, SidebarProvider, useSidebar } from '@/shared/ui/sidebar'
 import { AppSidebar } from './app-sidebar'
 import { layoutMode, sidebarOpenFrom } from './layout-mode'
@@ -54,16 +53,18 @@ export function Layout() {
 
   const stage = mode === 'stage'
   return (
-    // The provider wraps the top bar too: its button opens and closes the sidebar.
+    // The provider wraps the top bar too: its button opens and closes the sidebar. The shell is exactly the
+    // window's height and only the page scrolls inside it: the top bar and the sidebar, sign-out included,
+    // stay where they are.
     <SidebarProvider
       defaultOpen={sidebarOpenFrom(document.cookie)}
-      className={cn('flex-col', stage ? 'h-svh overflow-hidden' : 'min-h-svh')}
+      className="h-svh flex-col overflow-hidden"
       style={{ '--sidebar-width': '15rem' } as React.CSSProperties}
     >
       <TopBar />
       <div className="flex min-h-0 flex-1">
         <AppSidebar />
-        <SidebarInset className={cn('min-w-0', stage && 'overflow-hidden')}>
+        <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
           {stage ? (
             // The stage's height: 100% needs a definite box, which a flex-grown one is not: hence the absolute fill.
             <div className="relative min-h-0 flex-1">
@@ -72,8 +73,10 @@ export function Layout() {
               </div>
             </div>
           ) : (
-            <div className="flex flex-1 flex-col p-3 sm:p-4 lg:p-6">
-              <Outlet />
+            <div data-scroll="page" className="min-h-0 flex-1 overflow-y-auto">
+              <div className="flex flex-col p-3 sm:p-4 lg:p-6">
+                <Outlet />
+              </div>
             </div>
           )}
         </SidebarInset>
