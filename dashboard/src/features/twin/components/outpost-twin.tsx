@@ -17,6 +17,7 @@ import { SITE } from '../utils/site'
 import { Enclosure } from './enclosure'
 import { Halo } from './halo'
 import { Haze } from './haze'
+import { Intruder } from './intruder'
 import { NoiseWaves } from './noise-waves'
 import { OrbitCamera } from './orbit-camera'
 import { Perimeter } from './perimeter'
@@ -107,10 +108,11 @@ export interface OutpostTwinProps {
 // entrance, turns red as gas rises, shows the Status on its LCD and breathes it on its LED ring. A haze
 // thickens around the gas pipe with the gas, and the Enclosure sounds the Alarm while a `gas` or `thermal`
 // Alert is active. The generator hall's roof glows red with the heat, and the air ripples above it. An
-// intrusion lights the camera's sector on the ground; a predictive drift pulses the Probes it names; a
-// presence blinks the Enclosure's PIR dome and sends an amber sweep round the fence; a clap sends a wave of
-// light from the Enclosure over the socle. Without its signal it all turns grey and says so: what it shows is
-// no longer live. It fills its parent: give that the size the Twin should have on screen.
+// intrusion lights the camera's sector on the ground and stands the intruder on its arc, where `x_norm` places
+// it; a predictive drift pulses the Probes it names; a presence blinks the Enclosure's PIR dome and sends an
+// amber sweep round the fence; a clap sends a wave of light from the Enclosure over the socle. Without its
+// signal it all turns grey and says so: what it shows is no longer live. It fills its parent: give that the
+// size the Twin should have on screen.
 export function OutpostTwin({ scene, frames, wholeStage = false }: OutpostTwinProps) {
   const frame = useRef<HTMLDivElement>(null)
   const dpr = usePixelRatio(frame)
@@ -134,6 +136,7 @@ export function OutpostTwin({ scene, frames, wholeStage = false }: OutpostTwinPr
         <Haze density={scene.haze} />
         <NoiseWaves frames={frames} />
         <Perimeter sectorLit={scene.sector.lit} presence={scene.presence.active} />
+        <Intruder intruder={scene.intruder} />
         {/* Where the site plan stands it, turned the way its lens looks. */}
         <group position={[SITE.enclosure.x, 0, SITE.enclosure.z]} rotation={[0, SITE.enclosure.heading, 0]}>
           <Enclosure {...scene.enclosure} presence={scene.presence.active} />

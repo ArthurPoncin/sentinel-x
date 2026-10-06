@@ -3,6 +3,7 @@ import type { Alert, Severity, StatusLevel, Telemetry } from '@/shared/contract'
 import type { EnclosurePart } from './enclosure-parts'
 import { gasLevel } from './gas-level'
 import { heatLevel } from './heat-level'
+import { type GroundPoint, watchedPoint } from './site'
 
 // What the Twin reads of the live feed: the fields of the live-feed state it needs, by shape, so
 // the route hands them over without the twin feature importing live-feed.
@@ -57,8 +58,9 @@ export interface SceneProps {
   // The zone of the perimeter the camera watches, its sector on the ground: lit while an `intrusion` Alert
   // is active, wherever the intruder stands in it.
   sector: { lit: boolean }
-  // Where the last raised of the active `intrusion` Alerts places the intruder, 0 = left, 1 = right.
-  intruder: { x_norm: number } | null
+  // The intruder the last raised of the active `intrusion` Alerts sees: where it stands across the camera's
+  // image, 0 = left, 1 = right, and so where on the perimeter, on the arc of the fence the camera watches.
+  intruder: { x_norm: number; at: GroundPoint } | null
   // Someone is near the site: a `presence` Alert is active. The Enclosure's PIR dome blinks and an amber
   // sweep goes round the fence for as long.
   presence: { active: boolean }
@@ -160,7 +162,7 @@ export function toScene(state: TwinState): SceneProps {
         if (probe) pulses.add(probe)
       }
     }
-    if (alert.kind === 'intrusion') intruder = { x_norm: alert.detail.x_norm }
+    if (alert.kind === 'intrusion') intruder = { x_norm: alert.detail.x_norm, at: watchedPoint(alert.detail.x_norm) }
     if (alert.kind === 'gas' || alert.kind === 'thermal') {
       if (alarm === null || SEVERITIES.indexOf(alert.severity) > SEVERITIES.indexOf(alarm)) alarm = alert.severity
     }

@@ -64,11 +64,12 @@ src/
 │   │   ├── hooks/           # useLiveFeed(selector)
 │   │   ├── components/      # LiveFeedProvider, ConnectionIndicator, FeedInspector
 │   │   └── index.ts         # the feature's public API
-│   └── twin/                # #20, #12, #30, #31, #32, #33, #40, #13, #36, #34, #35, #37 — the Outpost as a maquette, on its studio stage
+│   └── twin/                # #20, #12, #30, #31, #32, #33, #40, #13, #36, #34, #35, #37, #23 — the Outpost as a maquette, on its studio stage
 │       ├── components/      # OutpostTwin: the scene, drawn from SceneProps · Enclosure · OrbitCamera · Halo
 │       │                    # Socle · PowerPlant · Perimeter · Steam: the site, drawn from SITE
 │       │                    # Haze: the gas around the pipe · VapourMaterial: what steam and haze are made of
 │       │                    # HeatShimmer: the hot air above the hall · NoiseWaves: a clap's wave over the socle
+│       │                    # Intruder: the figure the camera sees, on the fence's arc
 │       │                    # Box · Turned: the bevelled volumes it is built from · palette
 │       ├── hooks/           # usePixelRatio(element) · useFade(target), useColorFade(color) · useSweep(present)
 │       │                    # useWaves(frames)
@@ -103,7 +104,7 @@ src/
 | `features/telemetry` | #21 gas curve, #11 every curve | `/` |
 | `features/status` · `features/alerts` | #11 Status badge, active Alerts | `/` |
 | `features/camera` · `features/actuators` | #14 camera feed, actuator panel | `/` |
-| `features/twin` (started) | #23 intruder placed by `x_norm`, #38 / #39 final intrusion and drift | `/twin` |
+| `features/twin` (started) | #38 / #39 final intrusion and drift | `/twin` |
 | `features/replay` | #15 time-scrubber, scenario mode (rebuilds state with `apply`) | `/twin` |
 
 ## Live feed — `features/live-feed`
@@ -142,7 +143,7 @@ const history = useLiveFeed((state) => state.history)
 <OutpostTwin scene={scene} frames={history} />
 ```
 
-- `toScene(state)` turns the live state into what the scene shows, and is all the scene reads: pure, tested without WebGL. It gives the Enclosure's color and glow (gas), what its LCD reads and the color its LED ring breathes in (the Status), its Alarm (active `gas` and `thermal` Alerts), the Probes to pulse (active `predictive` Alerts), how thick the haze around the gas pipe is (gas), the Status's color grade, the heat of the generator hall (how red its roof glows, whether the air ripples above it), whether the camera sector is lit (an active `intrusion`), where the intruder stands (last active `intrusion`'s `x_norm`), whether someone is near the site (an active `presence`) and whether the signal is lost. The intruder itself is not drawn yet (#23).
+- `toScene(state)` turns the live state into what the scene shows, and is all the scene reads: pure, tested without WebGL. It gives the Enclosure's color and glow (gas), what its LCD reads and the color its LED ring breathes in (the Status), its Alarm (active `gas` and `thermal` Alerts), the Probes to pulse (active `predictive` Alerts), how thick the haze around the gas pipe is (gas), the Status's color grade, the heat of the generator hall (how red its roof glows, whether the air ripples above it), whether the camera sector is lit (an active `intrusion`), where the intruder stands (last active `intrusion`'s `x_norm`, and the point of the fence it gives), whether someone is near the site (an active `presence`) and whether the signal is lost.
 - The `Status` grades the whole scene. At `nominal` the studio keeps its neutral light, and only the ring around the socle, the LCD and the LED ring are green. At `elevated` and `critical` every light takes the Status's color: the whole model is lit in amber, in red. It follows the Command Post's Status, never the readings. The sky stays black on the stage (#30): the grade's `background` is no longer drawn.
 - **Nothing cuts** (#33). A new Status fades in over `FADE_SECONDS` (0.8 s), lights, ring around the socle, LCD and LED ring together, and one that comes during a fade starts from the color on screen. `fadeTo(fade, to, now)` and `fadeValue(fade, now)` are that rule, pure and tested; `useFade` / `useColorFade` run it on every frame.
 - **Signal lost** (#33). When the feed closes after having been open, `scene.signalLost` is true until it is open again, the retries in between included: the whole frame fades to grey (`<Halo saturation>`), "Signal lost" shows over the scene and the caption loses its colors, so that a stale state never passes for a live one. Before the first connection there is no signal to lose: the scene is neutral, with no notice. To see it, stop the backend.
@@ -157,10 +158,21 @@ const history = useLiveFeed((state) => state.history)
 |---|---|
 | ![The camera sector lit on an intrusion](../docs/twin/intrusion-sector.png) | ![The Probes pulsing on a predictive drift](../docs/twin/predictive-pulse.png) |
 
-- **Intrusion** — while an `intrusion` Alert is active, `scene.sector.lit` is true and the camera sector on the ground lights up in `INTRUSION_COLOR` (the critical red): the zone of the perimeter the camera watches, whole, wherever the intruder stands in it. It goes out when the last `intrusion` is `cleared`. Placing the intruder on the arc from `x_norm` is #23.
+- **Intrusion** — while an `intrusion` Alert is active, `scene.sector.lit` is true and the camera sector on the ground lights up in `INTRUSION_COLOR` (the critical red): the zone of the perimeter the camera watches, whole, wherever the intruder stands in it. It goes out when the last `intrusion` is `cleared`. The intruder itself stands on the sector's arc (#23, below).
 - **Predictive drift** — an active `predictive` Alert names what drifts in `detail.drivers`, and `DRIVER_PROBES` gives the Probe each one is read from: `temp_slope` → the DHT22, `air_slope` → the MQ-2. `scene.enclosure.pulses` lists them, each once; a driver that is not in `DRIVER_PROBES` pulses nothing. Those Probes emit `DRIFT_COLOR` in beats, an orange of its own that is not a Status color, so it shows at `nominal` as well as in the amber of `elevated`. `pulse(t)` is the beat, pure and tested: one every `PULSE_PERIOD` (1.2 s), never below `PULSE_FLOOR`.
 - Both come and go in a fade (`useFade`), like everything in the Twin, and both glow: they are emissive, so the halo takes them for lights.
 - **What it does not show yet** — the Probes sit in their compartment, which is open front and back only: seen from the Enclosure's side, the pulse is hidden behind the compartment's cheek until the orbit comes round. The label of #39 is what will say it from every side.
+
+**The intruder** (#23) — where the vision service sees someone, on the maquette:
+
+| `x_norm` 0.15 | `x_norm` 0.85 |
+|---|---|
+| ![The intruder on the arc, at the lens's left](../docs/twin/intruder-left.png) | ![The intruder on the arc, at the lens's right](../docs/twin/intruder-right.png) |
+
+- **Where** — `scene.intruder` is the last raised of the active `intrusion` Alerts: its `x_norm` and `at`, the point of the fence the camera's sight meets for it, `watchedPoint(x_norm)` (see [the site](#digital-twin--featurestwin), camera sector). 0 is the lens's left, 1 its right: mirrored when you face the Enclosure. `toScene` does the mapping, so it is tested without a render: on the fence, at `watchedPoint`, and moving across the arc, in order, as the mock's 0.15 → 0.35 → 0.55 → 0.75 come in.
+- **Drawn** — `<Intruder>`: a figure a little taller than the fence, standing just outside it (it comes from outside, and the rails do not run through it), with a ring on the arc at its feet. Unlit and brighter than white in `INTRUSION_COLOR`, so it reads over a scene lit all in red and the halo takes it for a light. It casts no shadow: the shadows are drawn once, and it moves.
+- **Moves** — a new `x_norm` on the same Alert stands it at the new point; it is gone when the last `intrusion` is `cleared`, while the sector fades out.
+- **Not yet** (#38) — it jumps from one point to the next and appears and goes without a fade. #38 makes it a column of light that glides along the arc, fades in and out, and is tied to the lens by a thin line.
 
 **Presence** (#36) — the site knows it is approached before anyone is inside:
 
@@ -262,6 +274,6 @@ const history = useLiveFeed((state) => state.history)
 - [x] Gas haze around the pipe, the Alarm on the Enclosure's LED ring and buzzer — #34
 - [x] Heat on the generator hall: its roof glows with the temperature, the air ripples on a `thermal` Alert — #35
 - [x] Noise: a wave from the Enclosure over the socle on each clap — #37
-- [ ] Intruder placement (`x_norm` → perimeter arc) — #23
+- [x] Intruder placement (`x_norm` → perimeter arc) — #23
 - [ ] Time-scrubber + scenario mode — #15
 - [ ] CI: build + smoke render — #16
