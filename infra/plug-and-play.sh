@@ -291,26 +291,27 @@ api_password="$(sed -n 's/^MQTT_PASSWORD=//p' "$secrets/api.env")"
 ui_detail "dans infra/secrets, jamais commités"
 ui_done
 
-# --- 4. The camera ---------------------------------------------------------------------------
-ui_step "Caméra ZIF"
-# Its device nodes go to vision only when they all exist: with one missing, Docker would refuse to
-# start the container, and `docker compose up` would stop at step 5.
+# --- 4. The webcam ---------------------------------------------------------------------------
+ui_step "Webcam USB"
+# Its node goes to vision only when it is plugged in: missing, Docker would refuse to start the
+# container, and `docker compose up` would stop at step 5. Found by its name in /dev/v4l/by-id,
+# which only USB devices get: whatever port it is on, and never one of the Pi's own video nodes.
 camera_line=COMPOSE_FILE=docker-compose.yml:docker-compose.camera.yml
 camera_ok=false
-missing_nodes=()
-for node in $(sed -n 's|^ *- \(/dev/[^ ]*\)$|\1|p' docker-compose.camera.yml); do
-  [[ -e "$node" ]] || missing_nodes+=("$node")
+webcam=""
+for node in /dev/v4l/by-id/usb-*-video-index0; do
+  if [[ -z "$webcam" && -e "$node" ]]; then webcam="$node"; fi
 done
 touch .env
-if ((${#missing_nodes[@]})); then
-  sed -i "\|^$camera_line\$|d" .env
-  shown="${missing_nodes[*]:0:3}"
-  ((${#missing_nodes[@]} > 3)) && shown="$shown et $((${#missing_nodes[@]} - 3)) autres"
-  ui_note "nœuds de la caméra absents ($shown) : vision tournera sans caméra. Vérifie la nappe avec rpicam-hello --list-cameras, puis relance."
+sed -i -e "\|^$camera_line\$|d" -e '/^CAMERA_DEVICE=/d' .env
+if [[ -z "$webcam" ]]; then
+  ui_note "pas de webcam USB : vision tournera sans caméra. Branche-la sur un port USB du Pi, puis relance avec --no-flash."
 else
-  grep -qx "$camera_line" .env || echo "$camera_line" >>.env
+  printf '%s\nCAMERA_DEVICE=%s\n' "$camera_line" "$webcam" >>.env
   camera_ok=true
-  ui_detail "ses nœuds sont donnés à vision"
+  webcam_name="${webcam#/dev/v4l/by-id/usb-}"
+  webcam_name="${webcam_name%-video-index0}"
+  ui_detail "${webcam_name//_/ }, donnée à vision"
 fi
 ui_done
 
@@ -406,7 +407,7 @@ summary=(
   "Passphrase   $passphrase"
   "Dashboard    https://$pi_ip/"
   "Sentinel     $($sentinel_ok && echo "$G_OK $sentinel_ip" || echo "$G_FAIL pas encore sur le Wi-Fi")"
-  "Caméra       $($camera_ok && echo "$G_OK donnée à vision" || echo "$G_FAIL absente")"
+  "Webcam       $($camera_ok && echo "$G_OK donnée à vision" || echo "$G_FAIL absente")"
   "Durée        $(_ui_duration "$SECONDS")"
   "Journal      $(_ui_home "$UI_LOG")"
 )

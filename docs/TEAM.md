@@ -13,7 +13,7 @@ Architecture: the brief's **Option A** — everything server-side runs on the Co
 - Owns its threshold Alerts (`gas`, `thermal`, `presence`, `noise`, with hysteresis) + autonomous Alarm; publishes telemetry + Alerts over MQTTS (CA-verified, own credentials).
 
 ### AI / Data — `ai/` (Command Post, Pi)
-- **Vision:** person detection on the Pi's ZIF camera, built on [`automaticdai/rpi-object-detection`](https://github.com/automaticdai/rpi-object-detection) (TFLite + Picamera2; OpenCV motion detection as fallback), ≤640x480, <100ms/frame → `intrusion` Alert with `x_norm`. **Benchmark on the Pi Monday** — it validates Option A.
+- **Vision:** person detection on the Pi's USB webcam, built on [`automaticdai/rpi-object-detection`](https://github.com/automaticdai/rpi-object-detection) (TFLite + Picamera2; OpenCV motion detection as fallback), ≤640x480, <100ms/frame → `intrusion` Alert with `x_norm`. **Benchmark on the Pi Monday** — it validates Option A.
 - **Predictive:** Isolation Forest on live temp+air telemetry, subscribed over MQTTS (+ velocity features). **No static `if temp>40`.** → `predictive` Alert.
 - Both run as containers on the Pi and post to `POST /api/v1/alerts` with their service token.
 

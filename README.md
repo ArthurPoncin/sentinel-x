@@ -32,7 +32,7 @@ The twin makes the embedded intelligence *visible*. That's the story we tell the
 
 ## 🧩 System architecture
 
-> **Option A "Embedded centralization"** from the brief. A **Raspberry Pi 4** fixed inside the Sentinel-X Enclosure is the Command Post — the single Local Server: Wi-Fi access point, containerized stack (web front-end + API), and the vision + predictive AI on its **ZIF camera**. The **ESP32** is the Sentinel and joins the Pi's Wi-Fi. A laptop is only the Operator's browser.
+> **Option A "Embedded centralization"** from the brief. A **Raspberry Pi 4** fixed inside the Sentinel-X Enclosure is the Command Post — the single Local Server: Wi-Fi access point, containerized stack (web front-end + API), and the vision + predictive AI on its **USB webcam**. The **ESP32** is the Sentinel and joins the Pi's Wi-Fi. A laptop is only the Operator's browser.
 
 ```mermaid
 flowchart LR
@@ -46,7 +46,7 @@ flowchart LR
             ALARM["Alarm · buzzer"]
         end
         subgraph cp["🖥️ Command Post · Raspberry Pi 4 (Wi-Fi AP)"]
-            CAM["ZIF camera (CSI)"]
+            CAM["USB webcam"]
             subgraph docker["Docker-Compose"]
                 PROXY["reverse-proxy · HTTPS/WSS :443"]
                 BROKER["mosquitto · MQTTS :8883"]
@@ -86,7 +86,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/DIGITAL-TWIN.md`](
 | Pillar | What it delivers | Suggested stack | Runs on |
 |---|---|---|---|
 | **Edge / IoT** | ESP32 firmware: cadenced probe reads, LCD status, Alarm (buzzer), its own threshold Alerts, structured payloads | C++ · PlatformIO | Sentinel |
-| **Local AI & Data** | Vision person detection on the ZIF camera + **correlation-based** predictive maintenance on temp+air drift (no static `if temp>40`) | Python · TFLite ([rpi-object-detection](https://github.com/automaticdai/rpi-object-detection)) / OpenCV · scikit-learn | Command Post |
+| **Local AI & Data** | Vision person detection on the USB webcam + **correlation-based** predictive maintenance on temp+air drift (no static `if temp>40`) | Python · TFLite ([rpi-object-detection](https://github.com/automaticdai/rpi-object-detection)) / OpenCV · scikit-learn | Command Post |
 | **Infrastructure** | Containerized stack (reverse proxy, broker, DB, API, dashboard, AI services), isolated Wi-Fi AP & IP plan | Docker-Compose · Mosquitto · hostapd | Command Post |
 | **Cybersecurity** | MQTTS/HTTPS + authentication on every channel (MQTT ACL, API tokens, Operator session), Pi & Docker hardening (UFW, SSH keys only), cross-team pentest | OpenSSL · UFW/iptables · Nmap/Wireshark | transversal |
 | **Dashboard & API** | Real-time UI: **3D Digital Twin**, live charts, `Status`, camera feed, reactive actuator control, Operator login | React · react-three-fiber (Three.js) · WebSocket | Command Post |

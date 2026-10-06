@@ -2,8 +2,8 @@
 #   docker compose up -d --build
 # Only the reverse proxy (443) and the broker (8883) are reachable from the table network; the
 # rest only talk to each other, on a network with no way out. See infra/README.md.
-# The camera's device nodes for vision are in docker-compose.camera.yml, taken on the Pi through
-# COMPOSE_FILE in .env (see that file): the stack still starts where there is no camera.
+# The webcam's device node for vision is in docker-compose.camera.yml, taken on the Pi through
+# COMPOSE_FILE in .env (see that file): the stack still starts where there is no webcam.
 # On the Pi, infra/plug-and-play.sh pulls the five images built here ready-made from GHCR when the CI
 # published them for this very code (infra/images.sh), and builds only the others.
 
@@ -70,7 +70,7 @@ services:
     networks: [internal]
 
   # The intrusion detector, and the annotated camera feed the reverse proxy serves under /camera,
-  # behind the Operator session. Its camera device nodes are in docker-compose.camera.yml: a node
+  # behind the Operator session. Its webcam's device node is in docker-compose.camera.yml: a node
   # missing on the host would stop the whole `docker compose up`. See infra/README.md.
   vision:
     <<: *hardened
@@ -78,15 +78,15 @@ services:
       context: ai
       dockerfile: vision/Dockerfile
     image: sentinel-x/vision
-    # The host's `video` group owns the camera nodes (44 on Debian and Raspberry Pi OS:
+    # The host's `video` group owns the webcam's node (44 on Debian and Raspberry Pi OS:
     # getent group video). The user stays the image's, unprivileged; never `privileged`.
     group_add: ["${VIDEO_GID:-44}"]
     env_file: infra/secrets/vision.env          # VISION_TOKEN
     environment:
       ALERTS_URL: http://api:8080/api/v1/alerts
-      # The ZIF camera, through Picamera2: down until docker-compose.camera.yml gives it its nodes.
-      # Another source (opencv:0 a USB webcam…): CAMERA_SOURCE in .env (infra/README.md).
-      CAMERA_SOURCE: ${CAMERA_SOURCE:-picamera2}
+      # The USB webcam, /dev/video0 in the container: down until docker-compose.camera.yml gives it.
+      # Another source (a video file…): CAMERA_SOURCE in .env (infra/README.md).
+      CAMERA_SOURCE: ${CAMERA_SOURCE:-opencv:0}
       # A person, not just motion: EfficientDet-Lite0 on TFLite, its model in the image. DETECTOR=motion
       # in .env falls back to motion detection, the brief's allowed fallback (ai/README.md).
       DETECTOR: ${DETECTOR:-tflite}

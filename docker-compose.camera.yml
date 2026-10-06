@@ -1,34 +1,15 @@
-# The ZIF camera's device nodes for the vision service, on top of docker-compose.yml. Apart, because
+# The USB webcam's device node for the vision service, on top of docker-compose.yml. Apart, because
 # Docker refuses to create a container whose device node is missing on the host: listed in the main
-# file, a laptop without a camera — or the Pi with its ribbon loose — could not start the stack at all.
-# On the Pi, infra/plug-and-play.sh takes it once every node below exists, through this line in .env:
+# file, a laptop without a webcam — or the Pi with it unplugged — could not start the stack at all.
+# On the Pi, infra/plug-and-play.sh takes it once it finds a webcam, through these lines in .env:
 #   COMPOSE_FILE=docker-compose.yml:docker-compose.camera.yml
+#   CAMERA_DEVICE=/dev/v4l/by-id/usb-<the webcam>-video-index0
 # and every `docker compose …` then takes both files.
-# Nodes only, never `privileged`: the container sees these and nothing else of /dev, through the
-# host's `video` group (group_add in docker-compose.yml), which owns them all.
+# The node only, never `privileged`: the container sees it and nothing else of /dev, through the
+# host's `video` group (group_add in docker-compose.yml), which owns it.
 services:
   vision:
     devices:
-      # What libcamera needs for the ZIF camera on a Pi 4, as `ls /dev` shows them there: the camera's
-      # receiver (unicam), its sensor, the ISP that turns the raw frames into pictures (both of its
-      # instances), the media controllers that tie them together, and the memory the frames live in.
-      # The ISP and unicam numbers are fixed by their drivers; another Pi model would need its own list.
-      - /dev/media0
-      - /dev/media1
-      - /dev/media2
-      - /dev/media3
-      - /dev/media4
-      - /dev/v4l-subdev0
-      - /dev/video0
-      - /dev/video13
-      - /dev/video14
-      - /dev/video15
-      - /dev/video16
-      - /dev/video20
-      - /dev/video21
-      - /dev/video22
-      - /dev/video23
-      - /dev/dma_heap
-    volumes:
-      # libcamera finds the camera's nodes through the udev database: read-only.
-      - /run/udev:/run/udev:ro
+      # The webcam by its name, whatever USB port it is on and whatever /dev/videoN the host gave it,
+      # seen in the container as /dev/video0: CAMERA_SOURCE=opencv:0.
+      - ${CAMERA_DEVICE:?the webcam, put in .env by infra/plug-and-play.sh}:/dev/video0

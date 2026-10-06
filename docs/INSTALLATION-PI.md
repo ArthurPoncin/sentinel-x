@@ -9,6 +9,7 @@ Dans cette page, la table est la n° **4**. Remplace `4` par ton numéro de tabl
 - Le Raspberry Pi 4, son alimentation officielle (USB-C, 5 V / 3 A) et une carte microSD d'au moins 16 Go.
 - Un **câble Ethernet** branché sur un réseau qui a Internet (box, routeur, prise de l'école). Indispensable seulement la première fois.
 - L'ESP32 câblé selon [`firmware/include/pins.h`](../firmware/include/pins.h), avec un **câble USB qui transmet les données**. Beaucoup de câbles ne font que charger : avec eux, le Pi ne voit pas l'ESP32.
+- Une **webcam USB**, pour la détection d'intrusion.
 
 ## 1. Préparer la carte SD (sur ton PC)
 
@@ -26,7 +27,7 @@ Dans **Raspberry Pi Imager** :
 
 ## 2. Démarrer le Pi
 
-Mets la carte SD dans le Pi. Branche l'**Ethernet**, l'**ESP32 sur un port USB du Pi**, puis l'alimentation. Attends 2 minutes.
+Mets la carte SD dans le Pi. Branche l'**Ethernet**, l'**ESP32** et la **webcam** sur des ports USB du Pi, puis l'alimentation. Attends 2 minutes.
 
 ## 3. Se connecter au Pi
 
@@ -72,7 +73,7 @@ Il déroule 9 étapes numérotées. Chacune affiche un spinner et son temps, ave
 1. **Logiciels** : Docker, PlatformIO, dnsmasq (DHCP) et chrony (heure), tant qu'il y a Internet.
 2. **Images Docker** : chaque image construite par GitHub pour ce code exact est téléchargée ; les autres sont construites sur le Pi (code modifié sur le Pi, image pas encore publiée, ou pas d'Internet : alors celles déjà là servent).
 3. **Secrets et certificats** : dans `infra/secrets/`, jamais commités.
-4. **Caméra ZIF** : ses périphériques sont donnés au service `vision` s'ils sont tous là.
+4. **Webcam USB** : elle est donnée au service `vision` si elle est branchée.
 5. **Démarrage de la stack** : les conteneurs, sur les images de l'étape 2.
 6. **Firmware du Sentinel** : compilé avec les secrets de ce Pi ; les mots de passe ne quittent jamais le Pi.
 7. **Wi-Fi de la table** : le Wi-Fi du Pi devient le réseau `SentinelX-4`, en 2,4 GHz, WPA2, sans Internet. L'ESP32 a toujours l'adresse `192.168.4.10`, et le Pi lui donne l'heure.
@@ -87,7 +88,7 @@ Le script finit sur un encadré : **vert** « Command Post prêt » si tout s'es
 
 - **Wi-Fi** et **Passphrase** : note la phrase de passe du Wi-Fi de la table. Elle est aussi gardée dans `infra/secrets/wifi.env`.
 - **Sentinel** `✓ 192.168.4.10` et l'étape 9 qui affiche `première mesure : 23.4 °C · humidité 41 % · gaz 312` : **tout marche**, l'ESP32 envoie ses mesures au Pi.
-- **Caméra** `✓ donnée à vision` : la caméra ZIF va au service `vision`.
+- **Webcam** `✓ donnée à vision` : la webcam va au service `vision`.
 - Sous **À voir**, chaque remarque `!` dit ce qui manque : voir aussi [Dépannage](#dépannage).
 - Sous **Ensuite**, les commandes à copier telles quelles : récupérer le certificat, puis les journaux.
 
@@ -151,7 +152,7 @@ Le script lui-même :
 | `la stack ne démarre pas` | Lis les lignes affichées sous l'encadré (le journal complet est dans `~/.local/share/sentinel-x/plug-and-play.log`) ; sans Internet, une image qui manque ne peut pas être construite |
 | `le firmware ne compile pas` | La première fois, PlatformIO télécharge ses outils : il faut Internet |
 | `NetworkManager ne tourne pas` | Le système est trop ancien : réinstalle un Raspberry Pi OS (64-bit) récent |
-| `nœuds de la caméra absents` | Le Pi ne voit pas la caméra : éteins-le, remets la nappe (contacts vers les ports HDMI), vérifie avec `rpicam-hello --list-cameras`, puis relance |
+| `pas de webcam USB` | Branche la webcam sur un port USB du Pi (elle doit apparaître dans `ls /dev/v4l/by-id`), puis relance avec `--no-flash` |
 | `le Sentinel n'est pas encore sur le Wi-Fi` | Vérifie qu'il est alimenté, et ce que dit son écran (tableau ci-dessus) |
 
 Journaux :
@@ -159,4 +160,4 @@ Journaux :
 - **l'ESP32 en direct** : `~/.local/share/sentinel-x/platformio/bin/pio device monitor -d firmware` (Ctrl+C pour quitter) ;
 - **le script** : `~/.local/share/sentinel-x/plug-and-play.log`, tout ce qu'ont dit les commandes de son dernier passage ;
 - **le Pi** : `docker compose logs -f api mosquitto` ;
-- **la caméra** : `docker compose logs -f vision` (« Camera picamera2 up, 640x480 » quand elle marche). Dans le dashboard, une image grise « camera down, retrying » veut dire que `vision` tourne sans caméra.
+- **la caméra** : `docker compose logs -f vision` (« Camera opencv:0 up, 640x480 » quand elle marche). Dans le dashboard, une image grise « camera down, retrying » veut dire que `vision` tourne sans caméra.

@@ -20,7 +20,7 @@ Applied by [`harden.sh`](harden.sh) (#49), once `infra/plug-and-play.sh` is done
   - no `privileged: true`, never mount `/var/run/docker.sock`;
   - `cap_drop: [ALL]` (add back only what a service proves it needs), `security_opt: [no-new-privileges:true]`;
   - non-root `user:` in every container, `read_only: true` where possible;
-  - `api`, `dashboard`, `vision`, `predictive` on the internal network only; the camera reaches `vision` via `devices:` (its nodes only, in `docker-compose.camera.yml`) and the host's `video` group (`group_add`), never `privileged`.
+  - `api`, `dashboard`, `vision`, `predictive` on the internal network only; the USB webcam reaches `vision` via `devices:` (its node only, in `docker-compose.camera.yml`) and the host's `video` group (`group_add`), never `privileged`.
 - **Wi-Fi AP:** WPA2-PSK, CCMP/AES only, WPS off, long random passphrase (out of git). No NAT/bridge to another network.
 
 ### `harden.sh`
