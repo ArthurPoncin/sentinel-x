@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AlertState, Frame, Severity, StatusLevel } from '@/shared/contract'
 import type { FeedEvent } from '../api/feed-client'
-import { apply, createFeedStore, HISTORY_LIMIT, initialFeedState } from './feed-store'
+import { apply, createFeedStore, HISTORY_LIMIT, initialFeedState, stateAfter } from './feed-store'
 
 const ts = '2026-10-05T14:23:00.000Z'
 
@@ -161,5 +161,32 @@ describe('createFeedStore', () => {
     store.dispatch(telemetry(420))
 
     expect(listener).not.toHaveBeenCalled()
+  })
+})
+
+describe('stateAfter', () => {
+  it('rebuilds the state the feed held after the frames, on a connection open all along', () => {
+    const state = stateAfter([telemetry(420), gas('gas-1', 'warning', 'raised'), status('elevated')])
+
+    expect(state.connection).toBe('open')
+    expect(state.connectedOnce).toBe(true)
+    expect(state.status).toBe('elevated')
+    expect(state.latestTelemetry?.readings.air).toBe(420)
+    expect(state.activeAlerts.map((alert) => alert.alert_id)).toEqual(['gas-1'])
+  })
+
+  it('pairs the Alerts as the live feed does', () => {
+    const state = stateAfter([gas('gas-1', 'warning', 'raised'), gas('gas-1', 'warning', 'cleared'), status('nominal')])
+
+    expect(state.activeAlerts).toEqual([])
+    expect(state.status).toBe('nominal')
+  })
+
+  it('starts from a nominal Outpost with nothing received', () => {
+    const state = stateAfter([])
+
+    expect(state.status).toBe('nominal')
+    expect(state.latestTelemetry).toBeNull()
+    expect(state.activeAlerts).toEqual([])
   })
 })

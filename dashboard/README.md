@@ -21,8 +21,8 @@ The face of Sentinel-X and our **"wow" centerpiece**. See [`../docs/DIGITAL-TWIN
 - **Intruder marker** placed along the perimeter from the `intrusion` Alert's `x_norm`.
 - **Component pulse** on a `predictive` anomaly; sound ripples on `noise`.
 - **`Status`** drives the twin's overall color (`nominal`/`elevated`/`critical`).
-- **Time-scrubber** replays a past Incident (grouped by `alert_id`) — demo insurance.
-- Scenario mode for the 3-min live demo + 60s teaser.
+- **Time-scrubber** replays a past Incident second by second, labelled REPLAY — demo insurance (#15).
+- **Scenario mode** plays the scripted reference scenario on demand, network or not (#15).
 
 ## Run it
 Node ≥ 22. Start the mock feed first, then the app:
@@ -35,7 +35,8 @@ cd backend && npm install && OPERATOR_AUTH=off MOCK_FEED=true HISTORY_FILE=:memo
 cd dashboard && npm install && npm run dev
 
 npm test            # store, feed client, config, gas level, heat level, scene mapper, site plan, steam, haze, Alarm,
-                    # fades, pulse, presence sweep, noise wave, automatic orbit, pixel ratio, framing
+                    # fades, pulse, presence sweep, noise wave, automatic orbit, pixel ratio, framing,
+                    # Incidents, replay, scenario, Incidents client, the Twin on a replay
 npm run build       # typecheck + production bundle in dist/
 ```
 
@@ -60,10 +61,17 @@ src/
 ├── features/
 │   ├── live-feed/           # #10 — the socket, the store, the hook
 │   │   ├── api/             # connectFeed(): WebSocket client, backoff, drops bad frames
-│   │   ├── stores/          # apply(state, event): pure reducer + tiny external store
+│   │   ├── stores/          # apply(state, event): pure reducer + tiny external store · stateAfter(frames)
 │   │   ├── hooks/           # useLiveFeed(selector)
 │   │   ├── components/      # LiveFeedProvider, ConnectionIndicator, FeedInspector
 │   │   └── index.ts         # the feature's public API
+│   ├── replay/              # #15 — the time-scrubber and scenario mode
+│   │   ├── api/             # fetchIncidents(), fetchIncidentReplay(id): the Command Post's recorded Incidents
+│   │   ├── hooks/           # usePlayer(): second by second · useRecordedIncidents(key)
+│   │   ├── components/      # TimeScrubber: the LIVE/REPLAY label and the scrubber, over the Twin
+│   │   ├── utils/           # incidents(history) · replayOf(history, incident) · framesAt(replay, t)
+│   │   │                    # withStatus(frames) · scenario(start), scenarioFrames(start) · labels
+│   │   └── index.ts
 │   └── twin/                # #20, #12, #30, #31, #32, #33, #40, #13, #36, #34, #35, #37, #23 — the Outpost as a maquette, on its studio stage
 │       ├── components/      # OutpostTwin: the scene, drawn from SceneProps · Enclosure · OrbitCamera · Halo
 │       │                    # Socle · PowerPlant · Perimeter · Steam: the site, drawn from SITE
@@ -105,7 +113,6 @@ src/
 | `features/status` · `features/alerts` | #11 Status badge, active Alerts | `/` |
 | `features/camera` · `features/actuators` | #14 camera feed, actuator panel | `/` |
 | `features/twin` (started) | #38 final intrusion | `/twin` |
-| `features/replay` | #15 time-scrubber, scenario mode (rebuilds state with `apply`) | `/twin` |
 
 ## Live feed — `features/live-feed`
 
@@ -119,7 +126,7 @@ const history = useLiveFeed((state) => state.history)                // every fr
 ```
 
 - Select a state field as is; derive anything else with `useMemo` (a selector returning a new array each call loops).
-- The Status comes from the Command Post: the front never recomputes it.
+- The Status comes from the Command Post: the front never recomputes it on the live feed. A replay is the one exception: the history keeps no Status, so `features/replay` works it out from the replayed Alerts by the Command Post's rule.
 - On every (re)connection the backend sends its snapshot (current Status + latest telemetry) and the active Alerts start over, since some may have cleared while the socket was down.
 - `connection` is the socket as it is now (`connecting`, `open`, `closed`), `connectedOnce` whether it has ever been open. Together they tell a signal lost (not open any more) from a first connection still being tried.
 - Types come from `@/shared/contract`: `Telemetry`, `Alert`, `Status`, `Frame`…
@@ -259,6 +266,31 @@ const history = useLiveFeed((state) => state.history)
 - **Whole in frame** — `<OutpostTwin wholeStage />` stands the camera back until the whole stage holds in the frame, whatever its shape: `wholeStageDistance(aspect)` fits a sphere around the stage (`STAGE_RADIUS`, the ring around the socle plus room for its halo) in the narrower field of view, so it holds all the way around the orbit and at any tilt. The camera can still be turned by hand; it no longer zooms.
 - Anything added to the stage further out than the ring around the socle needs a larger `STAGE_RADIUS`.
 
+## Time-scrubber — `features/replay`
+
+The demo's insurance (#15): a past Incident replayed second by second in the Twin, or the scripted scenario played on demand, network or not, and always labelled as a replay.
+
+![The scenario replayed in the Twin, labelled REPLAY](../docs/twin/replay-scenario.png)
+
+```tsx
+import { stateAfter, useLiveFeed } from '@/features/live-feed'
+import { TimeScrubber, usePlayer } from '@/features/replay'
+
+const player = usePlayer()
+const shown = player.frames ? stateAfter(player.frames) : liveState   // replayed or live, the same shape
+<OutpostTwin scene={toScene(shown)} frames={player.frames ?? history} />
+<TimeScrubber history={history} player={player} />
+```
+
+- **Incidents** — `incidents(history)` groups the Alerts of any list of frames into Incidents, pure: from the first `raised` until every Alert raised since is `cleared`, paired by `alert_id`, by date. The Command Post's rule and shape (`Incident` of the contract), so the reference scenario holds here too: gas nominal → warning → critical → warning → nominal plus two PIR detections = 8 Alerts, 1 Incident.
+- **Where they come from** — the scrubber lists the Command Post's recorded Incidents (`GET /api/v1/incidents`, asked again whenever an Incident opens or closes in the feed, and on ↻) and replays one from `GET /api/v1/incidents/:id`. When the Command Post cannot be reached (network down, no Operator session), it falls back on `incidents(history)` over the frames this window received: the feed's last 1000. An Incident whose replay fails to load is taken from there too if the window saw it.
+- **A replay** — `replayOf(history, incident)`: the Incident's span with `LEAD_MS` (3 s) of calm on each side, the last telemetry before it, and after each Alert the Status it leads to (`withStatus`: the history keeps no Status). Copies of the frames, never the live feed's own: the noise waves tell them apart by identity, so going back to live replays no clap.
+- **Second by second** — `usePlayer()` moves one second every second from the replay's start, stops on its last second and holds there; the range input seeks to any second, Play/Pause, and Play from the end starts over. `framesAt(replay, t)` is what has been received by `t`, and `stateAfter(frames)` (live-feed) folds it with the live feed's own `apply`, on a connection open all along: the Twin reacts to the replayed frames exactly as to the live ones, and never shows a signal lost in a replay.
+- **Live or replay** — always one label at the top left of the stage: `LIVE`, or `REPLAY · Incident #1 · 14:23:12` on a solid violet (`--replay`, a color no Status shares), the whole stage framed in it and the caption showing the replayed Status and gas. **Back to live** leaves the replay; the Twin never goes back on its own.
+- **Scenario mode** — **Play the scenario** plays `scenario(now)`: the reference scenario, scripted (60 s: 5 s of calm, the 50 s Incident, 5 s of calm), one telemetry snapshot a second with the gas rising to 680 and the PIR on while someone is there. It plays the same every time without the network, and is labelled REPLAY like any other.
+- **Not in capture mode** — `/twin?capture` shows neither the label nor the scrubber.
+- **Not yet** — the last N minutes of history (`GET /api/v1/history`) as one free timeline, rather than Incident by Incident. With `OPERATOR_AUTH` on, the Command Post answers only to a session: until the login screen exists, the scrubber falls back on this window's Incidents.
+
 ## TODO
 - [x] App shell + live feed (WebSocket client, store, hook) — #10
 - [ ] Operator login screen: the API is ready (`POST /api/v1/auth/login`, `GET /api/v1/auth/check`, see [`../backend/README.md`](../backend/README.md#operator-session))
@@ -278,5 +310,5 @@ const history = useLiveFeed((state) => state.history)
 - [x] Heat on the generator hall: its roof glows with the temperature, the air ripples on a `thermal` Alert — #35
 - [x] Noise: a wave from the Enclosure over the socle on each clap — #37
 - [x] Intruder placement (`x_norm` → perimeter arc) — #23
-- [ ] Time-scrubber + scenario mode — #15
+- [x] Time-scrubber + scenario mode — #15
 - [ ] CI: build + smoke render — #16

@@ -5,4 +5,4 @@ export { FeedInspector } from './components/feed-inspector'
 export { LiveFeedProvider } from './components/live-feed-provider'
 export { useLiveFeed } from './hooks/use-live-feed'
 // Pure, for features that rebuild a state from recorded frames (time-scrubber).
-export { apply, type FeedState, initialFeedState } from './stores/feed-store'
+export { apply, type FeedState, initialFeedState, stateAfter } from './stores/feed-store'
