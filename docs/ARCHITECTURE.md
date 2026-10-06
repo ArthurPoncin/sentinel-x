@@ -7,7 +7,7 @@ We implement the brief's **Option A**: the Local Server ("PC Serveur Local") is 
 | Node | Hardware | Role |
 |---|---|---|
 | **Sentinel** | ESP32 + probes + LCD + Alarm | Senses, decides its own local Alerts, fires the Alarm autonomously |
-| **Command Post** | Raspberry Pi 4 + ZIF camera | The single server: Wi-Fi AP, MQTT broker, DB, API, dashboard host, vision + predictive AI |
+| **Command Post** | Raspberry Pi 4 + ZIF camera | The single server: Wi-Fi AP, MQTT broker, API and its history, dashboard host, vision + predictive AI |
 | *Operator laptop* | any laptop | Browser only — nothing of the system runs on it |
 
 The Sentinel and the Command Post live in the same 3D-printed **Enclosure** (see [Physical layout](#physical-layout-option-a)).
@@ -38,7 +38,7 @@ flowchart LR
                 PROXY["reverse-proxy · HTTPS/WSS :443"]
                 BROKER["mosquitto · MQTTS :8883"]
                 API["api · REST + WebSocket"]
-                DB[("db")]
+                DB[("history · SQLite<br/>api-data volume")]
                 DASH["dashboard · 3D Twin"]
                 VISION["vision · TFLite person detection"]
                 PRED["predictive · Isolation Forest"]
@@ -54,12 +54,12 @@ flowchart LR
     CAM --> VISION
     VISION -- "POST /api/v1/alerts + token" --> API
     BROKER -- "MQTTS: live telemetry" --> PRED
-    DB -. "history (training)" .-> PRED
+    DB -. "read-only (training)" .-> PRED
     PRED -- "POST /api/v1/alerts + token" --> API
     OP -- "HTTPS / WSS + Operator session" --> PROXY
     PROXY --> DASH
     PROXY --> API
-    PROXY -- "camera feed (MJPEG)" --> VISION
+    PROXY -- "/camera: camera feed (MJPEG)" --> VISION
 ```
 
 ## Physical layout (Option A)
@@ -93,7 +93,7 @@ Two ingress paths funnel into one Alert pipeline in the `api`:
 - **Sentinel → MQTTS** (`mosquitto`, port 8883): telemetry + its own Alerts. Lightweight for the micro, and satisfies the mandatory IoT ↔ stack encryption.
 - **`vision` / `predictive` → `POST /api/v1/alerts`** (the brief's mandatory JSON entry point), over the **internal Docker network**, with a per-service token.
 - **Broker → `predictive`**: the predictive service subscribes to live telemetry (`sentinel/+/telemetry`) with its own MQTT user, on the same broker reached as `mosquitto:8883` from the internal Docker network.
-- **`api`**: subscribes to MQTT, exposes the endpoints, normalizes both paths into DB + WebSocket → Twin. Recomputes `Status` after every Alert.
+- **`api`**: subscribes to MQTT, exposes the endpoints, normalizes both paths into its history (SQLite) + WebSocket → Twin. Recomputes `Status` after every Alert.
 - **Commands**: dashboard → `POST /api/v1/commands` → MQTTS `command/<id>/actuator` → ESP32.
 
 ### MQTT topics
@@ -167,7 +167,7 @@ The **single unified Alert schema**, emitted by the Sentinel and by the AI servi
 
 ### `GET /health`
 
-- **Callers:** Docker's healthcheck, inside the `api` container. The reverse proxy does **not** route it: it routes `/api` and `/ws` only.
+- **Callers:** Docker's healthcheck, inside the `api` container. The reverse proxy does **not** route it: it routes `/api` and `/ws` to the `api`, `/camera` to `vision`, the rest to the dashboard.
 - `200` `{ "status": "ok", "broker": "connected" | "off" }`, `503` `{ "status": "degraded", "broker": "disconnected" }` while the broker is out of reach — see [`../backend/`](../backend/README.md#health--get-health).
 
 ### Operator endpoints (through the reverse proxy, HTTPS/WSS)
@@ -181,7 +181,7 @@ The **single unified Alert schema**, emitted by the Sentinel and by the AI servi
 | `GET /api/v1/history?from=…&to=…` | Telemetry + Alert history of a time range, oldest first (time-scrubber) — see [`../backend/`](../backend/README.md#history--get-apiv1history). Session required |
 | `GET /api/v1/incidents` | The Incidents, oldest first, with their start and end (`null` while one goes on) — see [`../backend/`](../backend/README.md#incidents--get-apiv1incidents). Session required |
 | `GET /api/v1/incidents/:incident_id` | One Incident and its telemetry + Alerts, oldest first, for the Twin to replay — see [`../backend/`](../backend/README.md#replay--get-apiv1incidentsincident_id). Session required |
-| camera feed | Session required |
+| `GET /camera` | The annotated camera feed (MJPEG) of `vision`, any query string (the dashboard adds `?attempt=N`). The proxy checks the session with `GET /api/v1/auth/check` first (`401` without one), then strips the prefix: `/camera?attempt=1` reaches `vision:8000` as `/?attempt=1`. Session required |
 
 ### Actuator command — `command/<id>/actuator`
 
@@ -228,7 +228,7 @@ Only what the table network needs reaches it; everything else stays on the inter
 | 67/udp | DHCP of the Wi-Fi AP | table Wi-Fi |
 | 123/udp | NTP (chrony): the table network has no Internet, and the Sentinel time-stamps its readings | table Wi-Fi |
 
-No plaintext port: no MQTT 1883, no HTTP 80. `db`, `api`, `dashboard`, `vision`, `predictive` publish no ports.
+No plaintext port: no MQTT 1883, no HTTP 80. `api`, `dashboard`, `vision`, `predictive` publish no ports.
 
 > **One broker, two sides.** Mosquitto 2.x listens on localhost only unless a `listener` is declared. Our explicit `listener 8883` binds every interface of the container, so the same TLS listener serves the ESP32 (through the published port) and the internal clients (`mosquitto:8883`). Adding an MQTT client later = one MQTT user + its ACL lines, nothing else.
 
@@ -296,12 +296,11 @@ This plan is the basis of the network schema deliverable (engineering report) �
 
 | Service | Role | Published port |
 |---|---|---|
-| `reverse-proxy` | TLS termination (HTTPS/WSS); routes dashboard, API and camera feed; forward-auth on the Operator session | 443 |
+| `reverse-proxy` | TLS termination (HTTPS/WSS); routes dashboard, API and camera feed (`/camera`, prefix stripped, to `vision:8000`); forward-auth on the Operator session for the camera feed | 443 |
 | `mosquitto` | MQTT broker (MQTTS, ACL) | 8883 |
-| `api` | REST + WebSocket, Alert pipeline, `Status`, auth | — |
-| `db` | Telemetry + Alert history (time-scrubber, predictive training) | — |
+| `api` | REST + WebSocket, Alert pipeline, `Status`, auth; keeps the telemetry + Alert history (time-scrubber, predictive training) in an SQLite file on the `api-data` volume — there is no separate `db` container | — |
 | `dashboard` | Web app + 3D Digital Twin (rendered in the Operator's browser) | — |
-| `vision` | Person detection on the ZIF camera (Picamera2, camera device nodes via `devices:`); serves the annotated camera feed | — |
-| `predictive` | Isolation Forest on live telemetry (MQTTS subscriber); trains on DB history (read-only DB user) | — |
+| `vision` | Person detection on the ZIF camera (Picamera2, camera device nodes via `devices:` in `docker-compose.camera.yml` and the host's `video` group); serves the annotated camera feed | — |
+| `predictive` | Isolation Forest on live telemetry (MQTTS subscriber); trains on the api's SQLite history, the `api-data` volume mounted read-only (and opened `mode=ro`); its model on the `predictive-model` volume | — |
 
 `docker compose up` brings the whole Command Post online. Hardening rules for every service (non-root, no `privileged`, `cap_drop: ALL`…) are in [`../cyber/`](../cyber/).

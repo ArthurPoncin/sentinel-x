@@ -1,6 +1,7 @@
 # reverse-proxy: the Command Post's only HTTPS entry point (published on 443).
-# TLS with the team CA's certificate (infra/setup.sh), then the API and its live feed, the
-# dashboard for everything else. /health is not routed: it stays on the internal network.
+# TLS with the team CA's certificate (infra/setup.sh), then the API and its live feed, the camera
+# feed behind the Operator session, the dashboard for everything else. The api's /health is not
+# routed: it stays on the internal network.
 {
 	admin off
 	auto_https off
@@ -31,13 +32,18 @@
 		reverse_proxy api:8080
 	}
 
-	# The annotated camera feed, once the vision service serves it: Operator session required.
-	# handle /camera/* {
-	# 	forward_auth api:8080 {
-	# 		uri /api/v1/auth/check
-	# 	}
-	# 	reverse_proxy vision:8000
-	# }
+	# The annotated camera feed (MJPEG) of the vision service, for the Operator only: the api answers
+	# 204 to a request with a valid session, and its 401 goes back as is. The prefix is stripped:
+	# /camera?attempt=1 reaches vision as /?attempt=1, query kept.
+	handle_path /camera* {
+		forward_auth api:8080 {
+			uri /api/v1/auth/check
+		}
+		reverse_proxy vision:8000 {
+			# Every picture as soon as it comes: the feed never ends, nothing to buffer.
+			flush_interval -1
+		}
+	}
 
 	handle {
 		reverse_proxy dashboard:8080

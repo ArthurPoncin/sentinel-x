@@ -98,7 +98,7 @@ The procedure:
    ```bash
    docker compose run --rm predictive train --from 2026-10-13T08:00:00Z --to 2026-10-13T11:00:00Z
    ```
-   The `predictive` service, its volumes and environment are wired in the Compose stack by #75. Without it, from `ai/`: `PYTHONPATH=common:predictive .venv/bin/python -m predictive train --from … --to … --history <copy of history.sqlite> --model <file>`.
+   The `predictive` service, its volumes and environment are wired in the Compose stack (`docker-compose.yml`, [`../infra/README.md`](../infra/README.md#the-ai-services)). Without it, from `ai/`: `PYTHONPATH=common:predictive .venv/bin/python -m predictive train --from … --to … --history <copy of history.sqlite> --model <file>`.
 4. Read the summary (here on 4 h of synthetic telemetry, with a 5 min `presence` Alert in it):
    ```
    sentinel-01: 14400 snapshots, 14099 kept, 301 excluded (Alert active), 0 invalid → 13979 vectors
