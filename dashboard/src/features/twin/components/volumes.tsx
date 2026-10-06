@@ -1,10 +1,26 @@
 import { type Ref, useMemo } from 'react'
-import { LatheGeometry, type MeshStandardMaterial, Vector2 } from 'three'
+import { type BufferGeometry, LatheGeometry, type MeshStandardMaterial, Vector2 } from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 
 // The maquette is built from these two: simple volumes with bevelled edges, which catch the studio light.
 
 type Triple = readonly [number, number, number]
+
+// A box's shape, bevelled, around its own middle: width (x), height, depth (z).
+export function boxShape([width, height, depth]: Triple, bevel: number): BufferGeometry {
+  return new RoundedBoxGeometry(width, height, depth, 2, bevel)
+}
+
+// The shape of a volume turned around the vertical, from its profile. Every corner of the profile stays a
+// crisp edge.
+export function turnedShape(profile: Profile): BufferGeometry {
+  // LatheGeometry smooths its normals across a point: given twice, a point keeps one normal per side.
+  const points = profile.flatMap(([radius, height], index) => {
+    const point = new Vector2(radius, height)
+    return index === 0 || index === profile.length - 1 ? [point] : [point, point.clone()]
+  })
+  return new LatheGeometry(points, 40)
+}
 
 interface VolumeProps {
   // The middle of its base.
@@ -36,7 +52,7 @@ export function Box({
   bevel = 0.012,
   glow,
 }: BoxProps) {
-  const geometry = useMemo(() => new RoundedBoxGeometry(width, height, depth, 2, bevel), [width, height, depth, bevel])
+  const geometry = useMemo(() => boxShape([width, height, depth], bevel), [width, height, depth, bevel])
 
   return (
     <mesh geometry={geometry} position={[at[0], at[1] + height / 2, at[2]]} castShadow receiveShadow>
@@ -65,14 +81,7 @@ export interface TurnedProps extends VolumeProps {
 
 // A volume turned around the vertical, standing on `at`. Every corner of its profile stays a crisp edge.
 export function Turned({ profile, at = [0, 0, 0], color, roughness = 0.65 }: TurnedProps) {
-  const geometry = useMemo(() => {
-    // LatheGeometry smooths its normals across a point: given twice, a point keeps one normal per side.
-    const points = profile.flatMap(([radius, height], index) => {
-      const point = new Vector2(radius, height)
-      return index === 0 || index === profile.length - 1 ? [point] : [point, point.clone()]
-    })
-    return new LatheGeometry(points, 40)
-  }, [profile])
+  const geometry = useMemo(() => turnedShape(profile), [profile])
 
   return (
     <mesh geometry={geometry} position={[at[0], at[1], at[2]]} castShadow receiveShadow>

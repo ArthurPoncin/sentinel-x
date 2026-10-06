@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { ENCLOSURE_SHAPE } from './enclosure-parts'
-import { alongPipe, type Block, fencePosts, type GroundPoint, lensHeight, lensPoint, SITE, watchedPoint } from './site'
+import {
+  alongPipe,
+  type Block,
+  bearingTo,
+  fencePosts,
+  type GroundPoint,
+  lensHeight,
+  lensPoint,
+  SITE,
+  watchedPoint,
+} from './site'
 
 // Across the camera's image, edge to edge.
 const ACROSS = [0, 0.15, 0.35, 0.5, 0.55, 0.75, 1]
@@ -218,5 +228,26 @@ describe('the camera sector', () => {
 
     expect((left ?? 0) - (right ?? 0)).toBeCloseTo(SITE.camera.fov)
     expect(left).toBeCloseTo(-(right ?? 0))
+  })
+})
+
+describe('the bearing to face', () => {
+  it('is 0 toward the entrance and grows toward x, like every bearing of the plan', () => {
+    const here = { x: 0.4, z: -0.3 }
+
+    expect(bearingTo(here, { x: 0.4, z: 2 })).toBeCloseTo(0)
+    expect(bearingTo(here, { x: 2, z: -0.3 })).toBeCloseTo(Math.PI / 2)
+    expect(bearingTo(here, { x: -2, z: -0.3 })).toBeCloseTo(-Math.PI / 2)
+  })
+
+  it('turns what stands on the watched arc to the lens, wherever it stands on it', () => {
+    for (const xNorm of ACROSS) {
+      const at = watchedPoint(xNorm)
+      const bearing = bearingTo(at, lens)
+      const away = between(at, lens)
+
+      expect(at.x + away * Math.sin(bearing)).toBeCloseTo(lens.x)
+      expect(at.z + away * Math.cos(bearing)).toBeCloseTo(lens.z)
+    }
   })
 })

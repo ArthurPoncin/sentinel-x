@@ -1,4 +1,4 @@
-// How fast the intruder's column glides toward where the camera last saw it: most of the way in a few tenths
+// How fast the intruder's figurine glides toward where the camera last saw it: most of the way in a few tenths
 // of a second, all of it well before the next `x_norm` comes, a second later on the mock feed.
 export const GLIDE = 6
 
@@ -9,22 +9,30 @@ export function glide(current: number, target: number, elapsed: number): number 
   return target + (current - target) * Math.exp(-GLIDE * Math.max(0, elapsed))
 }
 
-// The intruder's column as the Twin draws it: the `intrusion` Alert it shows, null once that is cleared and
-// the column fades out where it last stood, and where it stands on the camera's image, 0 = left, 1 = right.
+// The intruder's figurine as the Twin draws it: the `intrusion` Alert it shows, null once that is cleared and
+// the figurine fades out where it last stood, where it stands on the camera's image, 0 = left, 1 = right, and
+// for how many seconds its Alert has been shown, which its sweep from feet to head goes by. A cleared one no
+// longer ages.
 export interface Track {
   alertId: string | null
   x_norm: number
+  age: number
 }
 
-// The column `elapsed` seconds after `track` (null: none was ever drawn), for the intruder the scene shows
+// The figurine `elapsed` seconds after `track` (null: none was ever drawn), for the intruder the scene shows
 // now (null: no `intrusion` Alert is active). It glides along the arc as the same Alert's `x_norm` changes;
-// an Alert newly raised stands its column where it is, without gliding from where a previous one stood.
+// an Alert newly raised stands its figurine where it is, without gliding from where a previous one stood, and
+// starts its sweep over.
 export function trackAt(
   track: Track | null,
   intruder: { alertId: string; x_norm: number } | null,
   elapsed: number,
 ): Track | null {
-  if (intruder === null) return track && (track.alertId === null ? track : { alertId: null, x_norm: track.x_norm })
-  if (track === null || track.alertId !== intruder.alertId) return { ...intruder }
-  return { alertId: intruder.alertId, x_norm: glide(track.x_norm, intruder.x_norm, elapsed) }
+  if (intruder === null) return track && (track.alertId === null ? track : { ...track, alertId: null })
+  if (track === null || track.alertId !== intruder.alertId) return { ...intruder, age: 0 }
+  return {
+    alertId: intruder.alertId,
+    x_norm: glide(track.x_norm, intruder.x_norm, elapsed),
+    age: track.age + Math.max(0, elapsed),
+  }
 }
