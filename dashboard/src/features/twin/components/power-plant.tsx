@@ -1,23 +1,52 @@
-import { memo, useMemo } from 'react'
+import { useFrame } from '@react-three/fiber'
+import { memo, useMemo, useRef } from 'react'
+import { MathUtils, type MeshStandardMaterial } from 'three'
+import { EASE } from '../utils/easing'
+import { HEAT_COLOR, type SceneProps } from '../utils/scene'
 import { type Block, type Column, type GroundPoint, SITE } from '../utils/site'
+import { HeatShimmer } from './heat-shimmer'
 import { GRAPHITE, OFF_WHITE, STEEL } from './palette'
 import { Steam } from './steam'
 import { Box, type Profile, Turned } from './volumes'
 
+// How bright the hall's roof glows at the peak of the heat: a deep red all over, and its skylight, right over
+// the generator, far brighter.
+const GLOW = { roof: 0.55, skylight: 1.4 }
+
 // The generator hall: off-white walls on a plinth, a graphite roof with its skylight, the door and a band
-// of windows on its front, where the gas pipe comes in under the windows.
-function Hall({ x, z, width, depth, height }: Block) {
+// of windows on its front, where the gas pipe comes in under the windows. Its roof glows red with `heat`,
+// 0–1: it eases toward it, as everything that follows the Readings does.
+function Hall({ x, z, width, depth, height, heat }: Block & { heat: number }) {
   const PLINTH = 0.03
   const ROOF = 0.05
   const eaves = height - 2 * ROOF
   const front = depth / 2
+  const roof = useRef<MeshStandardMaterial>(null)
+  const skylight = useRef<MeshStandardMaterial>(null)
+  const shown = useRef(heat)
+
+  useFrame((_, delta) => {
+    shown.current = MathUtils.damp(shown.current, heat, EASE, delta)
+    if (roof.current) roof.current.emissiveIntensity = shown.current * GLOW.roof
+    if (skylight.current) skylight.current.emissiveIntensity = shown.current * GLOW.skylight
+  })
 
   return (
     <group position={[x, 0, z]}>
       <Box size={[width + 0.06, PLINTH, depth + 0.06]} color={GRAPHITE} />
       <Box size={[width, eaves - PLINTH, depth]} at={[0, PLINTH, 0]} color={OFF_WHITE} />
-      <Box size={[width + 0.08, ROOF, depth + 0.08]} at={[0, eaves, 0]} color={GRAPHITE} />
-      <Box size={[width * 0.62, ROOF, depth * 0.3]} at={[0, eaves + ROOF, 0]} color={GRAPHITE} />
+      <Box
+        size={[width + 0.08, ROOF, depth + 0.08]}
+        at={[0, eaves, 0]}
+        color={GRAPHITE}
+        glow={{ color: HEAT_COLOR, material: roof }}
+      />
+      <Box
+        size={[width * 0.62, ROOF, depth * 0.3]}
+        at={[0, eaves + ROOF, 0]}
+        color={GRAPHITE}
+        glow={{ color: HEAT_COLOR, material: skylight }}
+      />
       <Box size={[0.36, 0.34, 0.02]} at={[width * 0.3, PLINTH, front]} color={GRAPHITE} bevel={0.006} />
       <Box size={[width * 0.46, 0.07, 0.02]} at={[-width * 0.16, eaves - 0.17, front]} color={GRAPHITE} bevel={0.006} />
     </group>
@@ -176,11 +205,13 @@ function Pipe({ path, radius, height }: (typeof SITE)['pipe']) {
 }
 
 // The micro power plant the Outpost protects, where the site plan puts it. It is idling: steam rises from
-// its chimneys.
-export const PowerPlant = memo(function PowerPlant() {
+// its chimneys. The heat shows on its generator hall: the roof glows with `intensity`, and the air above it
+// ripples while `shimmer` is on.
+export const PowerPlant = memo(function PowerPlant({ intensity, shimmer }: SceneProps['thermal']) {
   return (
     <group>
-      <Hall {...SITE.hall} />
+      <Hall {...SITE.hall} heat={intensity} />
+      <HeatShimmer {...SITE.hall} active={shimmer} />
       {SITE.chimneys.map((chimney, index) => (
         <group key={chimney.x}>
           <Chimney {...chimney} />

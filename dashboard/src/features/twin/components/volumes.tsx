@@ -1,5 +1,5 @@
-import { useMemo } from 'react'
-import { LatheGeometry, Vector2 } from 'three'
+import { type Ref, useMemo } from 'react'
+import { LatheGeometry, type MeshStandardMaterial, Vector2 } from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 
 // The maquette is built from these two: simple volumes with bevelled edges, which catch the studio light.
@@ -13,19 +13,44 @@ interface VolumeProps {
   roughness?: number
 }
 
+// What a volume that can glow glows in, and its material: whoever holds it sets how bright
+// (`emissiveIntensity`), frame by frame. It starts dark.
+export interface Glow {
+  color: string
+  material: Ref<MeshStandardMaterial>
+}
+
 export interface BoxProps extends VolumeProps {
   // Width (x), height, depth (z).
   size: Triple
   bevel?: number
+  glow?: Glow
 }
 
 // A box with bevelled edges, standing on `at`.
-export function Box({ size: [width, height, depth], at = [0, 0, 0], color, roughness = 0.65, bevel = 0.012 }: BoxProps) {
+export function Box({
+  size: [width, height, depth],
+  at = [0, 0, 0],
+  color,
+  roughness = 0.65,
+  bevel = 0.012,
+  glow,
+}: BoxProps) {
   const geometry = useMemo(() => new RoundedBoxGeometry(width, height, depth, 2, bevel), [width, height, depth, bevel])
 
   return (
     <mesh geometry={geometry} position={[at[0], at[1] + height / 2, at[2]]} castShadow receiveShadow>
-      <meshStandardMaterial color={color} roughness={roughness} />
+      {glow ? (
+        <meshStandardMaterial
+          ref={glow.material}
+          color={color}
+          roughness={roughness}
+          emissive={glow.color}
+          emissiveIntensity={0}
+        />
+      ) : (
+        <meshStandardMaterial color={color} roughness={roughness} />
+      )}
     </mesh>
   )
 }
