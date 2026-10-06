@@ -1,5 +1,5 @@
 import { STATUS_COLORS } from '@/shared/config/status-colors'
-import type { Alert, StatusLevel, Telemetry } from '@/shared/contract'
+import type { Alert, Severity, StatusLevel, Telemetry } from '@/shared/contract'
 import type { EnclosurePart } from './enclosure-parts'
 import { gasLevel } from './gas-level'
 
@@ -37,9 +37,14 @@ export interface SceneProps {
     lcd: { text: string; color: string }
     // The color the LED ring breathes in: the Status's.
     ring: { color: string }
+    // The Alarm, on while a `gas` or `thermal` Alert is active: the LED ring blinks in `color`, that of the
+    // highest severity among them, and the buzzer sounds. Null while it rests.
+    alarm: { severity: Severity; color: string } | null
     // The Probes that pulse: those the `drivers` of the active `predictive` Alerts say are drifting, each once.
     pulses: readonly DriftingProbe[]
   }
+  // How thick the haze around the gas pipe is, 0–1: the gas level.
+  haze: number
   status: StatusGrade
   // The zone of the perimeter the camera watches, its sector on the ground: lit while an `intrusion` Alert
   // is active, wherever the intruder stands in it.
@@ -113,12 +118,24 @@ export const LCD_TEXT: Readonly<Record<StatusLevel, string>> = {
   critical: 'CRITICAL',
 }
 
+// The severities, from the lowest up, and the Status each one raises at the Command Post: the Alarm takes
+// that Status's color.
+const SEVERITIES: readonly Severity[] = ['info', 'warning', 'critical']
+const SEVERITY_LEVEL: Readonly<Record<Severity, StatusLevel>> = {
+  info: 'nominal',
+  warning: 'elevated',
+  critical: 'critical',
+}
+
 // The live state as the scene shows it: pure, no WebGL, so it is tested without a render.
 export function toScene(state: TwinState): SceneProps {
   const glow = gasLevel(state.latestTelemetry?.readings.air ?? null)
   const pulses = new Set<DriftingProbe>()
   let intruder: SceneProps['intruder'] = null
   let present = false
+  // The highest severity among the Alerts the Sentinel fires its Alarm on. The contract does not carry the
+  // Alarm's own state: an Alarm the Operator silenced still shows here.
+  let alarm: Severity | null = null
   for (const alert of state.activeAlerts) {
     if (alert.kind === 'presence') present = true
     if (alert.kind === 'predictive') {
@@ -128,6 +145,9 @@ export function toScene(state: TwinState): SceneProps {
       }
     }
     if (alert.kind === 'intrusion') intruder = { x_norm: alert.detail.x_norm }
+    if (alert.kind === 'gas' || alert.kind === 'thermal') {
+      if (alarm === null || SEVERITIES.indexOf(alert.severity) > SEVERITIES.indexOf(alarm)) alarm = alert.severity
+    }
   }
 
   const status = STATUS_GRADES[state.status]
@@ -138,8 +158,11 @@ export function toScene(state: TwinState): SceneProps {
       glow,
       lcd: { text: LCD_TEXT[state.status], color: status.perimeter },
       ring: { color: status.perimeter },
+      alarm: alarm && { severity: alarm, color: STATUS_COLORS[SEVERITY_LEVEL[alarm]] },
       pulses: [...pulses],
     },
+    // On the range of the Enclosure's glow: both are the gas level.
+    haze: glow,
     status,
     sector: { lit: intruder !== null },
     intruder,

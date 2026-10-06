@@ -34,8 +34,8 @@ cd backend && npm install && OPERATOR_AUTH=off MOCK_FEED=true HISTORY_FILE=:memo
 # terminal 2 — the app on http://localhost:5173 (/ and /twin)
 cd dashboard && npm install && npm run dev
 
-npm test            # store, feed client, config, gas level, scene mapper, site plan, steam, fades, pulse,
-                    # presence sweep, automatic orbit, pixel ratio, framing
+npm test            # store, feed client, config, gas level, scene mapper, site plan, steam, haze, Alarm, fades,
+                    # pulse, presence sweep, automatic orbit, pixel ratio, framing
 npm run build       # typecheck + production bundle in dist/
 ```
 
@@ -64,14 +64,16 @@ src/
 │   │   ├── hooks/           # useLiveFeed(selector)
 │   │   ├── components/      # LiveFeedProvider, ConnectionIndicator, FeedInspector
 │   │   └── index.ts         # the feature's public API
-│   └── twin/                # #20, #12, #30, #31, #32, #33, #40, #13, #36 — the Outpost as a maquette, on its studio stage
+│   └── twin/                # #20, #12, #30, #31, #32, #33, #40, #13, #36, #34 — the Outpost as a maquette, on its studio stage
 │       ├── components/      # OutpostTwin: the scene, drawn from SceneProps · Enclosure · OrbitCamera · Halo
 │       │                    # Socle · PowerPlant · Perimeter · Steam: the site, drawn from SITE
+│       │                    # Haze: the gas around the pipe · VapourMaterial: what steam and haze are made of
 │       │                    # Box · Turned: the bevelled volumes it is built from · palette
 │       ├── hooks/           # usePixelRatio(element) · useFade(target), useColorFade(color) · useSweep(present)
 │       ├── utils/           # toScene(state): the scene's props, pure · gasLevel(air): 0–1
 │       │                    # SITE: the ground plan · lensPoint() · watchedPoint(xNorm) · fencePosts()
-│       │                    # puffAt(age): a puff of steam's life · ENCLOSURE_PARTS, ENCLOSURE_SHAPE
+│       │                    # alongPipe(share) · puffAt(age): a puff of steam's life · wispAt(age): a wisp
+│       │                    # of haze's · blink(t), arcsAt(t): the Alarm · ENCLOSURE_PARTS, ENCLOSURE_SHAPE
 │       │                    # autoOrbitSpeed(touch, now) · pixelRatio(density, width, height)
 │       │                    # wholeStageDistance(aspect) · fadeTo(fade, to, now), fadeValue(fade, now)
 │       │                    # DRIVER_PROBES: driver → Probe · pulse(t): a drifting Probe's beat
@@ -135,13 +137,13 @@ const scene = useMemo(
 <OutpostTwin scene={scene} />
 ```
 
-- `toScene(state)` turns the live state into what the scene shows, and is all the scene reads: pure, tested without WebGL. It gives the Enclosure's color and glow (gas), what its LCD reads and the color its LED ring breathes in (the Status), the Probes to pulse (active `predictive` Alerts), the Status's color grade, whether the camera sector is lit (an active `intrusion`), where the intruder stands (last active `intrusion`'s `x_norm`), whether someone is near the site (an active `presence`) and whether the signal is lost. The intruder itself is not drawn yet (#23).
+- `toScene(state)` turns the live state into what the scene shows, and is all the scene reads: pure, tested without WebGL. It gives the Enclosure's color and glow (gas), what its LCD reads and the color its LED ring breathes in (the Status), its Alarm (active `gas` and `thermal` Alerts), the Probes to pulse (active `predictive` Alerts), how thick the haze around the gas pipe is (gas), the Status's color grade, whether the camera sector is lit (an active `intrusion`), where the intruder stands (last active `intrusion`'s `x_norm`), whether someone is near the site (an active `presence`) and whether the signal is lost. The intruder itself is not drawn yet (#23).
 - The `Status` grades the whole scene. At `nominal` the studio keeps its neutral light, and only the ring around the socle, the LCD and the LED ring are green. At `elevated` and `critical` every light takes the Status's color: the whole model is lit in amber, in red. It follows the Command Post's Status, never the readings. The sky stays black on the stage (#30): the grade's `background` is no longer drawn.
 - **Nothing cuts** (#33). A new Status fades in over `FADE_SECONDS` (0.8 s), lights, ring around the socle, LCD and LED ring together, and one that comes during a fade starts from the color on screen. `fadeTo(fade, to, now)` and `fadeValue(fade, now)` are that rule, pure and tested; `useFade` / `useColorFade` run it on every frame.
 - **Signal lost** (#33). When the feed closes after having been open, `scene.signalLost` is true until it is open again, the retries in between included: the whole frame fades to grey (`<Halo saturation>`), "Signal lost" shows over the scene and the caption loses its colors, so that a stale state never passes for a live one. Before the first connection there is no signal to lose: the scene is neutral, with no notice. To see it, stop the backend.
 - The Enclosure goes from dark anodized to red as `readings.air` rises, and lights the ground around it. It follows the telemetry, not the Alerts: it moves before any `gas` Alert is raised.
-- `gasLevel(air)` gives the share of the way from calm to critical, 0–1. Its two bounds, `CALM_AIR` (200) and `CRITICAL_AIR` (620), are those of the mock feed: tune them to the MQ-2's calibration when the Sentinel sends its own Readings.
-- What follows the Readings (the Enclosure's gas color and glow) eases toward them (`EASE`): a snapshot a second flows into the next, it does not jump.
+- `gasLevel(air)` gives the share of the way from calm to critical, 0–1. Its two bounds, `CALM_AIR` (200) and `CRITICAL_AIR` (620), are those of the mock feed: tune them to the MQ-2's calibration when the Sentinel sends its own Readings. The Enclosure's glow and the haze both run over that range: it is set there, once.
+- What follows the Readings (the Enclosure's gas color and glow, the haze) eases toward them (`EASE`, `HAZE_EASE`): a snapshot a second flows into the next, it does not jump.
 - The feature takes its data as props: `app/routes/twin.tsx` reads the feed, maps it with `toScene` and hands it over. `TwinState` asks for the live-feed state's fields by shape, so a replayed state (time-scrubber) feeds it the same way.
 
 **The threats** (#13) — what the vision and predictive services see, shown on the maquette:
@@ -192,12 +194,23 @@ const scene = useMemo(
 ![The Enclosure, nominal](../docs/twin/enclosure-nominal.png)
 
 - **Front:** the LCD band, then the camera lens, the PIR dome, the mic grille. **Under the body:** the ventilated Probe compartment, louvres front and back, the DHT22 and the MQ-2 visible between them. **On top:** the buzzer and the LED ring around it. **Right side:** the engraving, *AetherCorp / SENTINEL-X / serial* (`ENGRAVING`).
-- **Parts to drive:** every Probe and actuator is a named object — `scene.getObjectByName(ENCLOSURE_PARTS.mq2)` — for the later slices: alarm on `ledRing` / `buzzer`. The predictive pulse (#13) drives `dht22` and `mq2` from `scene.enclosure.pulses`, the presence (#36) blinks `pir`.
+- **Parts to drive:** every Probe and actuator is a named object — `scene.getObjectByName(ENCLOSURE_PARTS.mq2)` — for the later slices. The predictive pulse (#13) drives `dht22` and `mq2` from `scene.enclosure.pulses`, the presence (#36) blinks `pir`, the Alarm (#34) drives `ledRing` and `buzzer` from `scene.enclosure.alarm`.
 - **LCD:** shows `scene.enclosure.lcd.text` (`LCD_TEXT`: `NOMINAL`, `ELEVATED`, `CRITICAL`) in the Status's color. The text switches like a real LCD's, the color fades. Unlit, so it glows.
-- **LED ring:** breathes in the Status's color, one breath every `BREATH_PERIOD` (4 s), never below `BREATH_FLOOR` — `breath(t)` is pure and tested. The kit has no LED any more (`docs/ARCHITECTURE.md`): on the Twin, the ring is the Status light.
+- **LED ring:** breathes in the Status's color, one breath every `BREATH_PERIOD` (4 s), never below `BREATH_FLOOR` — `breath(t)` is pure and tested. The kit has no LED any more (`docs/ARCHITECTURE.md`): on the Twin, the ring is the Status light, until the Alarm makes it blink (#34, below).
 - **Gas:** the body carries the glow of #20, and lights the ground from inside it.
 - **Where it stands:** the site plan says (`SITE.enclosure`: the foot of its mast, the way it faces), and `OutpostTwin` puts it there. What the plan needs of its shape is in `ENCLOSURE_SHAPE` (`utils/enclosure-parts.ts`), which the model is drawn from: its scale, the radius of its foot, where its lens is. Move the lens there and the camera sector follows.
 - **Camera:** the orbit now turns around the Enclosure's height (`TARGET` y = 1.2).
+
+**Gas and the Alarm** (#34) — the physical threat, readable without a look at the curves:
+
+![The Outpost at the gas peak](../docs/twin/gas-peak.png)
+
+- **Haze** — a haze settles around the gas pipe and thickens with `readings.air`. `scene.haze` is the gas level (`gasLevel`): none when calm, the most from `CRITICAL_AIR` on. Like the Enclosure's glow it follows the telemetry, not the Alerts: it is there before any `gas` Alert. `<Haze density>` eases toward it slowly enough (`HAZE_EASE`) never to rest on a step between two Readings.
+- **Wisps** — the haze is made of wisps that seep from points spread along the pipe (`alongPipe(share)`), sink to the ground and spread over it. `wispAt(age)` is a wisp's whole life, pure. They are made of what the steam is made of (`VapourMaterial`): lit, so the haze takes the Status's light, red at `critical`, and never glows.
+- **Alarm** — `scene.enclosure.alarm` is on while a `gas` or `thermal` Alert is active, the Alerts the Sentinel fires its Alarm on. It carries the highest severity among them and its color: green for `info`, amber for `warning`, red for `critical`. The LED ring then blinks in that color instead of breathing, and the buzzer sends out arcs of sound, one on every beat (`ALARM_PERIOD`, 0.5 s): `blink(t)` and `arcsAt(t)` are pure and tested. When none is left, the ring goes back to breathing in the Status's color and the buzzer goes silent. One fades into the other over `FADE_SECONDS`.
+- **Not the real Alarm's state** — the contract does not carry it. An Alarm the Operator silenced keeps sounding on the Twin for as long as its Alert is active.
+- **Arcs** — drawn on a sheet that stands on the buzzer and turns to face the camera. They rise no higher than `ARC_REACH`: the camera frames the Enclosure with little room above it.
+- **Cost** — at the gas peak a frame takes about 1 ms more than when calm: 9 ms against 8 at 1920 × 1080 on the Iris Xe, where 60 images per second leave 16.7. All of it is the haze: each wisp is drawn over what is behind it, so their number (`WISPS`) and their radius are what to keep an eye on.
 
 **Capture mode** (#40) — `/twin?capture` is the Twin alone, to be filmed for the teaser:
 
@@ -220,6 +233,7 @@ const scene = useMemo(
 - [x] The Outpost as a maquette: socle, micro power plant, perimeter, camera sector — #32
 - [x] Intrusion zone lit, predictive pulse on the drifting Probes — #13
 - [x] Presence: PIR dome blinking, amber sweep round the fence — #36
+- [x] Gas haze around the pipe, the Alarm on the Enclosure's LED ring and buzzer — #34
 - [ ] Intruder placement (`x_norm` → perimeter arc) — #23
 - [ ] Time-scrubber + scenario mode — #15
 - [ ] CI: build + smoke render — #16

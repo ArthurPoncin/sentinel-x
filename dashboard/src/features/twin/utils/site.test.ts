@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { ENCLOSURE_SHAPE } from './enclosure-parts'
-import { type Block, fencePosts, type GroundPoint, lensPoint, SITE, watchedPoint } from './site'
+import { alongPipe, type Block, fencePosts, type GroundPoint, lensPoint, SITE, watchedPoint } from './site'
 
 // Across the camera's image, edge to edge.
 const ACROSS = [0, 0.15, 0.35, 0.5, 0.55, 0.75, 1]
 
 const fromCentre = (point: GroundPoint) => Math.hypot(point.x, point.z)
+const between = (a: GroundPoint, b: GroundPoint) => Math.hypot(a.x - b.x, a.z - b.z)
 
 const corners = ({ x, z, width, depth }: Block): GroundPoint[] =>
   [-1, 1].flatMap((side) => [-1, 1].map((end) => ({ x: x + (side * width) / 2, z: z + (end * depth) / 2 })))
@@ -124,13 +125,42 @@ describe('the gas pipe', () => {
     expect(pipe.height - pipe.radius).toBeGreaterThan(0)
     expect(pipe.height + pipe.radius).toBeLessThan(Math.min(hall.height, tank.height))
   })
+
+  it('is followed from the hall to the tank, through its bend', () => {
+    const [start, bend, end] = pipe.path
+    const lengths = [between(start, bend), between(bend, end)] as const
+
+    expect(alongPipe(0)).toEqual(start)
+    expect(between(alongPipe(lengths[0] / (lengths[0] + lengths[1])), bend)).toBeCloseTo(0)
+    expect(between(alongPipe(1), end)).toBeCloseTo(0)
+    // No further than its ends.
+    expect(alongPipe(-0.5)).toEqual(alongPipe(0))
+    expect(alongPipe(1.5)).toEqual(alongPipe(1))
+  })
+
+  it('is followed at an even pace, without leaving it', () => {
+    const STEPS = 40
+    const [start, bend, end] = pipe.path
+    const points = Array.from({ length: STEPS + 1 }, (_, step) => alongPipe(step / STEPS))
+    // How far `point` is from the stretch that runs from `from` to `to`.
+    const off = (point: GroundPoint, from: GroundPoint, to: GroundPoint) => {
+      const [x, z] = [to.x - from.x, to.z - from.z]
+      const share = Math.min(1, Math.max(0, ((point.x - from.x) * x + (point.z - from.z) * z) / (x * x + z * z)))
+      return between(point, { x: from.x + x * share, z: from.z + z * share })
+    }
+
+    for (const point of points) expect(Math.min(off(point, start, bend), off(point, bend, end))).toBeCloseTo(0)
+    // Every step is as long along the pipe; the one that takes the bend cuts its corner.
+    const pace = (between(start, bend) + between(bend, end)) / STEPS
+    const steps = points.slice(1).map((point, step) => between(point, points[step] ?? point))
+    expect(steps.filter((step) => Math.abs(step - pace) > 1e-9).length).toBeLessThanOrEqual(1)
+  })
 })
 
 describe('the Enclosure', () => {
   const { fence } = SITE
   // The middle of the gate: the site's entrance.
   const entrance = { x: fence.radius * Math.sin(fence.gate.bearing), z: fence.radius * Math.cos(fence.gate.bearing) }
-  const between = (a: GroundPoint, b: GroundPoint) => Math.hypot(a.x - b.x, a.z - b.z)
   const { Enclosure: foot = [], ...plant } = outlines()
 
   it('stands at the entrance, nearer the gate than anything of the plant', () => {

@@ -7,13 +7,13 @@ A **live 3D replica** of the Sentinel-X outpost rendered in the dashboard (Three
 | Real signal (Alert `kind` / telemetry) | Source node | Twin reaction |
 |---|---|---|
 | Temperature / humidity (DHT) | Sentinel | Heat shimmer / color grade on the box; thermal gauge |
-| Gas (`air`) | Sentinel | Box glows red, particle haze scales with the reading |
+| Gas (`air`) | Sentinel | Box glows red, a haze around the gas pipe thickens with the reading |
 | Presence (`pir`) | Sentinel | The Enclosure's PIR dome blinks, an amber sweep goes round the fence |
 | Noise (`sound`) | Sentinel | Sound-wave ripples around the box, scaled to `sound` (share of the cycle that was loud) |
 | Intrusion (vision) | Command Post (`vision`) | **Intruder marker** placed along the perimeter arc from `x_norm` |
 | Predictive drift | Command Post (`predictive`) | The drifting **component pulses orange** *before* the critical threshold |
 | `Status` (nominal/elevated/critical) | Command Post | The scene's overall color grade |
-| Alarm state (buzzer) | Sentinel | Twin mirrors the physical box (buzzer ring) |
+| Alarm (buzzer) | Sentinel | LED ring blinks and buzzer sounds while a `gas` or `thermal` Alert is active. The contract does not carry the Alarm's own state: the Twin does not show it silenced by the Operator |
 
 ## Signature features
 

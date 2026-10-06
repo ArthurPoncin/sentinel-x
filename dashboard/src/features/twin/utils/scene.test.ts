@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { STATUS_COLORS } from '@/shared/config/status-colors'
-import type { Alert, StatusLevel } from '@/shared/contract'
+import type { Alert, Severity, StatusLevel } from '@/shared/contract'
 import { ENCLOSURE_PARTS } from './enclosure-parts'
 import { CALM_AIR, CRITICAL_AIR } from './gas-level'
 import {
@@ -68,6 +68,11 @@ function presence(alertId: string): Alert {
   return { ...base, alert_id: alertId, source: 'esp32', kind: 'presence', severity: 'warning', detail: {} }
 }
 
+// An Alert the Sentinel raises from its own Probes.
+function sensed(kind: 'gas' | 'thermal' | 'presence' | 'noise', severity: Severity): Alert {
+  return { ...base, alert_id: kind, source: 'esp32', kind, severity, detail: {} }
+}
+
 describe('mix', () => {
   it('goes from one color to the other', () => {
     expect(mix('#000000', '#ffffff', 0)).toBe('#000000')
@@ -84,8 +89,10 @@ describe('toScene', () => {
         glow: 0,
         lcd: { text: 'NOMINAL', color: STATUS_GRADES.nominal.perimeter },
         ring: { color: STATUS_GRADES.nominal.perimeter },
+        alarm: null,
         pulses: [],
       },
+      haze: 0,
       status: STATUS_GRADES.nominal,
       sector: { lit: false },
       intruder: null,
@@ -101,6 +108,66 @@ describe('toScene', () => {
       glow: 0.5,
     })
     expect(toScene(withAir(CRITICAL_AIR)).enclosure).toMatchObject({ color: GAS_COLOR, glow: 1 })
+  })
+
+  it('thickens the haze around the gas pipe with the gas Reading: none when calm, the most at its peak', () => {
+    expect(toScene(withAir(180)).haze).toBe(0)
+    expect(toScene(withAir(CALM_AIR)).haze).toBe(0)
+    expect(toScene(withAir((CALM_AIR + CRITICAL_AIR) / 2)).haze).toBe(0.5)
+    expect(toScene(withAir(CRITICAL_AIR)).haze).toBe(1)
+    expect(toScene(withAir(840)).haze).toBe(1)
+  })
+
+  it("takes the haze over the range of the Enclosure's glow", () => {
+    for (const air of [150, CALM_AIR, 260, 320, 480, CRITICAL_AIR, 840]) {
+      const scene = toScene(withAir(air))
+
+      expect(scene.haze, `air ${air}`).toBe(scene.enclosure.glow)
+    }
+  })
+
+  it('has the haze follow the gas Reading, not the Alerts nor the Status', () => {
+    expect(toScene({ ...withAir(CRITICAL_AIR), status: 'nominal' }).haze).toBe(1)
+    expect(toScene(state({ status: 'critical', activeAlerts: [sensed('gas', 'critical')] })).haze).toBe(0)
+  })
+
+  it.each(['gas', 'thermal'] as const)('sounds the Alarm while a %s Alert is active', (kind) => {
+    expect(toScene(state({ activeAlerts: [sensed(kind, 'warning')] })).enclosure.alarm).toEqual({
+      severity: 'warning',
+      color: STATUS_COLORS.elevated,
+    })
+  })
+
+  it('rests the Alarm when no gas or thermal Alert is left, whatever else is active', () => {
+    const others = [sensed('presence', 'warning'), sensed('noise', 'info'), intrusion('i1', 0.2), predictive('p1', [])]
+
+    expect(toScene(state()).enclosure.alarm).toBeNull()
+    expect(toScene(state({ status: 'critical', activeAlerts: others })).enclosure.alarm).toBeNull()
+  })
+
+  it('gives the Alarm the color of the highest severity among its Alerts, whatever their order', () => {
+    const alarm = (...activeAlerts: Alert[]) => toScene(state({ activeAlerts })).enclosure.alarm
+
+    expect(alarm(sensed('gas', 'info'))).toEqual({ severity: 'info', color: STATUS_COLORS.nominal })
+    expect(alarm(sensed('gas', 'warning'), sensed('thermal', 'info'))).toEqual({
+      severity: 'warning',
+      color: STATUS_COLORS.elevated,
+    })
+    expect(alarm(sensed('gas', 'critical'), sensed('thermal', 'warning'))).toEqual({
+      severity: 'critical',
+      color: STATUS_COLORS.critical,
+    })
+    expect(alarm(sensed('thermal', 'warning'), sensed('gas', 'critical'))).toEqual(
+      alarm(sensed('gas', 'critical'), sensed('thermal', 'warning')),
+    )
+  })
+
+  it('takes the severity of the Alarm from the gas and thermal Alerts alone', () => {
+    const scene = toScene(state({ status: 'critical', activeAlerts: [intrusion('i1', 0.2), sensed('gas', 'warning')] }))
+
+    expect(scene.enclosure.alarm?.severity).toBe('warning')
+    // The color the LED ring goes back to breathing in is still the Status's.
+    expect(scene.enclosure.ring).toEqual({ color: STATUS_GRADES.critical.perimeter })
   })
 
   it.each<StatusLevel>(['nominal', 'elevated', 'critical'])(
