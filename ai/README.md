@@ -39,6 +39,24 @@ The main technical risk of Option A, on a Pi 4 that is slower than the Pi 5 the 
 - **Live:** `Model.load(path)`, one `Monitor(model, sentinel)` per Sentinel, `monitor.push(sample_of(payload))` → an Alert to post, or `None`.
 - The synthetic room is stationary and bounded (ventilation cycles, drafts, probe noise): the Tuesday capture must cover the demo's conditions likewise, or the model will rightly find them odd.
 
+### The live service — `python -m predictive run` (`predictive.service`)
+The image's default command. Configured by its environment, every variable in [`predictive/.env.example`](predictive/.env.example); a missing or invalid one stops it at startup with its name.
+- **Broker:** `MQTT_URL` in `mqtts://` only (port 8883 by default), user `MQTT_USERNAME` (`predictive`) / `MQTT_PASSWORD`, the broker verified against `MQTT_CA_FILE` alone, its name included (TLS ≥ 1.2). Subscribes to `sentinel/+/telemetry` each time the connection comes up; retries forever while the broker is away or refuses the login (1 s, doubling up to 30 s), saying why once.
+- **Messages:** the Sentinel is the topic's `<id>` (`[\w-]{1,64}`), never the payload's. A foreign topic, a payload over 4 KB or that is not a snapshot (`sample_of`), a snapshot not newer than the last: ignored and counted, the first of each kind logged with its topic, the rest summed up every 5 min.
+- **Model:** `MODEL_FILE` (`/model/model.joblib`), checked every `MODEL_POLL_S` (10 s). Without it, the service reads the telemetry, scores none of it and says so (again every 5 min). As soon as it appears, and each time it changes, it is loaded and logged with its range, levels and window, and every Sentinel starts over with a fresh window. A file that cannot be loaded is logged once and skipped: the previous model, if any, keeps scoring. So `docker compose run --rm predictive train …` is enough: the running service takes the new model up by itself.
+- **Alerts:** each transition is logged with its score and drivers, and posted through the `AlertClient` with `PREDICTIVE_TOKEN` to `ALERTS_URL`. A new model, or the service stopping, first clears the episodes still raised: nobody else could clear them.
+- **SIGTERM / SIGINT:** disconnects, posts what is queued (5 s at most), exits. No secret in any log line.
+
+Against a broker, from `ai/` (with a model saved by `Model.save`, e.g. the Pi's, copied):
+
+```bash
+MQTT_URL=mqtts://<pi-ip>:8883 MQTT_PASSWORD=… MQTT_CA_FILE=../infra/secrets/ca.crt \
+ALERTS_URL=http://127.0.0.1:8080/api/v1/alerts PREDICTIVE_TOKEN=… MODEL_FILE=model.joblib \
+PYTHONPATH=common:predictive .venv/bin/python -m predictive run
+```
+
+The image: `docker build -f ai/predictive/Dockerfile ai/` (the context is `ai/`, for `ai/common`); non-root (uid 10001), runs with `read_only` and `cap_drop: ALL`; the model lives on a volume at `/model`.
+
 ## Output
 Both jobs → `POST /api/v1/alerts` over the **internal Docker network**, using the unified Alert schema in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#alert--sentinelidalert-and-body-of-post-apiv1alerts). Each service sends its own token (`Authorization: Bearer …`, from its `.env`) and may only post its own `kind` (`intrusion` / `predictive`).
 
