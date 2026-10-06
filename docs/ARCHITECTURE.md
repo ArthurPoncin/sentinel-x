@@ -154,6 +154,8 @@ The **single unified Alert schema**, emitted by the Sentinel and by the AI servi
 "detail": { "anomaly_score": 0.91, "drivers": ["temp_slope", "air_slope"] }
 ```
 
+**Predictive `drivers`** — a closed vocabulary, the names of the model's 7 features over its 120 s window: `temp`, `humidity`, `air` (the last Readings), `temp_slope`, `air_slope` (least-squares trend, per minute), `temp_mean`, `air_mean`. Listed: the features furthest from their nominal spread (robust z-score ≥ 3), at most 3, furthest first — or the furthest one alone if none is that far. `anomaly_score` is the Isolation Forest's score, 0–1 (~0.5 for the usual).
+
 > An **Incident** spans from the first `raised` Alert until every open Alert has `cleared`. `alert_id` is how the time-scrubber groups and replays it.
 
 ### `POST /api/v1/alerts`
