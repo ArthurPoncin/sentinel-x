@@ -210,20 +210,30 @@ describe('toScene', () => {
   it('gives each Status its own colors', () => {
     const grades = Object.values(STATUS_GRADES)
 
-    for (const key of ['background', 'light', 'rim', 'perimeter'] as const) {
+    for (const key of ['background', 'rim', 'perimeter'] as const) {
       expect(new Set(grades.map((grade) => grade[key])).size).toBe(grades.length)
     }
   })
 
-  it('lights the model in neutral when nominal', () => {
-    expect(toScene(state({ status: 'nominal' })).status).toMatchObject({ light: NEUTRAL_LIGHT, rim: NEUTRAL_RIM })
+  it.each<StatusLevel>(['nominal', 'elevated', 'critical'])('lights the model in neutral at %s', (level) => {
+    expect(toScene(state({ status: level })).status.light).toBe(NEUTRAL_LIGHT)
   })
 
-  it.each(['elevated', 'critical'] as const)('lights the whole model in the color of the %s Status', (level) => {
-    const color = STATUS_COLORS[level]
-
-    expect(toScene(state({ status: level })).status).toMatchObject({ light: color, rim: color })
+  it('keeps the rim light the cold one of the studio when nominal', () => {
+    expect(toScene(state({ status: 'nominal' })).status.rim).toBe(NEUTRAL_RIM)
   })
+
+  it.each(['elevated', 'critical'] as const)(
+    'keeps the light neutral at %s and shows the Status on the rim light, the ring around the socle, the LCD and the LED ring',
+    (level) => {
+      const color = STATUS_COLORS[level]
+      const scene = toScene(state({ status: level }))
+
+      expect(scene.status).toMatchObject({ light: NEUTRAL_LIGHT, rim: color, perimeter: color })
+      expect(scene.enclosure.lcd.color).toBe(color)
+      expect(scene.enclosure.ring.color).toBe(color)
+    },
+  )
 
   it.each<StatusLevel>(['nominal', 'elevated', 'critical'])(
     "rings the perimeter in the dashboard's %s color",

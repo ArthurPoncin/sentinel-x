@@ -60,7 +60,7 @@ The live 3D model of the Outpost in the dashboard, driven in real time by the sa
 _Avoid_: 3D view, simulation, model.
 
 **Status**:
-The Outpost's single headline state — `nominal`, `elevated` or `critical` — computed as the highest severity among active Alerts. The Digital Twin's overall color.
+The Outpost's single headline state — `nominal`, `elevated` or `critical` — computed as the highest severity among active Alerts. The color the Digital Twin is flooded in as it rises, and keeps on its ring.
 _Avoid_: threat level, score, health.
 
 **Time-scrubber**:

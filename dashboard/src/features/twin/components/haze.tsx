@@ -30,7 +30,7 @@ export interface HazeProps {
 }
 
 // The haze of a gas leak: it seeps from the gas pipe, sinks and lies on the ground around it, thicker as the
-// gas rises. Made of what the steam is made of, so it takes the Status's light and does not glow.
+// gas rises. Made of what the steam is made of, so it takes the scene's light and does not glow.
 export function Haze({ density }: HazeProps) {
   const haze = useRef<Group>(null)
   const wisps = useRef<(Mesh | null)[]>([])

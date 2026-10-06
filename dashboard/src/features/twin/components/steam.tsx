@@ -23,7 +23,7 @@ export interface SteamProps {
 }
 
 // The slow plume of steam above a chimney. The puffs are lit like the rest of the maquette, so they take the
-// Status's light and do not glow.
+// scene's light and do not glow.
 export function Steam({ x, z, height, lag = 0 }: SteamProps) {
   const puffs = useRef<(Mesh | null)[]>([])
   const seconds = useRef(0)
