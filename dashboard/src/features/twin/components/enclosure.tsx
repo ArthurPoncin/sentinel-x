@@ -11,6 +11,8 @@ import {
   PlaneGeometry,
   type PointLight,
   ShaderMaterial,
+  type Sprite,
+  type SpriteMaterial,
   SRGBColorSpace,
   Vector2,
   Vector3,
@@ -240,9 +242,65 @@ function Probe({ part, pulsing, position, children }: ProbeProps) {
   )
 }
 
+// The drift label's card, in pixels, and its size on the Enclosure at scale 1: wider than the compartment it
+// hangs under, to be read from the back of the room.
+const LABEL_CARD = { width: 640, height: 128 } as const
+const LABEL_WIDTH = 1.5
+// How far under the compartment's floor the label hangs, at scale 1, so it hides neither Probe.
+const LABEL_DROP = 0.2
+
+// Under the drifting Probes, what the predictive model says of them: « dérive · score 0.91 », on a dark card
+// edged in the drift's orange. A sprite: it faces the camera wherever the orbit takes it, and is drawn over
+// the mast and the body, so it reads from every side. It comes and goes in a fade, and keeps its last text
+// while it fades out.
+function DriftLabel({ drift, below }: Pick<SceneProps['enclosure'], 'drift'> & { below: number }) {
+  const sprite = useRef<Sprite>(null)
+  const material = useRef<SpriteMaterial>(null)
+  const shownNow = useFade([drift ? 1 : 0])
+  const [text, setText] = useState(drift?.label ?? '')
+  if (drift && drift.label !== text) setText(drift.label)
+
+  const card = useCanvasTexture(LABEL_CARD.width, LABEL_CARD.height, (context) => {
+    const { width, height } = LABEL_CARD
+    const inset = 6
+    context.beginPath()
+    context.roundRect(inset, inset, width - 2 * inset, height - 2 * inset, (height - 2 * inset) / 2)
+    context.fillStyle = 'rgba(8, 10, 13, 0.86)'
+    context.fill()
+    context.lineWidth = 5
+    context.strokeStyle = DRIFT_COLOR
+    context.stroke()
+    context.fillStyle = DRIFT_COLOR
+    context.font = '700 58px ui-monospace, Menlo, Consolas, monospace'
+    context.textAlign = 'center'
+    context.textBaseline = 'middle'
+    context.fillText(text, width / 2, height / 2 + 2, width - 80)
+  })
+
+  useFrame(() => {
+    const shown = shownNow()[0] ?? 0
+    if (material.current) material.current.opacity = shown
+    // Nothing to draw once it has faded out.
+    if (sprite.current) sprite.current.visible = shown > 0.004
+  })
+
+  return (
+    <sprite
+      ref={sprite}
+      position={[0, below - LABEL_DROP, 0.05]}
+      scale={[LABEL_WIDTH, (LABEL_WIDTH * LABEL_CARD.height) / LABEL_CARD.width, 1]}
+      renderOrder={10}
+      visible={false}
+    >
+      <spriteMaterial ref={material} map={card} transparent opacity={0} depthTest={false} toneMapped={false} />
+    </sprite>
+  )
+}
+
 // Under the body, the ventilated compartment that keeps the Probes away from the electronics' heat:
-// louvres front and back, the DHT22 and the MQ-2 visible between them. Those of `pulses` pulse.
-function ProbeCompartment({ pulses }: Pick<SceneProps['enclosure'], 'pulses'>) {
+// louvres front and back, the DHT22 and the MQ-2 visible between them. Those of `pulses` pulse, and the
+// label of the drift hangs under them.
+function ProbeCompartment({ pulses, drift }: Pick<SceneProps['enclosure'], 'pulses' | 'drift'>) {
   const height = 0.34
   const louvres = [-0.11, -0.04, 0.03, 0.1]
 
@@ -294,6 +352,7 @@ function ProbeCompartment({ pulses }: Pick<SceneProps['enclosure'], 'pulses'>) {
           <meshStandardMaterial color="#b9c0c6" metalness={0.85} roughness={0.35} {...DRIFT} />
         </mesh>
       </Probe>
+      <DriftLabel drift={drift} below={-height / 2} />
     </group>
   )
 }
@@ -441,8 +500,9 @@ export type EnclosureProps = SceneProps['enclosure'] & {
 // The Sentinel-X product: a dark bevelled module on a mast, its Probes and actuators each a part of its
 // own (ENCLOSURE_PARTS). The body turns red and glows as gas rises; the LCD shows the Status and the
 // LED ring breathes in its color, until the Alarm makes it blink and the buzzer sound; the Probes the
-// predictive model says are drifting pulse; the PIR dome blinks while someone is near.
-export function Enclosure({ color, glow, lcd, ring, alarm, pulses, presence }: EnclosureProps) {
+// predictive model says are drifting pulse, their score on a label under them; the PIR dome blinks while
+// someone is near.
+export function Enclosure({ color, glow, lcd, ring, alarm, pulses, drift, presence }: EnclosureProps) {
   const body = useRef<MeshStandardMaterial>(null)
   const light = useRef<PointLight>(null)
   const target = useMemo(() => new Color(color), [color])
@@ -489,7 +549,7 @@ export function Enclosure({ color, glow, lcd, ring, alarm, pulses, presence }: E
         <PirDome presence={presence} />
         <MicGrille />
         <Engraving />
-        <ProbeCompartment pulses={pulses} />
+        <ProbeCompartment pulses={pulses} drift={drift} />
         <Crown ring={ring} alarm={alarm} />
         {/* What the gas throws on the ground around the Enclosure: from inside the body, it lights what
             is around without burning its own faces. */}

@@ -104,7 +104,7 @@ src/
 | `features/telemetry` | #21 gas curve, #11 every curve | `/` |
 | `features/status` · `features/alerts` | #11 Status badge, active Alerts | `/` |
 | `features/camera` · `features/actuators` | #14 camera feed, actuator panel | `/` |
-| `features/twin` (started) | #38 / #39 final intrusion and drift | `/twin` |
+| `features/twin` (started) | #38 final intrusion | `/twin` |
 | `features/replay` | #15 time-scrubber, scenario mode (rebuilds state with `apply`) | `/twin` |
 
 ## Live feed — `features/live-feed`
@@ -143,7 +143,7 @@ const history = useLiveFeed((state) => state.history)
 <OutpostTwin scene={scene} frames={history} />
 ```
 
-- `toScene(state)` turns the live state into what the scene shows, and is all the scene reads: pure, tested without WebGL. It gives the Enclosure's color and glow (gas), what its LCD reads and the color its LED ring breathes in (the Status), its Alarm (active `gas` and `thermal` Alerts), the Probes to pulse (active `predictive` Alerts), how thick the haze around the gas pipe is (gas), the Status's color grade, the heat of the generator hall (how red its roof glows, whether the air ripples above it), whether the camera sector is lit (an active `intrusion`), where the intruder stands (last active `intrusion`'s `x_norm`, and the point of the fence it gives), whether someone is near the site (an active `presence`) and whether the signal is lost.
+- `toScene(state)` turns the live state into what the scene shows, and is all the scene reads: pure, tested without WebGL. It gives the Enclosure's color and glow (gas), what its LCD reads and the color its LED ring breathes in (the Status), its Alarm (active `gas` and `thermal` Alerts), the Probes to pulse and the drift's label (active `predictive` Alerts), how thick the haze around the gas pipe is (gas), the Status's color grade, the heat of the generator hall (how red its roof glows, whether the air ripples above it), whether the camera sector is lit (an active `intrusion`), where the intruder stands (last active `intrusion`'s `x_norm`, and the point of the fence it gives), whether someone is near the site (an active `presence`) and whether the signal is lost.
 - The `Status` grades the whole scene. At `nominal` the studio keeps its neutral light, and only the ring around the socle, the LCD and the LED ring are green. At `elevated` and `critical` every light takes the Status's color: the whole model is lit in amber, in red. It follows the Command Post's Status, never the readings. The sky stays black on the stage (#30): the grade's `background` is no longer drawn.
 - **Nothing cuts** (#33). A new Status fades in over `FADE_SECONDS` (0.8 s), lights, ring around the socle, LCD and LED ring together, and one that comes during a fade starts from the color on screen. `fadeTo(fade, to, now)` and `fadeValue(fade, now)` are that rule, pure and tested; `useFade` / `useColorFade` run it on every frame.
 - **Signal lost** (#33). When the feed closes after having been open, `scene.signalLost` is true until it is open again, the retries in between included: the whole frame fades to grey (`<Halo saturation>`), "Signal lost" shows over the scene and the caption loses its colors, so that a stale state never passes for a live one. Before the first connection there is no signal to lose: the scene is neutral, with no notice. To see it, stop the backend.
@@ -161,7 +161,9 @@ const history = useLiveFeed((state) => state.history)
 - **Intrusion** — while an `intrusion` Alert is active, `scene.sector.lit` is true and the camera sector on the ground lights up in `INTRUSION_COLOR` (the critical red): the zone of the perimeter the camera watches, whole, wherever the intruder stands in it. It goes out when the last `intrusion` is `cleared`. The intruder itself stands on the sector's arc (#23, below).
 - **Predictive drift** — an active `predictive` Alert names what drifts in `detail.drivers`, and `DRIVER_PROBES` gives the Probe each one is read from: `temp_slope` → the DHT22, `air_slope` → the MQ-2. `scene.enclosure.pulses` lists them, each once; a driver that is not in `DRIVER_PROBES` pulses nothing. Those Probes emit `DRIFT_COLOR` in beats, an orange of its own that is not a Status color, so it shows at `nominal` as well as in the amber of `elevated`. `pulse(t)` is the beat, pure and tested: one every `PULSE_PERIOD` (1.2 s), never below `PULSE_FLOOR`.
 - Both come and go in a fade (`useFade`), like everything in the Twin, and both glow: they are emissive, so the halo takes them for lights.
-- **What it does not show yet** — the Probes sit in their compartment, which is open front and back only: seen from the Enclosure's side, the pulse is hidden behind the compartment's cheek until the orbit comes round. The label of #39 is what will say it from every side.
+- **The drift's label** (#39) — under the pulsing Probes, a card reads « dérive · score 0.91 »: the `anomaly_score` of the last raised of the active `predictive` Alerts that pulse a Probe, to two decimals. `scene.enclosure.drift` gives it (`{ score, label }`, `driftLabel(score)` for the text), null while no Probe pulses: an Alert whose drivers are all unknown labels nothing. The text comes from the mapper, tested without a render. The card is a sprite drawn over the mast and the body: it faces the camera wherever the orbit takes it, so the drift reads from every side, even where the compartment's cheek hides the pulse. It fades in with the pulse and out on the `cleared`, keeping its last text as it goes; like the pulse, it is the drift's orange at `nominal` as at `elevated`.
+
+![The drift's label under the pulsing Probes](../docs/twin/predictive-label.png)
 
 **The intruder** (#23) — where the vision service sees someone, on the maquette:
 
@@ -270,6 +272,7 @@ const history = useLiveFeed((state) => state.history)
 - [x] Capture mode for the teaser (`/twin?capture`) — #40
 - [x] The Outpost as a maquette: socle, micro power plant, perimeter, camera sector — #32
 - [x] Intrusion zone lit, predictive pulse on the drifting Probes — #13
+- [x] The drift's label under the pulsing Probes: « dérive · score 0.91 » — #39
 - [x] Presence: PIR dome blinking, amber sweep round the fence — #36
 - [x] Gas haze around the pipe, the Alarm on the Enclosure's LED ring and buzzer — #34
 - [x] Heat on the generator hall: its roof glows with the temperature, the air ripples on a `thermal` Alert — #35
