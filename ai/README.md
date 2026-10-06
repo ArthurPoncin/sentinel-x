@@ -18,6 +18,34 @@ Pure, camera and model aside: each inference's person boxes in, the Alerts to po
 - **`raised` again, same `alert_id`**, when `x_norm` moved by **≥ 0.05** since the last Alert sent, **at most every 500 ms**; a move made inside those 500 ms is sent once they are over. Someone standing still sends nothing.
 - **`cleared`** once nobody has been seen for **3 s** (`CLEAR_AFTER_S`), with the last known detail — also when inference stalls, through `tick()`. A shorter miss changes nothing; whoever comes after a clear gets a new `alert_id`.
 
+### The service — `python -m vision`
+The camera in, the tracker's Alerts posted with `VISION_TOKEN`, the annotated feed out. Runs on a laptop with a webcam or a video file: no Pi needed.
+- **Source** (`vision.sources`, `CAMERA_SOURCE`): `opencv:0` a webcam, `opencv:/path/video.mp4` a video file played in a loop at its own frame rate. Frames larger than 640x480 are shrunk, proportions kept. A capture thread keeps only the **latest** frame. A camera absent or lost stops nothing: `/health` says `down`, the feed shows a "camera down" card, and the source opens it again on its own (after 0.5 s, doubling up to every 10 s).
+- **Detector** (`vision.detectors`, `DETECTOR`): `motion`, OpenCV's MOG2 background subtraction, worked at 320 px wide; the largest blobs are the detections, `confidence` = blob area / 4 % of the frame (about a person at the fence), capped at 1. It learns the still scene for 20 frames before reporting anything, and someone who stops moving fades into the background within seconds: motion says someone moves, not that someone is there.
+- **Loop** (`vision.service.Vision`): the detector on every `INFER_EVERY`-th new frame, detections under `MIN_CONFIDENCE` dropped, the tracker's Alerts queued on the Alert client. The tracker is ticked between frames too, so a camera that stalls still clears. On SIGTERM / Ctrl-C it stops, clears the intrusion in progress (the api would keep it raised) and sends what is queued.
+- **HTTP** on `HTTP_PORT` (8000), never published: the reverse proxy serves it under `/camera`, behind the Operator session.
+  - `GET /`, whatever the query string (the dashboard asks for `/camera?attempt=N`, the proxy strips `/camera`): `multipart/x-mixed-replace; boundary=frame`, the latest frame with its boxes, their confidence and a status line (time, fps, inference ms, `INTRUSION` / `clear`), at most `STREAM_FPS` (15) a second, each picture encoded once for every client. `MAX_CLIENTS` (4) at once; the next one gets a `503`.
+  - `GET /health`: `{"camera": "ok"|"down", "fps", "inference_ms", "clients", "detector"}`, `200` while the camera works, `503` when it is down. Anything else is a `404`. Requests are not logged.
+- **Configuration**, all from the environment: [`vision/.env.example`](vision/.env.example). `VISION_TOKEN` is required (32 characters or more); a bad variable stops the service at start, with its name.
+- **Another source or detector** (Picamera2 #46, TFLite #74): a `CaptureThread` subclass with `_connect` / `_grab` / `_disconnect` and a line in `SOURCES`; a class with `name` and `detect(image) -> list[Detection]` and a line in `DETECTORS`.
+
+**In development**, three terminals from the repository's root (the `ai/` venv as in [Develop & test](#develop--test)):
+
+```bash
+# the api, taking the vision token, without the mock (its scripted intruder would mix with yours)
+openssl rand -hex 32 > /tmp/vision-token
+cd backend && VISION_TOKEN=$(cat /tmp/vision-token) OPERATOR_AUTH=off MOCK_FEED=false HISTORY_FILE=:memory: npm run dev
+
+# vision on the laptop's webcam (or CAMERA_SOURCE=opencv:/path/video.mp4), its feed on 127.0.0.1 only
+cd ai && PYTHONPATH=common:vision CAMERA_SOURCE=opencv:0 ALERTS_URL=http://127.0.0.1:8080/api/v1/alerts \
+  VISION_TOKEN=$(cat /tmp/vision-token) HTTP_HOST=127.0.0.1 .venv/bin/python -m vision
+
+# the dashboard on http://localhost:5173, its camera panel on that feed
+cd dashboard && CAMERA_URL=http://127.0.0.1:8000 npm run dev
+```
+
+Walk in front of the camera: the panel draws the box, the intruder appears on the Twin, and `curl -s 127.0.0.1:8000/health` gives the frame rate and the inference time.
+
 ### Performance on the Pi 4 — benchmark Monday
 The main technical risk of Option A, on a Pi 4 that is slower than the Pi 5 the brief assumes: TFLite detection on its CPU runs at a few frames per second. Levers, in order:
 1. EfficientDet-Lite0 at its native **320** input (capture stays 640x480); switch to SSD MobileNet if it benchmarks faster.
