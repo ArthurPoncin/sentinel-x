@@ -21,6 +21,8 @@ infra/plug-and-play.sh X          # X = table number: the Pi becomes 192.168.X.1
 4. turns the Pi's Wi-Fi into the table access point `SentinelX-X` (NetworkManager, 2.4 GHz, WPA2/CCMP, passphrase made once in `infra/secrets/wifi.env`), with DHCP only (dnsmasq: no DNS, no gateway, `sentinel-01` always on `.10`) and the time for the table (chrony: the network has no Internet, and every reading is time-stamped);
 5. flashes the ESP32 over USB and waits for its first telemetry snapshot on the broker.
 
+It talks French, through [`ui.sh`](ui.sh): sudo and the Operator password asked first, then 8 numbered steps with a spinner and their time, the commands' output in `~/.local/share/sentinel-x/plug-and-play.log` (its last line shown under the running step), a framed reason and the failed command's last lines when a step fails, a framed summary at the end. Plain lines, without the animation, when its output is not a terminal; `NO_COLOR` turns the colours off.
+
 Everything comes back by itself when the Pi reboots. The manual steps follow, for reference.
 
 Before the pentest, [`../cyber/harden.sh`](../cyber/harden.sh) closes the Pi down to what the table needs (SSH by key from the Operator laptop only, UFW, Docker's published ports kept to the table Wi-Fi) — [`../cyber/README.md`](../cyber/README.md#hardensh). Run it again after each `plug-and-play.sh`.

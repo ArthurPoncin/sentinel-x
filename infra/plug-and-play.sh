@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
 # Plug and play: turns a Raspberry Pi 4 into the Command Post and flashes the Sentinel plugged
-# into one of its USB ports. Run it on the Pi, from the repo root, as your usual user (it asks
-# for sudo), the first time while the Pi has Internet through Ethernet:
+# into one of its USB ports. Run it on the Pi, from the repo root, as your usual user, the first
+# time while the Pi has Internet through Ethernet:
 #   infra/plug-and-play.sh <table number>        e.g. infra/plug-and-play.sh 4 → the Pi is 192.168.4.1
 # It then works offline: run it again after a git pull, or to reflash, it keeps what exists.
 #   --no-flash   leaves the ESP32 alone
 # From the environment, all optional: WIFI_PASSPHRASE (else made once, kept in
 # infra/secrets/wifi.env), WIFI_SSID (SentinelX-<table>), WIFI_CHANNEL (6), WIFI_COUNTRY (FR),
-# OPERATOR_PASSWORD (else infra/setup.sh asks), ESP32_PORT (else the first /dev/ttyUSB*).
+# OPERATOR_PASSWORD (else asked), ESP32_PORT (else the first /dev/ttyUSB*).
+#
+# Its interface is infra/ui.sh, in French like the step-by-step (docs/INSTALLATION-PI.md): everything
+# it needs (sudo, the Operator password) is asked first, then eight steps run on their own, the
+# commands' output kept in ~/.local/share/sentinel-x/plug-and-play.log.
 set -euo pipefail
 
-usage() { echo "Usage: infra/plug-and-play.sh <table number> [--no-flash]" >&2; exit 1; }
+usage() { echo "Usage : infra/plug-and-play.sh <numéro de table> [--no-flash]" >&2; exit 1; }
 table="" flash=true
 for arg in "$@"; do
   case "$arg" in
@@ -31,11 +35,8 @@ pio="$pio_venv/bin/pio"
 
 cd "$(dirname "$0")/.."
 secrets=infra/secrets
-
-step() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
-ok() { printf '    \033[32m✓\033[0m %s\n' "$*"; }
-warn() { printf '    \033[33m!\033[0m %s\n' "$*"; }
-die() { printf '\n\033[31mStopped: %s\033[0m\n' "$*" >&2; exit 1; }
+# shellcheck source=infra/ui.sh
+source infra/ui.sh
 
 # Runs a command with a group the user just joined, without logging out and in again.
 with_group() {
@@ -43,41 +44,148 @@ with_group() {
   if id -nG | grep -qw "$group"; then "$@"; else sg "$group" -c "$(printf '%q ' "$@")"; fi
 }
 
-[[ "$(uname -s)" == Linux ]] || die "run this on the Raspberry Pi, not on a laptop."
-grep -qs "Raspberry Pi" /proc/device-tree/model || warn "this does not look like a Raspberry Pi: going on anyway."
+# What the steps run in the background, their output in the log. Each stops at its first error.
+install_packages() {
+  sudo apt-get update
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"
+}
+install_docker() { curl -fsSL https://get.docker.com | sudo sh; }
+install_platformio() {
+  python3 -m venv "$pio_venv"
+  "$pio_venv/bin/pip" install platformio
+}
+start_access_point() {
+  if command -v raspi-config >/dev/null; then sudo raspi-config nonint do_wifi_country "$country"; fi
+  sudo rfkill unblock wifi || true
+  local ap_settings=(
+    802-11-wireless.mode ap 802-11-wireless.band bg 802-11-wireless.channel "$channel"
+    wifi-sec.key-mgmt wpa-psk wifi-sec.proto rsn wifi-sec.pairwise ccmp wifi-sec.group ccmp wifi-sec.psk "$passphrase"
+    ipv4.method manual ipv4.addresses "$pi_ip/24" ipv6.method disabled
+    connection.autoconnect yes connection.autoconnect-priority 100
+  )
+  if nmcli -t -f NAME connection show | grep -qx sentinel-x-ap; then
+    sudo nmcli connection modify sentinel-x-ap 802-11-wireless.ssid "$ssid" "${ap_settings[@]}"
+  else
+    sudo nmcli connection add type wifi ifname wlan0 con-name sentinel-x-ap ssid "$ssid" "${ap_settings[@]}"
+  fi
+  sudo nmcli connection up sentinel-x-ap
+}
+serve_dhcp_and_time() {
+  # DHCP only: no DNS, no gateway. sentinel-01 always gets .10, by the name it sends.
+  sudo tee /etc/dnsmasq.d/sentinel-x.conf >/dev/null <<DNSMASQ
+# Sentinel-X table Wi-Fi. Made by infra/plug-and-play.sh.
+port=0
+interface=wlan0
+bind-dynamic
+dhcp-authoritative
+dhcp-range=192.168.$table.100,192.168.$table.199,255.255.255.0,12h
+dhcp-host=sentinel-01,$sentinel_ip
+dhcp-option=3
+dhcp-option=6
+dhcp-option=option:ntp-server,$pi_ip
+DNSMASQ
+  sudo systemctl enable --quiet dnsmasq
+  sudo systemctl restart dnsmasq
+  # The table network has no Internet: the Pi gives the time, which stamps every reading.
+  sudo mkdir -p /etc/chrony/conf.d
+  sudo tee /etc/chrony/conf.d/sentinel-x.conf >/dev/null <<CHRONY
+# Serves the time to the table Wi-Fi. Made by infra/plug-and-play.sh.
+allow 192.168.$table.0/24
+local stratum 10
+CHRONY
+  sudo systemctl enable --quiet chrony
+  sudo systemctl restart chrony
+}
+open_firewall() {
+  local rule
+  for rule in 67/udp 123/udp 443/tcp 8883/tcp; do
+    sudo ufw allow in on wlan0 to any port "${rule%/*}" proto "${rule#*/}"
+  done
+}
+wait_for_lease() {
+  local _
+  for _ in $(seq 60); do
+    if grep -qs " $sentinel_ip " /var/lib/misc/dnsmasq.leases; then return 0; fi
+    sleep 2
+  done
+  return 1
+}
+first_snapshot() {
+  with_group docker docker compose exec -T mosquitto mosquitto_sub -h mosquitto -p 8883 \
+    --cafile /mosquitto/config/certs/ca.crt -u api -P "$api_password" \
+    -t sentinel/sentinel-01/telemetry -C 1 -W 60 >"$1"
+}
+# A snapshot as the Operator reads it: « 23.4 °C · 41 % · gaz 312 ». As it came when it does not parse.
+readable_snapshot() {
+  local json=$1 temp humidity air
+  temp=$(sed -n 's/.*"temp":\([-0-9.]*\).*/\1/p' <<<"$json")
+  humidity=$(sed -n 's/.*"humidity":\([-0-9.]*\).*/\1/p' <<<"$json")
+  air=$(sed -n 's/.*"air":\([-0-9.]*\).*/\1/p' <<<"$json")
+  if [[ -n $temp && -n $humidity && -n $air ]]; then
+    printf 'première mesure : %s °C · humidité %s %% · gaz %s' "$temp" "$humidity" "$air"
+  else
+    printf 'première mesure : %s' "$json"
+  fi
+}
+
+ui_init 8 "$HOME/.local/share/sentinel-x/plug-and-play.log" "infra/plug-and-play.sh $*"
+ui_banner "SENTINEL-X · Command Post" "Table $table · Pi $pi_ip · Wi-Fi $ssid$($flash || echo " · sans flash")"
+
+# --- Before the steps: what the Pi is, and everything to ask ----------------------------------
+[[ "$(uname -s)" == Linux ]] || ui_fail "lance ce script sur le Raspberry Pi, pas sur un ordinateur."
+grep -qs "Raspberry Pi" /proc/device-tree/model || ui_warn "ça ne ressemble pas à un Raspberry Pi : on continue quand même."
 online=false
 curl -fsS --max-time 5 -o /dev/null https://download.docker.com && online=true
-if $online; then ok "Internet reachable: missing pieces get downloaded"; else warn "no Internet: only what is already installed will be used"; fi
+if $online; then
+  ui_ok "Internet joignable : ce qui manque sera téléchargé."
+else
+  ui_warn "pas d'Internet : seul ce qui est déjà installé servira."
+fi
+ui_sudo
+# setup.sh makes the Operator's password hash with the credentials, once: asked now, not in the
+# middle of a step.
+if [[ ! -f "$secrets/api.env" && -z "${OPERATOR_PASSWORD:-}" ]]; then
+  [[ -t 0 ]] || ui_fail "il faut le mot de passe Opérateur : lance le script dans un terminal, ou donne OPERATOR_PASSWORD."
+  again=""
+  while :; do
+    ui_ask_secret OPERATOR_PASSWORD "Mot de passe Opérateur, celui du dashboard (12 caractères minimum) :"
+    if ((${#OPERATOR_PASSWORD} < 12)); then ui_warn "trop court : 12 caractères minimum."; continue; fi
+    ui_ask_secret again "Encore une fois :"
+    [[ "$OPERATOR_PASSWORD" == "$again" ]] && break
+    ui_warn "les deux ne correspondent pas : on recommence."
+  done
+  export OPERATOR_PASSWORD
+fi
+ui_ok "Tout est demandé : la suite se fait seule (30 à 60 min la première fois)."
 
 # --- 1. Software, while there is Internet ---------------------------------------------------
-step "Software: Docker, dnsmasq (DHCP), chrony (time), PlatformIO"
+ui_step "Logiciels"
 missing=()
 for package in dnsmasq chrony python3-venv openssl curl; do
   dpkg -s "$package" >/dev/null 2>&1 || missing+=("$package")
 done
 if ((${#missing[@]})); then
-  $online || die "missing packages (${missing[*]}): plug the Pi into Ethernet and run it again."
-  sudo apt-get update -qq
-  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${missing[@]}" >/dev/null
+  $online || ui_fail "paquets manquants (${missing[*]}) : branche l'Ethernet, puis relance."
+  ui_run "installation de ${missing[*]}" install_packages "${missing[@]}"
 fi
-ok "packages"
-
 if ! command -v docker >/dev/null; then
-  $online || die "Docker is missing: plug the Pi into Ethernet and run it again."
-  curl -fsSL https://get.docker.com | sudo sh >/dev/null
+  $online || ui_fail "Docker manque : branche l'Ethernet, puis relance."
+  ui_run "installation de Docker" install_docker
 fi
-id -nG | grep -qw docker || sudo usermod -aG docker "$USER"
-ok "Docker"
-
+joined_docker=false
+if ! id -nG | grep -qw docker; then
+  sudo usermod -aG docker "$USER"
+  joined_docker=true
+fi
 if [[ ! -x "$pio" ]]; then
-  $online || die "PlatformIO is missing: plug the Pi into Ethernet and run it again."
-  python3 -m venv "$pio_venv"
-  "$pio_venv/bin/pip" install -q platformio
+  $online || ui_fail "PlatformIO manque : branche l'Ethernet, puis relance."
+  ui_run "installation de PlatformIO" install_platformio
 fi
-ok "PlatformIO"
+ui_detail "Docker, PlatformIO, dnsmasq (DHCP), chrony (heure)"
+ui_done
 
 # --- 2. Secrets ------------------------------------------------------------------------------
-step "Secrets: table Wi-Fi, certificates, MQTT accounts (infra/secrets, never committed)"
+ui_step "Secrets et certificats"
 mkdir -p "$secrets" && chmod 700 "$secrets"
 if [[ -n "${WIFI_PASSPHRASE:-}" ]]; then
   passphrase="$WIFI_PASSPHRASE"
@@ -86,7 +194,7 @@ elif [[ -f "$secrets/wifi.env" ]]; then
 else
   passphrase="$(openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | head -c 24)"
 fi
-[[ "$passphrase" =~ ^[[:print:]]{8,63}$ ]] || die "the Wi-Fi passphrase needs 8 to 63 printable characters."
+[[ "$passphrase" =~ ^[[:print:]]{8,63}$ ]] || ui_fail "la phrase de passe Wi-Fi doit faire 8 à 63 caractères imprimables."
 (umask 077 && printf 'WIFI_SSID=%s\nWIFI_PASSPHRASE=%s\n' "$ssid" "$passphrase" >"$secrets/wifi.env")
 
 # A broker certificate made before the ESP32 fix, or for another table: made again.
@@ -97,19 +205,22 @@ if [[ -f "$broker_crt" ]] && ! openssl x509 -in "$broker_crt" -noout -text 2>/de
   broker_remade=true
 fi
 if [[ -f "$secrets/caddy/proxy.crt" ]] && ! openssl x509 -in "$secrets/caddy/proxy.crt" -noout -text 2>/dev/null | grep -q "IP Address:$pi_ip"; then
-  warn "the HTTPS certificate is for another table: sudo rm infra/secrets/caddy/proxy.* and run it again."
+  ui_note "le certificat HTTPS est celui d'une autre table : sudo rm infra/secrets/caddy/proxy.*, puis relance."
 fi
-with_group docker infra/setup.sh "$table"
+ui_run "certificats, comptes MQTT, jetons des services IA" with_group docker infra/setup.sh "$table"
 
 sentinel_password="$(sed -n 's/.*user sentinel-01, password \([0-9a-f]*\).*/\1/p' "$secrets/handover.txt")"
 api_password="$(sed -n 's/^MQTT_PASSWORD=//p' "$secrets/api.env")"
-[[ -n "$sentinel_password" && -n "$api_password" ]] || die "no MQTT passwords in infra/secrets: sudo rm -rf infra/secrets and run it again."
+[[ -n "$sentinel_password" && -n "$api_password" ]] || ui_fail "pas de mots de passe MQTT dans infra/secrets : sudo rm -rf infra/secrets, puis relance."
+ui_detail "dans infra/secrets, jamais commités"
+ui_done
 
-# --- 3. The stack ----------------------------------------------------------------------------
-step "ZIF camera for vision (docker-compose.camera.yml)"
+# --- 3. The camera ---------------------------------------------------------------------------
+ui_step "Caméra ZIF"
 # Its device nodes go to vision only when they all exist: with one missing, Docker would refuse to
-# start the container, and `docker compose up` would stop here.
+# start the container, and `docker compose up` would stop at the next step.
 camera_line=COMPOSE_FILE=docker-compose.yml:docker-compose.camera.yml
+camera_ok=false
 missing_nodes=()
 for node in $(sed -n 's|^ *- \(/dev/[^ ]*\)$|\1|p' docker-compose.camera.yml); do
   [[ -e "$node" ]] || missing_nodes+=("$node")
@@ -117,19 +228,31 @@ done
 touch .env
 if ((${#missing_nodes[@]})); then
   sed -i "\|^$camera_line\$|d" .env
-  warn "camera nodes missing (${missing_nodes[*]}): vision runs with its camera down. Check the ribbon with rpicam-hello --list-cameras, then run this again."
+  shown="${missing_nodes[*]:0:3}"
+  ((${#missing_nodes[@]} > 3)) && shown="$shown et $((${#missing_nodes[@]} - 3)) autres"
+  ui_note "nœuds de la caméra absents ($shown) : vision tournera sans caméra. Vérifie la nappe avec rpicam-hello --list-cameras, puis relance."
 else
   grep -qx "$camera_line" .env || echo "$camera_line" >>.env
-  ok "the camera's nodes go to vision"
+  camera_ok=true
+  ui_detail "ses nœuds sont donnés à vision"
 fi
+ui_done
 
-step "Command Post stack (docker compose)"
-if $online; then with_group docker docker compose up -d --build; else with_group docker docker compose up -d; fi
-$broker_remade && with_group docker docker compose restart mosquitto >/dev/null
-ok "stack up: $(with_group docker docker compose ps --format '{{.Service}}' | tr '\n' ' ')"
+# --- 4. The stack ----------------------------------------------------------------------------
+ui_step "Stack Docker"
+if $online; then
+  ui_task "construction des images et démarrage" with_group docker docker compose up -d --build
+  ((UI_RC == 0)) || ui_fail "la stack ne démarre pas : la fin du journal dit pourquoi."
+else
+  ui_task "démarrage" with_group docker docker compose up -d
+  ((UI_RC == 0)) || ui_fail "la stack ne démarre pas. Sans Internet, une image qui manque ne peut pas être construite : branche l'Ethernet, puis relance."
+fi
+$broker_remade && ui_run "redémarrage du broker" with_group docker docker compose restart mosquitto
+ui_detail "en marche : $(with_group docker docker compose ps --format '{{.Service}}' | tr '\n' ' ')"
+ui_done
 
-# --- 4. The Sentinel's firmware, built with the secrets of this Pi -----------------------------
-step "Sentinel firmware"
+# --- 5. The Sentinel's firmware, built with the secrets of this Pi -----------------------------
+ui_step "Firmware du Sentinel"
 escape() { sed 's/\\/\\\\/g; s/"/\\"/g' <<<"$1"; }
 (
   umask 077
@@ -148,103 +271,107 @@ $(cat "$secrets/ca.crt")
 )PEM";
 SECRETS
 )
-"$pio" run -d firmware -s || die "the firmware does not build (first time: it needs Internet)."
-ok "firmware built"
+ui_task "compilation" "$pio" run -d firmware -s
+((UI_RC == 0)) || ui_fail "le firmware ne compile pas (la première fois, il faut Internet)."
+ui_detail "compilé avec les secrets de ce Pi"
+ui_done
 
-# --- 5. The table network: from here on, the Pi's Wi-Fi is the access point --------------------
-step "Table Wi-Fi $ssid on $pi_ip (2.4 GHz, WPA2, no route out)"
-systemctl is-active --quiet NetworkManager || die "NetworkManager is not running: use Raspberry Pi OS Bookworm."
+# --- 6. The table network: from here on, the Pi's Wi-Fi is the access point --------------------
+ui_step "Wi-Fi de la table"
+systemctl is-active --quiet NetworkManager || ui_fail "NetworkManager ne tourne pas : réinstalle un Raspberry Pi OS (64-bit) récent."
 if ip route get 1.1.1.1 2>/dev/null | grep -q "dev wlan0"; then
-  warn "the Pi reached the Internet through its Wi-Fi: that link drops now (everything is downloaded)."
+  ui_note "le Pi passait par son Wi-Fi pour Internet : ce lien tombe maintenant (tout est déjà téléchargé)."
 fi
-command -v raspi-config >/dev/null && sudo raspi-config nonint do_wifi_country "$country"
-sudo rfkill unblock wifi || true
-
-ap_settings=(
-  802-11-wireless.mode ap 802-11-wireless.band bg 802-11-wireless.channel "$channel"
-  wifi-sec.key-mgmt wpa-psk wifi-sec.proto rsn wifi-sec.pairwise ccmp wifi-sec.group ccmp wifi-sec.psk "$passphrase"
-  ipv4.method manual ipv4.addresses "$pi_ip/24" ipv6.method disabled
-  connection.autoconnect yes connection.autoconnect-priority 100
-)
-if nmcli -t -f NAME connection show | grep -qx sentinel-x-ap; then
-  sudo nmcli connection modify sentinel-x-ap 802-11-wireless.ssid "$ssid" "${ap_settings[@]}"
-else
-  sudo nmcli connection add type wifi ifname wlan0 con-name sentinel-x-ap ssid "$ssid" "${ap_settings[@]}" >/dev/null
-fi
-sudo nmcli connection up sentinel-x-ap >/dev/null
-ok "access point up"
-
-# DHCP only: no DNS, no gateway. sentinel-01 always gets .10, by the name it sends.
-sudo tee /etc/dnsmasq.d/sentinel-x.conf >/dev/null <<DNSMASQ
-# Sentinel-X table Wi-Fi. Made by infra/plug-and-play.sh.
-port=0
-interface=wlan0
-bind-dynamic
-dhcp-authoritative
-dhcp-range=192.168.$table.100,192.168.$table.199,255.255.255.0,12h
-dhcp-host=sentinel-01,$sentinel_ip
-dhcp-option=3
-dhcp-option=6
-dhcp-option=option:ntp-server,$pi_ip
-DNSMASQ
-sudo systemctl enable --quiet dnsmasq && sudo systemctl restart dnsmasq
-ok "DHCP: Sentinel on $sentinel_ip, laptops from .100"
-
-# The table network has no Internet: the Pi gives the time, which stamps every reading.
-sudo mkdir -p /etc/chrony/conf.d
-sudo tee /etc/chrony/conf.d/sentinel-x.conf >/dev/null <<CHRONY
-# Serves the time to the table Wi-Fi. Made by infra/plug-and-play.sh.
-allow 192.168.$table.0/24
-local stratum 10
-CHRONY
-sudo systemctl enable --quiet chrony && sudo systemctl restart chrony
-ok "time server for the table"
-
+ui_run "point d'accès $ssid" start_access_point
+ui_run "DHCP et serveur d'heure" serve_dhcp_and_time
 if sudo ufw status 2>/dev/null | grep -q "Status: active"; then
-  for rule in 67/udp 123/udp 443/tcp 8883/tcp; do sudo ufw allow in on wlan0 to any port "${rule%/*}" proto "${rule#*/}" >/dev/null; done
-  ok "firewall: DHCP, NTP, HTTPS and MQTTS open on the table Wi-Fi"
+  ui_run "pare-feu : DHCP, heure, HTTPS et MQTTS ouverts sur le Wi-Fi de la table" open_firewall
 fi
+ui_detail "$ssid sur $pi_ip · 2,4 GHz, WPA2, sans Internet · le Sentinel en $sentinel_ip"
+ui_done
 
-# --- 6. Flash the Sentinel and wait for its first snapshot ------------------------------------
-if $flash; then
-  step "Flashing the Sentinel over USB"
+# --- 7. Flash the Sentinel --------------------------------------------------------------------
+ui_step "Flash de l'ESP32"
+if ! $flash; then
+  ui_skip "ignoré (--no-flash)"
+else
   port="${ESP32_PORT:-}"
   for candidate in /dev/ttyUSB* /dev/ttyACM*; do
     if [[ -z "$port" && -e "$candidate" ]]; then port="$candidate"; fi
   done
   if [[ -z "$port" ]]; then
-    warn "no ESP32 on USB: plug it into the Pi and run it again (or --no-flash)."
+    ui_note "pas d'ESP32 en USB : branche-le sur le Pi avec un câble de données, puis relance (ou --no-flash)."
   else
     id -nG | grep -qw dialout || sudo usermod -aG dialout "$USER"
-    with_group dialout "$pio" run -d firmware -s -t upload --upload-port "$port" \
-      || die "flashing failed: hold the ESP32's BOOT button while it starts uploading, and run it again."
-    ok "flashed on $port"
+    ui_task "envoi sur $port" with_group dialout "$pio" run -d firmware -s -t upload --upload-port "$port"
+    ((UI_RC == 0)) || ui_fail "le flash a échoué : maintiens le bouton BOOT de l'ESP32 au début de l'envoi, puis relance."
+    ui_detail "flashé sur $port"
   fi
 fi
+ui_done
 
-step "Waiting for the Sentinel (up to 2 minutes)"
-for _ in $(seq 60); do
-  grep -qs " $sentinel_ip " /var/lib/misc/dnsmasq.leases && break
-  sleep 2
-done
-if grep -qs " $sentinel_ip " /var/lib/misc/dnsmasq.leases; then
-  ok "on the table Wi-Fi as $sentinel_ip"
-  if snapshot="$(with_group docker docker compose exec -T mosquitto mosquitto_sub -h mosquitto -p 8883 \
-      --cafile /mosquitto/config/certs/ca.crt -u api -P "$api_password" \
-      -t sentinel/sentinel-01/telemetry -C 1 -W 60 2>/dev/null)"; then
-    ok "first snapshot: $snapshot"
+# --- 8. Its first snapshot ---------------------------------------------------------------------
+ui_step "Première mesure du Sentinel"
+sentinel_ok=false
+ui_task "attente du Sentinel sur le Wi-Fi (2 min au plus)" wait_for_lease
+if ((UI_RC == 0)); then
+  sentinel_ok=true
+  snapshot_file=$(mktemp)
+  ui_task "attente d'une mesure (1 min au plus)" first_snapshot "$snapshot_file"
+  if ((UI_RC == 0)) && [[ -s "$snapshot_file" ]]; then
+    ui_detail "$(readable_snapshot "$(head -n 1 "$snapshot_file")")"
   else
-    warn "no snapshot yet: its LCD and \`$pio device monitor -d firmware\` tell what it waits for."
+    ui_note "pas encore de mesure : son écran et « $pio device monitor -d firmware » disent ce qu'il attend."
   fi
+  rm -f "$snapshot_file"
 else
-  warn "not on the Wi-Fi yet: check it is powered, and its LCD."
+  ui_note "le Sentinel n'est pas encore sur le Wi-Fi : vérifie qu'il est alimenté, et son écran."
+fi
+ui_done
+
+# --- The summary -------------------------------------------------------------------------------
+summary=(
+  "Wi-Fi        $ssid"
+  "Passphrase   $passphrase"
+  "Dashboard    https://$pi_ip/"
+  "Sentinel     $($sentinel_ok && echo "$G_OK $sentinel_ip" || echo "$G_FAIL pas encore sur le Wi-Fi")"
+  "Caméra       $($camera_ok && echo "$G_OK donnée à vision" || echo "$G_FAIL absente")"
+  "Durée        $(_ui_duration "$SECONDS")"
+  "Journal      $(_ui_home "$UI_LOG")"
+)
+printf '\n'
+if ((${#UI_ALL_NOTES[@]})); then
+  ui_box "$C_YELLOW" "Command Post prêt, avec des remarques" "${summary[@]}"
+  printf '\n %sÀ voir :%s\n' "$C_BOLD" "$C_RESET"
+  for note in "${UI_ALL_NOTES[@]}"; do
+    _ui_wrap $((UI_WIDTH - 5)) "$note"
+    printf '   %s%s%s %s\n' "$C_YELLOW" "$G_WARN" "$C_RESET" "${UI_WRAPPED[0]}"
+    for line in "${UI_WRAPPED[@]:1}"; do printf '     %s\n' "$line"; done
+  done
+else
+  ui_box "$C_GREEN" "Command Post prêt" "${summary[@]}"
 fi
 
-cat <<DONE
-
-Command Post ready.
-  Table Wi-Fi   $ssid   passphrase: $passphrase
-  Dashboard     https://$pi_ip/   (import infra/secrets/ca.crt as a trusted CA on the laptop first)
-  Logs          docker compose logs -f api mosquitto
-Everything comes back on its own after a reboot of the Pi.
-DONE
+# The Pi by its name while avahi answers for it, by its address once cyber/harden.sh turned it off.
+if systemctl is-active --quiet avahi-daemon; then pi_host="$(hostname).local"; else pi_host=$pi_ip; fi
+# Each thing to do, and the command that does it ("" when there is none): a command on its own line,
+# whole, to copy as it is.
+next=(
+  "Sur le PC Opérateur, récupère le certificat, puis importe-le comme autorité de confiance :"
+  "scp $USER@$pi_host:$PWD/$secrets/ca.crt ."
+  "Connecte le PC au Wi-Fi $ssid, puis ouvre https://$pi_ip/"
+  ""
+)
+if $joined_docker; then
+  next+=("Reconnecte-toi en SSH avant de lancer docker toi-même : tu viens d'entrer dans son groupe." "")
+fi
+next+=("Les journaux des services (vision pour la caméra) :" "docker compose logs -f vision")
+printf '\n %sEnsuite :%s\n' "$C_BOLD" "$C_RESET"
+for ((i = 0; i < ${#next[@]}; i += 2)); do
+  _ui_wrap $((UI_WIDTH - 6)) "${next[i]}"
+  printf '   %s%d.%s %s\n' "$C_CYAN" $((i / 2 + 1)) "$C_RESET" "${UI_WRAPPED[0]}"
+  for line in "${UI_WRAPPED[@]:1}"; do printf '      %s\n' "$line"; done
+  if [[ -n "${next[i + 1]}" ]]; then printf '      %s%s%s\n' "$C_CYAN" "${next[i + 1]}" "$C_RESET"; fi
+done
+printf '\n %sTout revient seul au redémarrage du Pi.%s\n\n' "$C_DIM" "$C_RESET"
+printf '\n=== fin : %d remarque(s)\n' "${#UI_ALL_NOTES[@]}" >>"$UI_LOG"
