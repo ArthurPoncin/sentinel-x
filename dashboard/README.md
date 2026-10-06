@@ -130,7 +130,9 @@ src/
 
 - UI building blocks come from shadcn/ui: `npx shadcn@latest add <component>` writes them to `src/shared/ui/` (check that its imports say `@/shared/lib/utils`). No icon library: a state is said with a colored `●` and words, a trend with `▲` / `▼` — the top bar's `● En direct` sets the tone. A shadcn component added later comes with lucide icons (still installed: `ui/` uses it internally): swap them for that. The theme is shadcn's neutral one, dark only, in `app/styles.css`; `nominal` / `elevated` / `critical` are Tailwind colors too (`text-critical`, `bg-nominal`…), kept to dots and figures.
 - The UI text is in French (the Operator and the jury are); code, comments and docs stay in English. Labels shared by several features live in `shared/lib/labels.ts`.
-- `app/` holds the shell (`layout.tsx`): the original top bar across the window — `Sentinel-X`, `Operator`, `Digital Twin`, `● Live`, its words in English — and under it the shadcn sidebar (`app-sidebar.tsx`), always open, with the two surfaces and the sign-out.
+- `app/` holds the shell (`layout.tsx`): the original top bar across the window — `☰`, `Sentinel-X`, `Operator`, `Digital Twin`, `● Live`, its words in English — and under it the shadcn sidebar (`app-sidebar.tsx`), with the two surfaces and the sign-out.
+- The sidebar folds away: the top bar's ☰ (or Ctrl+B) hides it and gives the page its room, and the choice survives a reload (`sidebarOpenFrom(document.cookie)` reads shadcn's `sidebar_state` cookie back). Under 768 px it is a drawer that a choice closes, and the top bar keeps only ☰, the brand and the feed.
+- Responsive down to a 390 px phone: the Alert log's filters stack in two columns; on a phone the Alert log puts the state under the Alert's name and the Incidents put the outcome under the start, rather than scroll sideways; the pager drops its words.
 
 **Features to come**
 
