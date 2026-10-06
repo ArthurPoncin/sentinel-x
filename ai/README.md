@@ -26,7 +26,7 @@ The main technical risk of Option A, on a Pi 4 that is slower than the Pi 5 the 
 
 ## Predictive maintenance
 - **Live:** subscribe to `sentinel/+/telemetry` over MQTTS (`mosquitto:8883`, own `predictive` MQTT user, broker verified against the team CA) and score a sliding window in memory.
-- **Training:** nominal history from the DB (**read-only** DB user).
+- **Training:** nominal history from the api's SQLite history, opened **read-only** (`mode=ro`, `api-data` volume mounted `:ro`) — see *Capture & training* below.
 - **No static thresholds** (`if temp>40` is forbidden). Isolation Forest on an enriched vector: `[temp, humidity, air]` **+ velocity features** `[Δtemp/dt, Δair/dt]` + rolling means.
 - Goal: catch the *correlation* — slow temp rise + micro air deviation → predict an incident **before** the critical threshold. Emits a `predictive` Alert with `anomaly_score`.
 - Train on **nominal data only**, captured Tuesday (2–4 h). No labelled incidents needed.
@@ -38,6 +38,32 @@ The main technical risk of Option A, on a Pi 4 that is slower than the Pi 5 the 
 - **Alert** (`predictive.detector`): `raised` after 5 scores in a row at or above the raise level, `cleared` after 10 in a row under the clear level, a new `alert_id` per episode, `ts` of the snapshot that tipped it; `drivers` as in [`ARCHITECTURE.md`](../docs/ARCHITECTURE.md#alert--sentinelidalert-and-body-of-post-apiv1alerts).
 - **Live:** `Model.load(path)`, one `Monitor(model, sentinel)` per Sentinel, `monitor.push(sample_of(payload))` → an Alert to post, or `None`.
 - The synthetic room is stationary and bounded (ventilation cycles, drafts, probe noise): the Tuesday capture must cover the demo's conditions likewise, or the model will rightly find them odd.
+
+### Capture & training — Tuesday
+`python -m predictive train --from <ISO> --to <ISO>` (`predictive.training`, `predictive.history`) reads the telemetry of the range from `HISTORY_FILE` (default `/history/history.sqlite`, the api's history, the time-scrubber's), opened read-only and while the api writes; `--history <file>` reads another copy, `--jsonl <file>` a capture made away from the Pi (one telemetry payload, Alert or history frame per line). Both ends of the range are included; a time without its zone is refused.
+- **Kept:** the telemetry, Sentinel by Sentinel, through the live service's window. **Left out:** the snapshots taken while one of the Sentinel's own Alerts (`gas`, `thermal`, `presence`, `noise`) was active, from its `raised` to the `cleared` of the same `alert_id` — also one raised before `--from`, and to the end of the range if it is never cleared. No window spans such a period, so the levels before and after it make no slope.
+- **Refused**, with what to do: a range the api's mock fed (an Alert whose `alert_id` starts with `mock-` in it, or still active at its start), a range with no telemetry, too little nominal (< 100 vectors). Nothing is saved then.
+- **Saved** to `MODEL_FILE` (default `/model/model.joblib`, the `predictive-model` volume, out of git), with its range, its number of vectors, its learned levels and its format and scikit-learn versions; the file is replaced in one move, so a running service never reads half of it.
+
+The procedure:
+1. Run the stack with the real Sentinel and **`MOCK_FEED` off** (the mock is recorded like a real Sentinel: a range it fed is refused), sensors in their ventilated compartment, the room as it will be for the demo: ventilation, door, people around, the Pi under its usual load. Change nothing during the capture that the demo will not have.
+2. Note the start time **in UTC** (`date -u +%FT%TZ`), let it run **2–4 h**, note the end. Don't trigger the Sentinel on purpose: a period under one of its Alerts is left out, so its time is lost to the capture.
+3. Train (a few seconds on the Pi), the api still running — a read-only reader needs the `-shm` file only the running api keeps:
+   ```bash
+   docker compose run --rm predictive train --from 2026-10-13T08:00:00Z --to 2026-10-13T11:00:00Z
+   ```
+   The `predictive` service, its volumes and environment are wired in the Compose stack by #75. Without it, from `ai/`: `PYTHONPATH=common:predictive .venv/bin/python -m predictive train --from … --to … --history <copy of history.sqlite> --model <file>`.
+4. Read the summary (here on 4 h of synthetic telemetry, with a 5 min `presence` Alert in it):
+   ```
+   sentinel-01: 14400 snapshots, 14099 kept, 301 excluded (Alert active), 0 invalid → 13979 vectors
+     excluded from 2026-10-06T09:00:00.000Z to 2026-10-06T09:05:00.000Z: presence Alert active
+   Trained on 13979 vectors: raise at 0.589, clear under 0.565 (learned quantiles of held-out nominal scores).
+   On its own training windows: 0.02% score at or above the raise level, a replay raises 0 predictive Alerts.
+   ```
+   - *snapshots / kept / excluded / invalid*: what the range held for each Sentinel; ~1 snapshot per second is expected. Many excluded or invalid: look at the Alerts or the Sentinel before trusting the capture.
+   - *vectors*: one per kept snapshot once its window is full, the first minute of each run aside.
+   - *raise at / clear under*: the learned levels the live service compares the anomaly score to.
+   - *on its own training windows*: a sanity check — a share well under 1 % and a replay that raises nothing. A replay that raises on the capture itself means the capture holds an episode that is not nominal: find it in the time-scrubber and train on a range without it.
 
 ## Output
 Both jobs → `POST /api/v1/alerts` over the **internal Docker network**, using the unified Alert schema in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#alert--sentinelidalert-and-body-of-post-apiv1alerts). Each service sends its own token (`Authorization: Bearer …`, from its `.env`) and may only post its own `kind` (`intrusion` / `predictive`).
