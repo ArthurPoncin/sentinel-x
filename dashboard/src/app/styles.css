@@ -1,45 +1,46 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
 
 @custom-variant dark (&:is(.dark *));
 
-/* shadcn/ui neutral theme, dark only: a control-room screen reads the same on the projector. */
+/* shadcn/ui's tokens on the Outpost's own control-room palette, dark only: a night blue, panels a shade lighter,
+   blue-grey borders and text. The sidebar, cards and charts take it from there. */
 :root {
   color-scheme: dark;
-  --radius: 0.625rem;
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --radius: 0.5rem;
+  --background: #0b0f14;
+  --foreground: #d8e1ea;
+  --card: #131a22;
+  --card-foreground: #d8e1ea;
+  --popover: #131a22;
+  --popover-foreground: #d8e1ea;
+  --primary: #d8e1ea;
+  --primary-foreground: #0b0f14;
+  --secondary: #1b2530;
+  --secondary-foreground: #d8e1ea;
+  /* A background shade in shadcn's naming: text that is set back is --muted-foreground. */
+  --muted: #1b2530;
+  --muted-foreground: #7d8b99;
+  --accent: #1b2530;
+  --accent-foreground: #d8e1ea;
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --border: #233040;
+  --input: #233040;
+  --ring: #7d8b99;
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar: #131a22;
+  --sidebar-foreground: #d8e1ea;
   --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-primary-foreground: #d8e1ea;
+  --sidebar-accent: #1b2530;
+  --sidebar-accent-foreground: #d8e1ea;
+  --sidebar-border: #233040;
+  --sidebar-ring: #7d8b99;
 
   /* --nominal, --elevated and --critical, the Status colors, are not set here: they are defined once, in
      shared/config/status-colors.ts, and main.tsx hands them over. */
@@ -51,7 +52,7 @@
 }
 
 @theme inline {
-  --font-sans: 'Geist Variable', system-ui, sans-serif;
+  --font-sans: system-ui, sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -140,6 +141,7 @@
 .stage-caption h1 {
   margin: 0;
   font-size: 0.75rem;
+  font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
