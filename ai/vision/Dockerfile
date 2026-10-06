@@ -30,9 +30,20 @@ COPY common/sentinel_common common/sentinel_common
 COPY vision/vision vision/vision
 
 # --- #74, the TFLite person detector: its runtime, then the model, fetched at build time. ----------
-# The model lives in the image (the root file system is read-only at runtime), out of git.
-# RUN <install the TFLite runtime> \
-#     && python3 vision/fetch_model.py /models/<model file>
+# The runtime is the one package apt does not have: pip puts it next to Debian's NumPy, pinned to the
+# version apt installed — left free, pip takes ml_dtypes 0.6 and NumPy 2 with it, and python3-opencv,
+# built against NumPy 1, no longer imports. Then pip goes away. The model lives
+# in the image (the root file system is read-only at runtime), out of git, its sha256 checked.
+COPY vision/requirements.txt vision/fetch_model.py /tmp/vision/
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates python3-pip \
+    && pip3 install --no-cache-dir --break-system-packages --disable-pip-version-check \
+       "$(grep '^ai-edge-litert==' /tmp/vision/requirements.txt)" \
+       "numpy==$(python3 -c 'import numpy; print(numpy.__version__)')" \
+    && python3 /tmp/vision/fetch_model.py /models/efficientdet_lite0.tflite \
+    && apt-get purge -y --auto-remove python3-pip \
+    && rm -rf /var/lib/apt/lists/* /tmp/vision
+ENV TFLITE_MODEL=/models/efficientdet_lite0.tflite
 
 # A fixed unprivileged user. Compose adds the host's `video` group (group_add) for the camera nodes.
 RUN groupadd --gid 10002 vision \

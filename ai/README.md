@@ -72,7 +72,7 @@ The main technical risk of Option A, on a Pi 4 that is slower than the Pi 5 the 
 2. Infer every 2nd–3rd frame (`INFER_EVERY`), and only when the motion detector sees movement (`MOTION_GATE`); the displayed stream stays at full rate. Fewer threads (`TFLITE_THREADS`) leave CPU to the rest of the stack.
 3. Fallback allowed by the brief: **OpenCV** motion detection alone (`DETECTOR=motion`).
 
-**`python -m vision.bench`** measures them, with the service's own configuration (`CAMERA_SOURCE`, `DETECTOR`, `TFLITE_*`, `MOTION_GATE`, `INFER_EVERY`; no token needed) and the frames fed as the service's loop takes them: 10 warm-up frames, then `--frames` (200). It prints a Markdown row to paste below. On the Pi, in the container, with the service stopped (one process at a time holds the camera): `docker compose run --rm vision python3 -m vision.bench --machine "Pi 4 4 GB"`; on a laptop, from `ai/`:
+**`python -m vision.bench`** measures them, with the service's own configuration (`CAMERA_SOURCE`, `DETECTOR`, `TFLITE_*`, `MOTION_GATE`, `INFER_EVERY`; no token needed) and the frames fed as the service's loop takes them: 10 warm-up frames, then `--frames` (200). It prints a Markdown row to paste below. On the Pi, in the container, with the service stopped (one process at a time holds the camera): `docker compose run --rm --entrypoint python3 vision -m vision.bench --machine "Pi 4 4 GB"`; on a laptop, from `ai/`:
 
 ```bash
 PYTHONPATH=common:vision CAMERA_SOURCE=opencv:/path/video.mp4 DETECTOR=tflite \
