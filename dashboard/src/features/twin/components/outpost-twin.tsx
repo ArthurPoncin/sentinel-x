@@ -100,7 +100,8 @@ export interface OutpostTwinProps {
   // What the scene shows, from toScene(state).
   scene: SceneProps
   // The feed's frames, oldest first, as they come in: a `noise` Alert raised among them sends a wave over the
-  // socle. Those already there as the Twin opens are past: none is replayed.
+  // socle, and an Alert raised for the first time turns the camera to its anchor. Those already there as the
+  // Twin opens are past: none is replayed.
   frames: readonly Frame[]
   // Keeps the whole stage in frame whatever the shape of the window, a vertical one included: the camera
   // stands back as far as that takes, and no longer zooms.
@@ -118,7 +119,9 @@ export interface OutpostTwinProps {
 // hologram tied to the lens, which walks to where `x_norm` places it, in the brackets of its detection and
 // under the vision model's confidence, and leaves its outline for a few seconds where it was last seen once
 // the Alert is cleared; a predictive drift pulses the Probes it names, its score on a label; a presence blinks the Enclosure's
-// PIR dome and sends an amber sweep round the fence; a clap sends a wave of light from the Enclosure over the socle. Without its
+// PIR dome and sends an amber sweep round the fence; a clap sends a wave of light from the Enclosure over the socle.
+// The camera orbits the site, and turns to an Alert as it is raised: it faces where it happens for a few
+// seconds, then orbits again. Without its
 // signal it all turns grey and says so: what it shows is no longer live. It fills its parent: give that the
 // size the Twin should have on screen.
 export function OutpostTwin({ scene, frames, wholeStage = false }: OutpostTwinProps) {
@@ -149,7 +152,7 @@ export function OutpostTwin({ scene, frames, wholeStage = false }: OutpostTwinPr
         <group position={[SITE.enclosure.x, 0, SITE.enclosure.z]} rotation={[0, SITE.enclosure.heading, 0]}>
           <Enclosure {...scene.enclosure} presence={scene.presence.active} />
         </group>
-        <OrbitCamera wholeStage={wholeStage} />
+        <OrbitCamera anchor={scene.anchor} frames={frames} wholeStage={wholeStage} />
         <Halo saturation={scene.signalLost ? 0 : 1} />
       </Canvas>
       {/* Next to the image, not in it: a screen reader skips what an image holds. */}

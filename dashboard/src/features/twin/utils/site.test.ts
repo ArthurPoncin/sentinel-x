@@ -7,6 +7,7 @@ import {
   bearingTo,
   fencePosts,
   type GroundPoint,
+  gatePoint,
   lensHeight,
   lensPoint,
   roundFence,
@@ -112,6 +113,16 @@ describe('the fence', () => {
     const [first, second] = fencePosts()
 
     expect(first && second && Math.hypot(first.x - second.x, first.z - second.z)).toBeLessThan(fence.gate.width / 1.5)
+  })
+
+  it('has the middle of its gate on its line, halfway between the two posts that stand on each side', () => {
+    const posts = fencePosts()
+    const [first, last] = [posts.at(0), posts.at(-1)]
+    const gate = gatePoint()
+
+    expect(fromCentre(gate)).toBeCloseTo(fence.radius)
+    expect(first && between(gate, first)).toBeCloseTo((last && between(gate, last)) ?? 0)
+    expect(first && between(gate, first)).toBeLessThan(fence.gate.width)
   })
 })
 

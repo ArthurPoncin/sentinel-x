@@ -11,7 +11,8 @@ import { captureMode } from '@/shared/config/capture-mode'
 // figurine in hologram walking along the arc, tied to the lens, in the brackets of its detection and labelled
 // with the vision model's confidence; a predictive drift pulses the Probes it names and
 // labels them with its score, a presence blinks the PIR dome and sweeps the fence in amber,
-// a clap sends a wave from the Enclosure over the socle. When the feed drops, it all turns grey: nothing here
+// a clap sends a wave from the Enclosure over the socle. The camera turns to each Alert as it is raised, then
+// orbits again. When the feed drops, it all turns grey: nothing here
 // is live any more. The time-scrubber replays a past Incident or the scripted scenario in it, second by second,
 // labelled REPLAY: the Twin is then rebuilt from the replayed frames, not the live ones.
 // With `?capture` it is the Twin alone, on the same feed: no top bar, no sidebar, no caption, no scrubber, the whole stage

@@ -4,7 +4,7 @@ import { detectionLabel } from './detection'
 import type { EnclosurePart } from './enclosure-parts'
 import { gasLevel } from './gas-level'
 import { heatLevel } from './heat-level'
-import { type GroundPoint, watchedPoint } from './site'
+import { alongPipe, type GroundPoint, gatePoint, SITE, watchedPoint } from './site'
 
 // What the Twin reads of the live feed: the fields of the live-feed state it needs, by shape, so
 // the route hands them over without the twin feature importing live-feed.
@@ -72,6 +72,12 @@ export interface SceneProps {
   // Someone is near the site: a `presence` Alert is active. The Enclosure's PIR dome blinks and an amber
   // sweep goes round the fence for as long.
   presence: { active: boolean }
+  // Where the last raised of the active Alerts happens on the site plan, its anchor: the intruder for an
+  // `intrusion`, the gas pipe for a `gas`, the generator hall for a `thermal`, the gate for a `presence`, the
+  // Enclosure for a `predictive`. A clap is heard, not seen anywhere: a `noise` Alert has none, and leaves the
+  // anchor to the Alert raised before it. The camera turns to the anchor as its Alert is raised
+  // (alert-framing.ts). Null while no Alert that has one is active.
+  anchor: { alertId: string; at: GroundPoint } | null
   // The feed was open and no longer is: the scene shows what it last knew, not the Outpost as it is now.
   signalLost: boolean
 }
@@ -163,12 +169,32 @@ const SEVERITY_LEVEL: Readonly<Record<Severity, StatusLevel>> = {
   critical: 'critical',
 }
 
+// Where an Alert happens on the site plan, for the camera to turn to: its anchor. The gas leaks along the pipe,
+// taken at its middle; the intruder stands where the Twin stands it.
+function anchorOf(alert: Alert): GroundPoint | null {
+  switch (alert.kind) {
+    case 'intrusion':
+      return watchedPoint(alert.detail.x_norm)
+    case 'gas':
+      return alongPipe(0.5)
+    case 'thermal':
+      return { x: SITE.hall.x, z: SITE.hall.z }
+    case 'presence':
+      return gatePoint()
+    case 'predictive':
+      return { x: SITE.enclosure.x, z: SITE.enclosure.z }
+    case 'noise':
+      return null
+  }
+}
+
 // The live state as the scene shows it: pure, no WebGL, so it is tested without a render.
 export function toScene(state: TwinState): SceneProps {
   const glow = gasLevel(state.latestTelemetry?.readings.air ?? null)
   const pulses = new Set<DriftingProbe>()
   let driftScore: number | null = null
   let intruder: SceneProps['intruder'] = null
+  let anchor: SceneProps['anchor'] = null
   let present = false
   let shimmer = false
   // The highest severity among the Alerts the Sentinel fires its Alarm on. The contract does not carry the
@@ -196,6 +222,8 @@ export function toScene(state: TwinState): SceneProps {
     if (alert.kind === 'gas' || alert.kind === 'thermal') {
       if (alarm === null || SEVERITIES.indexOf(alert.severity) > SEVERITIES.indexOf(alarm)) alarm = alert.severity
     }
+    const at = anchorOf(alert)
+    if (at) anchor = { alertId: alert.alert_id, at }
   }
 
   const status = STATUS_GRADES[state.status]
@@ -217,6 +245,7 @@ export function toScene(state: TwinState): SceneProps {
     sector: { lit: intruder !== null },
     intruder,
     presence: { active: present },
+    anchor,
     // Not open is not enough: before the first connection, and while that one is still being tried,
     // there is no signal to have lost. After it, a retry in progress is still a signal lost.
     signalLost: state.connectedOnce && state.connection !== 'open',
