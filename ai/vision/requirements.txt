@@ -4,3 +4,7 @@
 opencv-python-headless==5.0.0.93
 numpy==2.4.6; python_version < "3.12"
 numpy==2.5.3; python_version >= "3.12"
+# DETECTOR=tflite's interpreter: TensorFlow Lite's own package (tflite-runtime, its old name, stopped at
+# Python 3.11). Wheels for 3.11 and 3.13, x86_64 and aarch64 (glibc 2.27+: bookworm has 2.36); it also runs
+# on the Pi OS's NumPy 1.24.
+ai-edge-litert==2.2.0

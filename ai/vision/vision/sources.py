@@ -35,6 +35,7 @@ class Frame:
     image: np.ndarray
     index: int  # 1, 2, 3…: a new index is a new image
     at: float  # monotonic time of its capture
+    capture_ms: float = 0.0  # how long reading and shrinking it took: what `python -m vision.bench` reports
 
 
 class FrameSource(Protocol):
@@ -76,7 +77,8 @@ class CaptureThread:
     """The part every camera shares: the capture thread, the latest frame, the retries.
 
     A camera only says how to connect, grab one image and disconnect (`_connect`, `_grab`, `_disconnect`,
-    all called from the capture thread). Connecting again waits `retry` seconds, doubling up to
+    all called from the capture thread), and, if it is not the camera that sets the pace, how long to wait
+    before the next image (`_wait_next`). Connecting again waits `retry` seconds, doubling up to
     `max_retry`, back to `retry` once a frame came in. The camera is `ok` while its last frame is less than
     `stale_after` seconds old: a camera stuck in a read is down too, though nothing raised.
     """
@@ -132,6 +134,11 @@ class CaptureThread:
     def _disconnect(self) -> None:
         raise NotImplementedError
 
+    def _wait_next(self) -> bool:
+        """Waits until the next image is due; False when stopping. Not timed as capture. A camera's own
+        read waits for its next frame: nothing to wait here."""
+        return not self._stop.is_set()
+
     def _run(self) -> None:
         delay, problem = self._retry, None
         while not self._stop.is_set():
@@ -147,7 +154,8 @@ class CaptureThread:
                 continue
             first = True
             try:
-                while not self._stop.is_set():
+                while self._wait_next():
+                    started = time.perf_counter()
                     image = self._grab()
                     if image is None:
                         # Once, not on every reconnection that gives nothing either.
@@ -155,7 +163,7 @@ class CaptureThread:
                             problem = "lost"
                             logger.warning("Camera %s lost: reconnecting", self.name)
                         break
-                    self._publish(image)
+                    self._publish(image, started)
                     if first:
                         first, delay, problem = False, self._retry, None
                         logger.info("Camera %s up, %dx%d", self.name, self.width, self.height)
@@ -170,7 +178,7 @@ class CaptureThread:
             self._stop.wait(delay)
             delay = min(delay * 2, self._max_retry)
 
-    def _publish(self, image: np.ndarray) -> None:
+    def _publish(self, image: np.ndarray, started: float) -> None:
         image = fit(image)
         height, width = image.shape[:2]
         # The tracker's pixels are those of the first frame: a camera that comes back at another size is
@@ -179,9 +187,10 @@ class CaptureThread:
             self._size = (width, height)
         elif self._size != (width, height):
             image = cv2.resize(image, self._size, interpolation=cv2.INTER_AREA)
+        capture_ms = (time.perf_counter() - started) * 1000
         with self._lock:
             index = self._frame.index + 1 if self._frame else 1
-            self._frame = Frame(image, index, time.monotonic())
+            self._frame = Frame(image, index, time.monotonic(), capture_ms)
 
 
 class OpenCVSource(CaptureThread):
@@ -219,16 +228,19 @@ class OpenCVSource(CaptureThread):
             self._period = 1 / (fps if math.isfinite(fps) and 1 <= fps <= 120 else _DEFAULT_FPS)
             self._due = time.monotonic()
 
+    def _wait_next(self) -> bool:
+        # A webcam's read waits for its next frame: it sets the pace. A file reads as fast as it decodes:
+        # played at its own frame rate, like a camera.
+        if self._path is None:
+            return not self._stop.is_set()
+        return not self._stop.wait(max(0.0, self._due - time.monotonic()))
+
     def _grab(self) -> np.ndarray | None:
         capture = self._capture
         assert capture is not None
         if self._path is None:
-            # A webcam's read waits for its next frame: it sets the pace.
             ok, image = capture.read()
             return image if ok else None
-        # A file reads as fast as it decodes: played at its own frame rate, like a camera.
-        if self._stop.wait(max(0.0, self._due - time.monotonic())):
-            return None
         ok, image = capture.read()
         if not ok:
             # The end of the video: from the start again.

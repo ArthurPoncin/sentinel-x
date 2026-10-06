@@ -444,7 +444,7 @@ def test_settings_default_to_the_compose_stack(env):
 @pytest.mark.parametrize(
     ("name", "value", "message"),
     [
-        ("DETECTOR", "yolo", "DETECTOR: expected one of motion"),
+        ("DETECTOR", "yolo", "DETECTOR: expected one of tflite, motion"),
         ("STREAM_FPS", "30", "STREAM_FPS: expected a number >= 1 and <= 15"),
         ("INFER_EVERY", "0", "INFER_EVERY"),
         ("VISION_TOKEN", "short", "VISION_TOKEN: too short"),

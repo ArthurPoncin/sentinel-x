@@ -1,14 +1,18 @@
-"""What finds the intruder in a frame: `DETECTOR`, `motion` here (OpenCV background subtraction, the
-fallback the brief allows). The TFLite person detector plugs in the same way: a class with `detect()` and
-a line in `DETECTORS`.
+"""What finds the intruder in a frame: `DETECTOR`, `tflite` (EfficientDet-Lite0, a person detector, in
+`vision.tflite`) or `motion` (OpenCV background subtraction, the fallback the brief allows). Another one
+plugs in the same way: a class with `detect()` and a line in `DETECTORS`.
+
+`MOTION_GATE=true` puts the motion detector in front of the person detector: the model runs only when
+something moves, the Pi's CPU rests while the scene is still.
 """
 
+import time
 from typing import Callable, Protocol
 
 import cv2
 import numpy as np
 
-from sentinel_common.config import ConfigError
+from sentinel_common.config import ConfigError, env_bool, env_float
 
 from .tracker import Detection
 
@@ -55,7 +59,7 @@ class MotionDetector:
         self._subtractor = cv2.createBackgroundSubtractorMOG2(history=history, varThreshold=var_threshold, detectShadows=True)
         self._rate = 1 / history
         self._min_area, self._person_area = min_area, person_area
-        self._max_blobs, self._warmup = max_blobs, warmup
+        self._max_blobs, self.warmup = max_blobs, warmup
         self._work_width = work_width
         self._seen = 0
         self._open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
@@ -69,9 +73,9 @@ class MotionDetector:
         # A little blur first: sensor noise would otherwise flicker in and out of the foreground.
         self._seen += 1
         # -1: OpenCV's own rate, 1/(frames seen so far), while warming up.
-        rate = -1 if self._seen <= self._warmup else self._rate
+        rate = -1 if self._seen <= self.warmup else self._rate
         mask = self._subtractor.apply(cv2.GaussianBlur(image, (5, 5), 0), learningRate=rate)
-        if self._seen <= self._warmup:
+        if self._seen <= self.warmup:
             return []
         # MOG2 marks shadows 127, movement 255.
         _, mask = cv2.threshold(mask, 254, 255, cv2.THRESH_BINARY)
@@ -91,15 +95,85 @@ class MotionDetector:
         return detections
 
 
+class MotionGate:
+    """A person detector that runs only while something moves, or just moved, or was a person just now.
+
+    The motion detector sees every frame (its background must keep learning); the person detector runs
+    while the gate is open, and the gate stays open `hold` seconds after the last movement *or the last
+    person seen*. That second half is what keeps someone who stands still tracked: motion lets them fade
+    into the background within seconds, the person detector keeps seeing them, and each sighting holds the
+    gate open again. Once nobody moves and nobody is seen for `hold` seconds, the model rests.
+
+    The gate starts open, for the motion detector's `warmup` frames and `hold` seconds more: it reports
+    nothing while it learns the scene, and someone already standing there at start must still be seen.
+    """
+
+    def __init__(
+        self,
+        detector: Detector,
+        motion: Detector,
+        *,
+        hold: float = 3.0,
+        warmup: int = 0,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self.inner, self._motion, self._hold, self._clock = detector, motion, hold, clock
+        self.name = f"{detector.name}+motion"
+        self._warmup, self._seen = warmup, 0
+        self._open_until: float | None = None
+        # How many frames the person detector ran on, for the benchmark: the share of frames that cost a
+        # model inference.
+        self.runs = 0
+
+    def detect(self, image: np.ndarray) -> list[Detection]:
+        now = self._clock()
+        self._seen += 1
+        if self._open_until is None or self._seen <= self._warmup:
+            self._open_until = now + self._hold
+        if self._motion.detect(image):
+            self._open_until = max(self._open_until, now + self._hold)
+        if now >= self._open_until:
+            return []
+        self.runs += 1
+        people = self.inner.detect(image)
+        if people:
+            self._open_until = max(self._open_until, now + self._hold)
+        return people
+
+
+def env_min_confidence() -> float:
+    """MIN_CONFIDENCE: under it, a detection is nobody. Read by the service, which drops what is under it
+    whatever the detector, and by the detectors that filter on their own, so that both agree."""
+    return env_float("MIN_CONFIDENCE", 0.5, min=0, max=1)
+
+
+def _tflite() -> Detector:
+    # Imported here: the TFLite runtime is only needed when it is asked for.
+    from .tflite import TFLiteDetector
+
+    return TFLiteDetector.from_env(min_score=env_min_confidence())
+
+
 # DETECTOR → a factory that reads its own settings, if it has any.
 DETECTORS: dict[str, Callable[[], Detector]] = {
+    "tflite": _tflite,
     "motion": MotionDetector,
 }
 
 
 def make_detector(name: str) -> Detector:
-    """The detector DETECTOR names. A ConfigError when it names none."""
+    """The detector DETECTOR names, behind the motion gate when MOTION_GATE says so (MOTION_GATE_HOLD_S,
+    3 s by default, like CLEAR_AFTER_S). A ConfigError when it names none, or gates the motion detector
+    behind itself."""
     factory = DETECTORS.get(name)
     if factory is None:
         raise ConfigError(f"DETECTOR: expected one of {', '.join(DETECTORS)}, got {name!r}")
-    return factory()
+    gate = env_bool("MOTION_GATE", False)
+    hold = env_float("MOTION_GATE_HOLD_S", 3.0, min=0.5, max=60)
+    if gate and name == "motion":
+        raise ConfigError("MOTION_GATE: gates a person detector behind the motion one, so not DETECTOR=motion")
+    detector = factory()
+    if not gate:
+        return detector
+    motion = MotionDetector()
+    return MotionGate(detector, motion, hold=hold, warmup=motion.warmup)

@@ -26,7 +26,7 @@ import numpy as np
 from sentinel_common.alerts import AlertClient
 from sentinel_common.config import ConfigError, env_float, env_int, env_secret, env_str, env_url
 
-from .detectors import DETECTORS, Detector, make_detector
+from .detectors import DETECTORS, Detector, env_min_confidence, make_detector
 from .sources import MAX_HEIGHT, MAX_WIDTH, FrameSource, make_source
 from .tracker import Detection, IntruderTracker
 
@@ -71,7 +71,7 @@ def load_settings() -> Settings:
         token=env_secret("VISION_TOKEN"),
         sentinel=env_str("VISION_SENTINEL", "sentinel-01"),
         clear_after=env_float("CLEAR_AFTER_S", 3.0, min=0.5, max=60),
-        min_confidence=env_float("MIN_CONFIDENCE", 0.5, min=0, max=1),
+        min_confidence=env_min_confidence(),
         http_host=env_str("HTTP_HOST", "0.0.0.0"),
         http_port=env_int("HTTP_PORT", 8000, min=1, max=65535),
         # More would only cost the Pi's CPU: the dashboard shows a panel, not a film.
