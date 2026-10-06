@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# One run per branch: a new push cancels the run before it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: no secret in git
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # .gitignore lists what holds a secret (.env, keys, certificates, passwd…): none of it may be tracked,
+      # not even forced in with `git add -f`.
+      - name: Nothing tracked that .gitignore says never to commit
+        run: |
+          tracked=$(git ls-files -ci --exclude-standard)
+          if [ -n "$tracked" ]; then
+            echo "::error::Tracked although .gitignore says never to commit them:"
+            echo "$tracked"
+            exit 1
+          fi
+
+  backend:
+    name: backend — typecheck, tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  dashboard:
+    name: dashboard — tests, build, smoke-render
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            dashboard/package-lock.json
+            backend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      # Typecheck + the production bundle: what the smoke-render opens.
+      - run: npm run build
+      # The smoke-render starts the API from its sources, on its mock feed.
+      - run: npm ci
+        working-directory: backend
+      - run: npx playwright install --with-deps --only-shell chromium
+      - run: npm run smoke

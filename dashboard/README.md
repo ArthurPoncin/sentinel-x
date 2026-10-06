@@ -39,7 +39,12 @@ npm test            # store, feed client, config, gas level, heat level, scene m
                     # the intruder's glide and figurine,
                     # Incidents, replay, scenario, Incidents client, the Twin on a replay
 npm run build       # typecheck + production bundle in dist/
+npm run smoke       # smoke-render of that bundle, on the mock feed — see below
 ```
+
+**Smoke-render** (#16) — `npm run build && npm run smoke` opens `/` and `/twin` of the production bundle in a headless Chromium and fails on any runtime error: an uncaught exception, an error on the console, the feed not live, the Status or the Readings missing, the Twin without a WebGL context. It starts what it needs itself, on ports of its own (`playwright.config.ts`): the API from `../backend` on its mock feed (`npm install` there first) and `vite preview`, pointed at it by `BACKEND_URL`. The Twin is rendered in software, as on a CI runner. The browser: `npx playwright install chromium` once, or `SMOKE_BROWSER=/path/to/chrome` for one already on the machine. The tests are in [`smoke/`](smoke/).
+
+**CI** — [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), on every pull request and on `main`: the backend's typecheck and tests (the contract the front imports), then here `npm test`, `npm run build` and the smoke-render; and a check that nothing `.gitignore` lists as a secret is tracked.
 
 **Filming the Twin for the teaser** — open `/twin?capture` in a vertical 9:16 window (1080 × 1920) and record the screen while the scenario plays: the Twin alone on black, no interface, on the same feed. See [capture mode](#digital-twin--featurestwin).
 
@@ -357,4 +362,4 @@ const shown = player.frames ? stateAfter(player.frames) : liveState   // replaye
 - [x] The intruder as a human figurine in hologram — #92
 - [x] Time-scrubber + scenario mode — #15
 - [x] Neutral light, the Status floods the scene as it rises — #91
-- [ ] CI: build + smoke render — #16
+- [x] CI: build + smoke render — #16
