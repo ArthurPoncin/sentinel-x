@@ -28,6 +28,53 @@ The main technical risk of Option A, on a Pi 4 that is slower than the Pi 5 the 
 ## Output
 Both jobs → `POST /api/v1/alerts` over the **internal Docker network**, using the unified Alert schema in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#alert--sentinelidalert-and-body-of-post-apiv1alerts). Each service sends its own token (`Authorization: Bearer …`, from its `.env`) and may only post its own `kind` (`intrusion` / `predictive`).
 
+### The Alert client — `sentinel_common.alerts`
+Both services post through one `AlertClient`: `post()` only queues the Alert, so the detection loop never waits on the network, and a single worker sends the queue in order, so a `cleared` never overtakes its `raised`.
+
+- **Retried** with an exponential backoff (0.5 s, doubling, capped at 8 s, 5 sends at most): a network error, a `5xx`, a `429` after its `Retry-After`. Out of attempts, the Alert is logged and dropped: the next ones still go.
+- **Not retried:** any other `4xx` — the Alert itself is wrong. Logged with the api's `message`, then skipped.
+- Never through an HTTP proxy, never after a redirect, and the token appears in no log line nor `repr()`.
+- `close()` (or leaving the `with`) sends what is queued, for 5 s at most: call it before exiting.
+
+The configuration is the service's: it reads its own variables with `sentinel_common.config`, at startup, so a missing or invalid one stops it with its name — never with a secret's value.
+
+```python
+import sys
+
+from sentinel_common.alerts import AlertClient
+from sentinel_common.config import ConfigError, env_secret, env_url
+
+try:
+    url = env_url("ALERTS_URL", "http://api:8080/api/v1/alerts")
+    token = env_secret("VISION_TOKEN")  # predictive: PREDICTIVE_TOKEN
+except ConfigError as error:
+    sys.exit(f"Invalid configuration: {error}")
+
+with AlertClient(url, token) as alerts:
+    ...
+    alerts.post(alert)  # returns at once
+```
+
+## Develop & test
+Product requirements: the AI PRD, issue #67. Layout, one import package per directory:
+
+```
+ai/
+├── common/       # sentinel_common: the Alert contract mirror, the Alert client — stdlib only, Python 3.11+
+├── predictive/   # predictive: the predictive service
+└── vision/       # vision: the vision service
+```
+
+Everything is tested without a Pi, a camera, a broker or a network, from `ai/`:
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+.venv/bin/pytest
+```
+
+Every Alert a service emits is checked against `sentinel_common.contract.alert_errors`, the mirror of
+`backend/src/contract.ts`: what it refuses, the api refuses with a `400`.
+
 ## TODO
 - [ ] ZIF camera capture (Picamera2) on the Pi + **latency benchmark (Monday)**
 - [ ] Vision inference + `x_norm` extraction
