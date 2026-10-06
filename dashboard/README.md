@@ -13,7 +13,7 @@ The face of Sentinel-X and our **"wow" centerpiece**. See [`../docs/DIGITAL-TWIN
 - Reactive control panel to trigger the actuator (buzzer) remotely — `POST /api/v1/commands`.
 
 ## Security
-- **Operator login** screen; every view, the WebSocket (`wss://`) and the camera feed sit behind the session. A session that ends brings the login screen back — see [Operator session](#operator-session--featuresauth).
+- **Operator login** screen; every view, the WebSocket (`wss://`) and the camera feed sit behind the session. A session that ends brings the login screen back — see [Operator session](#operator-session--featuresauth). In the control room's look: a grid floor, the perimeter radar, the Enclosure's hexagon turning faster while the Command Post checks, red and a shake on a refusal, "Accès autorisé" before the dashboard; whether the channel is encrypted (HTTPS) is read from the page, never claimed. Still with reduced motion. Screenshots in [`../docs/dashboard/`](../docs/dashboard/).
 - No token or secret in the front-end bundle.
 
 ## Our extra — the Digital Twin
