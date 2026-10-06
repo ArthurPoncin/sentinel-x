@@ -85,6 +85,9 @@ services:
       # opencv:0, the first V4L2 camera (a USB webcam). The ZIF camera needs Picamera2: #46 makes
       # it the default. Another source: CAMERA_SOURCE in .env (infra/README.md).
       CAMERA_SOURCE: ${CAMERA_SOURCE:-opencv:0}
+      # A person, not just motion: EfficientDet-Lite0 on TFLite, its model in the image. DETECTOR=motion
+      # in .env falls back to motion detection, the brief's allowed fallback (ai/README.md).
+      DETECTOR: ${DETECTOR:-tflite}
     networks: [internal]
     depends_on: [api]
 

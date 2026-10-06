@@ -21,13 +21,13 @@ Pure, camera and model aside: each inference's person boxes in, the Alerts to po
 ### The service — `python -m vision`
 The camera in, the tracker's Alerts posted with `VISION_TOKEN`, the annotated feed out. Runs on a laptop with a webcam or a video file: no Pi needed.
 - **Source** (`vision.sources`, `CAMERA_SOURCE`): `opencv:0` a webcam, `opencv:/path/video.mp4` a video file played in a loop at its own frame rate. Frames larger than 640x480 are shrunk, proportions kept. A capture thread keeps only the **latest** frame. A camera absent or lost stops nothing: `/health` says `down`, the feed shows a "camera down" card, and the source opens it again on its own (after 0.5 s, doubling up to every 10 s).
-- **Detector** (`vision.detectors`, `DETECTOR`): `motion`, OpenCV's MOG2 background subtraction, worked at 320 px wide; the largest blobs are the detections, `confidence` = blob area / 4 % of the frame (about a person at the fence), capped at 1. It learns the still scene for 20 frames before reporting anything, and someone who stops moving fades into the background within seconds: motion says someone moves, not that someone is there.
+- **Detector** (`vision.detectors`, `DETECTOR`): `tflite`, the person detector (EfficientDet-Lite0, [below](#the-person-detector--detectortflite)), or `motion`, OpenCV's MOG2 background subtraction, worked at 320 px wide; the largest blobs are the detections, `confidence` = blob area / 4 % of the frame (about a person at the fence), capped at 1. It learns the still scene for 20 frames before reporting anything, and someone who stops moving fades into the background within seconds: motion says someone moves, not that someone is there.
 - **Loop** (`vision.service.Vision`): the detector on every `INFER_EVERY`-th new frame, detections under `MIN_CONFIDENCE` dropped, the tracker's Alerts queued on the Alert client. The tracker is ticked between frames too, so a camera that stalls still clears. On SIGTERM / Ctrl-C it stops, clears the intrusion in progress (the api would keep it raised) and sends what is queued.
 - **HTTP** on `HTTP_PORT` (8000), never published: the reverse proxy serves it under `/camera`, behind the Operator session.
   - `GET /`, whatever the query string (the dashboard asks for `/camera?attempt=N`, the proxy strips `/camera`): `multipart/x-mixed-replace; boundary=frame`, the latest frame with its boxes, their confidence and a status line (time, fps, inference ms, `INTRUSION` / `clear`), at most `STREAM_FPS` (15) a second, each picture encoded once for every client. `MAX_CLIENTS` (4) at once; the next one gets a `503`.
   - `GET /health`: `{"camera": "ok"|"down", "fps", "inference_ms", "clients", "detector"}`, `200` while the camera works, `503` when it is down. Anything else is a `404`. Requests are not logged.
 - **Configuration**, all from the environment: [`vision/.env.example`](vision/.env.example). `VISION_TOKEN` is required (32 characters or more); a bad variable stops the service at start, with its name.
-- **Another source or detector** (Picamera2 #46, TFLite #74): a `CaptureThread` subclass with `_connect` / `_grab` / `_disconnect` and a line in `SOURCES`; a class with `name` and `detect(image) -> list[Detection]` and a line in `DETECTORS`.
+- **Another source or detector** (Picamera2 #46): a `CaptureThread` subclass with `_connect` / `_grab` / `_disconnect` (and `_wait_next` if the camera does not set the pace itself) and a line in `SOURCES`; a class with `name` and `detect(image) -> list[Detection]` and a line in `DETECTORS`.
 
 **In development**, three terminals from the repository's root (the `ai/` venv as in [Develop & test](#develop--test)):
 
@@ -46,11 +46,63 @@ cd dashboard && CAMERA_URL=http://127.0.0.1:8000 npm run dev
 
 Walk in front of the camera: the panel draws the box, the intruder appears on the Twin, and `curl -s 127.0.0.1:8000/health` gives the frame rate and the inference time.
 
+### The person detector — `DETECTOR=tflite`
+`vision.tflite.TFLiteDetector`, adapted from upstream's `src/object-detection-tflite` (its MIT notice is at the top of [`vision/vision/tflite.py`](vision/vision/tflite.py)).
+- **Model:** EfficientDet-Lite0 (COCO, Apache 2.0), at its native **320x320** uint8 input, with its post-processing built in (up to 25 boxes, non-maximum suppression done) — the file TensorFlow's own Raspberry Pi example uses. [`vision/fetch_model.py`](vision/fetch_model.py) pins its URL and sha256. Not MediaPipe's `efficientdet_lite0.tflite` that upstream's README links: that one leaves anchor decoding and NMS to MediaPipe (19 206 raw boxes out), which neither upstream's code nor ours reads.
+- **Weights never in git:** the image fetches them when it is built (`python3 fetch_model.py /models/efficientdet_lite0.tflite`: download, sha256 check, atomic rename; non-zero exit and no file on a mismatch). The service reads `TFLITE_MODEL` (`/models/efficientdet_lite0.tflite`); a missing file stops it at start, naming the variable and the command to fetch it.
+- **Runtime:** [`ai-edge-litert`](https://pypi.org/project/ai-edge-litert/), TensorFlow Lite's own package (the old `tflite-runtime` stopped at Python 3.11): wheels for 3.11 and 3.13, x86_64 and aarch64, and it runs on the Pi OS's NumPy 1.24. Imported only for `DETECTOR=tflite`. `TFLITE_THREADS` (4, the Pi 4's cores).
+- **Frame → model → frame:** the frame is stretched to 320x320 (not letterboxed, as upstream and TensorFlow's example run the model), BGR → RGB. The boxes come back normalised to the whole frame: × its width and height gives its pixels, clipped to it. Only COCO's `person` (class 0, the first line of the label map inside the `.tflite`) is kept.
+- **`MIN_CONFIDENCE`** keeps one meaning: under it, a detection is nobody. For `tflite` it is the model's `person` score, 0.5 by default as upstream; for `motion`, a blob half the size of a person. Both defaults are 0.5, so one variable serves; a different `DETECTOR` may call for another value. The detector filters at it itself (the service filters again, harmlessly), so that the benchmark and the motion gate see what the service sees.
+- **Motion gate** (`MOTION_GATE=true`, `vision.detectors.MotionGate`): the motion detector sees every inferred frame, the model runs only while the gate is open — `MOTION_GATE_HOLD_S` (3 s) after the last movement **or the last person seen**. The second half keeps someone who stands still tracked: motion lets them fade into its background, the model keeps seeing them and each sighting holds the gate open. The gate starts open, for the motion detector's 20 warm-up frames and 3 s more: it sees nothing while it learns the scene, and someone may already be there. Once nobody moves and nobody is seen for 3 s, the model rests. The limit: someone the model misses for 3 s in a row while they stand still (turned away, half hidden) is lost until they move again — the tracker clears them after `CLEAR_AFTER_S` anyway.
+
+From `ai/`, on a laptop:
+
+```bash
+python3 vision/fetch_model.py ~/.cache/sentinel-x/efficientdet_lite0.tflite   # once; the tests use it too
+PYTHONPATH=common:vision DETECTOR=tflite TFLITE_MODEL=~/.cache/sentinel-x/efficientdet_lite0.tflite \
+  CAMERA_SOURCE=opencv:0 ALERTS_URL=http://127.0.0.1:8080/api/v1/alerts VISION_TOKEN=$(cat /tmp/vision-token) \
+  HTTP_HOST=127.0.0.1 .venv/bin/python -m vision
+```
+
+The tests run the model on a reference image (NASA's public-domain portrait of Eileen Collins, as scikit-image ships it, fetched once into `~/.cache/sentinel-x/` with its sha256 checked) and on empty images; they are skipped without the model or the runtime.
+
 ### Performance on the Pi 4 — benchmark Monday
 The main technical risk of Option A, on a Pi 4 that is slower than the Pi 5 the brief assumes: TFLite detection on its CPU runs at a few frames per second. Levers, in order:
 1. EfficientDet-Lite0 at its native **320** input (capture stays 640x480); switch to SSD MobileNet if it benchmarks faster.
-2. Infer every 2nd–3rd frame, and only when the motion detector sees movement; keep the displayed stream at full rate.
-3. Fallback allowed by the brief: **OpenCV** motion detection alone.
+2. Infer every 2nd–3rd frame (`INFER_EVERY`), and only when the motion detector sees movement (`MOTION_GATE`); the displayed stream stays at full rate. Fewer threads (`TFLITE_THREADS`) leave CPU to the rest of the stack.
+3. Fallback allowed by the brief: **OpenCV** motion detection alone (`DETECTOR=motion`).
+
+**`python -m vision.bench`** measures them, with the service's own configuration (`CAMERA_SOURCE`, `DETECTOR`, `TFLITE_*`, `MOTION_GATE`, `INFER_EVERY`; no token needed) and the frames fed as the service's loop takes them: 10 warm-up frames, then `--frames` (200). It prints a Markdown row to paste below. On the Pi, in the container, with the service stopped (one process at a time holds the camera): `docker compose run --rm --entrypoint python3 vision -m vision.bench --machine "Pi 4 4 GB"`; on a laptop, from `ai/`:
+
+```bash
+PYTHONPATH=common:vision CAMERA_SOURCE=opencv:/path/video.mp4 DETECTOR=tflite \
+  TFLITE_MODEL=~/.cache/sentinel-x/efficientdet_lite0.tflite .venv/bin/python -m vision.bench --machine laptop
+```
+
+- **Capture ms:** the capture thread's time per frame, read + shrink to 640x480. A camera's read waits for its next frame, so with a live camera it is about 1000 / its fps; with a video file, the decoding only.
+- **Inference ms p50 / p95:** per `detect()` call, preprocessing included; behind the motion gate, a mix of motion-only calls and model runs (**Model runs** counts the latter).
+- **Camera fps / processed fps:** the frames the source delivered, and those the loop took, a second. A video file plays at its own frame rate, which caps both: the inference column is the one that says how fast the model is.
+
+**Pi 4 results (#46)** — to fill in on the Pi, camera at 640x480:
+
+| Machine | Source | Detector | Frames | Capture ms p50 / p95 | Inference ms p50 / p95 | Model runs | Camera fps | Processed fps |
+|---|---|---|---|---|---|---|---|---|
+| Pi 4 | picamera2 640x480 | tflite, 4 threads | | | | | | |
+| Pi 4 | picamera2 640x480 | tflite, 4 threads, motion gate | | | | | | |
+| Pi 4 | picamera2 640x480 | tflite, 4 threads, every 2 frames | | | | | | |
+| Pi 4 | picamera2 640x480 | motion | | | | | | |
+
+**Laptop, for comparison only — not the Pi** (x86_64 Xeon at 2.1 GHz, 4 vCPU, Python 3.13, ai-edge-litert 2.2.0; a synthetic 30 fps 640x480 clip, 20 s: 10 s of an empty yard, then a figure crossing it — motion for the gate, not a person the model recognises):
+
+| Machine | Source | Detector | Frames | Capture ms p50 / p95 | Inference ms p50 / p95 | Model runs | Camera fps | Processed fps |
+|---|---|---|---|---|---|---|---|---|
+| laptop | opencv:yard.avi 640x480 | tflite, 4 threads | 580 | 1.3 / 1.6 | 10.6 / 13.1 | 580 / 580 | 30.0 | 30.0 |
+| laptop | opencv:yard.avi 640x480 | tflite, 4 threads, motion gate | 580 | 1.3 / 1.6 | 12.2 / 15.0 | 371 / 580 | 30.0 | 30.0 |
+| laptop | opencv:yard.avi 640x480 | tflite, 4 threads, every 2 frames | 580 | 1.3 / 1.6 | 11.5 / 13.6 | 290 / 290 | 30.0 | 30.0 |
+| laptop | opencv:yard.avi 640x480 | tflite, 1 thread | 580 | 1.4 / 1.7 | 21.1 / 28.0 | 580 / 580 | 30.0 | 30.0 |
+| laptop | opencv:yard.avi 640x480 | motion | 580 | 1.3 / 1.7 | 2.1 / 3.0 | 580 / 580 | 30.0 | 30.0 |
+
+On the laptop the model takes about 11 ms a frame and the clip's 30 fps caps the rest. The gate adds the motion detector's 2 ms to every frame and spared the model 36 % of them here, where the yard is empty half the time; a real yard is empty most of the time. Expect the Pi 4 to be several times slower on every line.
 
 ## Predictive maintenance
 - **Live:** subscribe to `sentinel/+/telemetry` over MQTTS (`mosquitto:8883`, own `predictive` MQTT user, broker verified against the team CA) and score a sliding window in memory.
