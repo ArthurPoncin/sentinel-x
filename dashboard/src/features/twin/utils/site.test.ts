@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ENCLOSURE_SHAPE } from './enclosure-parts'
-import { alongPipe, type Block, fencePosts, type GroundPoint, lensPoint, SITE, watchedPoint } from './site'
+import { alongPipe, type Block, fencePosts, type GroundPoint, lensHeight, lensPoint, SITE, watchedPoint } from './site'
 
 // Across the camera's image, edge to edge.
 const ACROSS = [0, 0.15, 0.35, 0.5, 0.55, 0.75, 1]
@@ -177,6 +177,11 @@ describe('the Enclosure', () => {
     expect(between(lens, SITE.enclosure)).toBeCloseTo(
       Math.hypot(ENCLOSURE_SHAPE.lens.x, ENCLOSURE_SHAPE.lens.z) * ENCLOSURE_SHAPE.scale,
     )
+  })
+
+  it('carries its lens high over the fence, at the height it is drawn at on the mast', () => {
+    expect(lensHeight()).toBeCloseTo(ENCLOSURE_SHAPE.lens.y * ENCLOSURE_SHAPE.scale)
+    expect(lensHeight()).toBeGreaterThan(SITE.fence.height)
   })
 
   it('faces the camera sector: its lens looks out through the gate and covers it all', () => {

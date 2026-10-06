@@ -373,6 +373,7 @@ describe('toScene', () => {
   it('places the intruder of the last raised intrusion Alert', () => {
     expect(toScene(state({ activeAlerts: [gas] })).intruder).toBeNull()
     expect(toScene(state({ activeAlerts: [intrusion('i1', 0.2), gas, intrusion('i2', 0.7)] })).intruder).toEqual({
+      alertId: 'i2',
       x_norm: 0.7,
       at: watchedPoint(0.7),
     })

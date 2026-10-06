@@ -62,8 +62,9 @@ export interface SceneProps {
   // is active, wherever the intruder stands in it.
   sector: { lit: boolean }
   // The intruder the last raised of the active `intrusion` Alerts sees: where it stands across the camera's
-  // image, 0 = left, 1 = right, and so where on the perimeter, on the arc of the fence the camera watches.
-  intruder: { x_norm: number; at: GroundPoint } | null
+  // image, 0 = left, 1 = right, and so where on the perimeter, on the arc of the fence the camera watches. The
+  // Alert's id tells the same intruder moving from a new one: the first glides, the second appears.
+  intruder: { alertId: string; x_norm: number; at: GroundPoint } | null
   // Someone is near the site: a `presence` Alert is active. The Enclosure's PIR dome blinks and an amber
   // sweep goes round the fence for as long.
   presence: { active: boolean }
@@ -171,7 +172,9 @@ export function toScene(state: TwinState): SceneProps {
       // An Alert that names no Probe the Twin knows has nothing to label.
       if (probes.length > 0) driftScore = alert.detail.anomaly_score
     }
-    if (alert.kind === 'intrusion') intruder = { x_norm: alert.detail.x_norm, at: watchedPoint(alert.detail.x_norm) }
+    if (alert.kind === 'intrusion') {
+      intruder = { alertId: alert.alert_id, x_norm: alert.detail.x_norm, at: watchedPoint(alert.detail.x_norm) }
+    }
     if (alert.kind === 'gas' || alert.kind === 'thermal') {
       if (alarm === null || SEVERITIES.indexOf(alert.severity) > SEVERITIES.indexOf(alarm)) alarm = alert.severity
     }
