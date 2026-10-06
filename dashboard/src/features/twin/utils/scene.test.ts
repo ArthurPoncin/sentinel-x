@@ -18,6 +18,7 @@ import {
   type TwinState,
   toScene,
 } from './scene'
+import { SITE, watchedPoint } from './site'
 
 const ts = '2026-10-05T14:23:00.000Z'
 
@@ -328,7 +329,28 @@ describe('toScene', () => {
     expect(toScene(state({ activeAlerts: [gas] })).intruder).toBeNull()
     expect(toScene(state({ activeAlerts: [intrusion('i1', 0.2), gas, intrusion('i2', 0.7)] })).intruder).toEqual({
       x_norm: 0.7,
+      at: watchedPoint(0.7),
     })
+  })
+
+  const intruderAt = (x_norm: number) => toScene(state({ activeAlerts: [intrusion('i1', x_norm)] })).intruder?.at
+
+  it("stands the intruder on the perimeter, where the camera's sight meets the fence", () => {
+    for (const x_norm of [0, 0.15, 0.5, 0.85, 1]) {
+      const at = intruderAt(x_norm)
+      expect(at).toEqual(watchedPoint(x_norm))
+      expect(Math.hypot(at?.x ?? 0, at?.z ?? 0)).toBeCloseTo(SITE.fence.radius)
+    }
+  })
+
+  it("moves the intruder along the arc as x_norm changes, from the lens's left to its right", () => {
+    // As the mock feed plays it: a new x_norm a second, the same Alert.
+    const steps = [0.15, 0.35, 0.55, 0.75].map(intruderAt)
+    // The lens looks out toward the entrance, +z: its left is toward +x.
+    const across = steps.map((at) => at?.x ?? 0)
+
+    expect(new Set(across.map((x) => x.toFixed(6))).size).toBe(steps.length)
+    expect(across).toEqual([...across].sort((a, b) => b - a))
   })
 
   const presenceFor = (...activeAlerts: Alert[]) => toScene(state({ activeAlerts })).presence
