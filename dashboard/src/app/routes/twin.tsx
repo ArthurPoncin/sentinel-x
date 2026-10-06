@@ -7,13 +7,13 @@ import { captureMode } from '@/shared/config/capture-mode'
 
 // The Digital Twin's screen: the 3D Outpost graded by the Status, its Enclosure showing the Status, reacting
 // to gas and sounding the Alarm, a haze around its gas pipe, its generator hall reacting to heat, on the whole
-// window under the top bar. An intrusion lights the camera's sector and stands the intruder on the perimeter, a
+// space under the header. An intrusion lights the camera's sector and stands the intruder on the perimeter, a
 // column of light gliding along the arc, tied to the lens; a predictive drift pulses the Probes it names and
 // labels them with its score, a presence blinks the PIR dome and sweeps the fence in amber,
 // a clap sends a wave from the Enclosure over the socle. When the feed drops, it all turns grey: nothing here
 // is live any more. The time-scrubber replays a past Incident or the scripted scenario in it, second by second,
 // labelled REPLAY: the Twin is then rebuilt from the replayed frames, not the live ones.
-// With `?capture` it is the Twin alone, on the same feed: no top bar, no caption, no scrubber, the whole stage
+// With `?capture` it is the Twin alone, on the same feed: no sidebar, no header, no caption, no scrubber, the whole stage
 // held in frame, to be filmed in a vertical window for the teaser.
 export function TwinRoute() {
   const capture = captureMode(useLocation())
