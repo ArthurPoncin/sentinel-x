@@ -127,3 +127,16 @@ export function watchedPoint(xNorm: number): GroundPoint {
 
   return { x: lens.x + reach * sight.x, z: lens.z + reach * sight.z }
 }
+
+// How far round the fence a point of it is, in scene units: 0 toward the entrance, growing toward x. The
+// difference between two points is how far the intruder walks from one to the other.
+export function roundFence(point: GroundPoint): number {
+  return SITE.fence.radius * Math.atan2(point.x, point.z)
+}
+
+// The bearing to face, standing on the fence at `point`, to walk along it: toward the right of the camera's
+// image (`way` 1) or toward its left (-1).
+export function bearingAlongFence(point: GroundPoint, way: number): number {
+  // The fence is a circle around the socle's centre, and the camera's right is toward smaller bearings.
+  return Math.atan2(point.x, point.z) - (way < 0 ? -1 : 1) * (Math.PI / 2)
+}

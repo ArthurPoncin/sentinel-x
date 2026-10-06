@@ -3,11 +3,13 @@ import { ENCLOSURE_SHAPE } from './enclosure-parts'
 import {
   alongPipe,
   type Block,
+  bearingAlongFence,
   bearingTo,
   fencePosts,
   type GroundPoint,
   lensHeight,
   lensPoint,
+  roundFence,
   SITE,
   watchedPoint,
 } from './site'
@@ -249,5 +251,53 @@ describe('the bearing to face', () => {
       expect(at.x + away * Math.sin(bearing)).toBeCloseTo(lens.x)
       expect(at.z + away * Math.cos(bearing)).toBeCloseTo(lens.z)
     }
+  })
+})
+
+describe('the way round the fence', () => {
+  it('is 0 toward the entrance and grows toward x, in scene units along the fence', () => {
+    const { radius } = SITE.fence
+
+    expect(roundFence({ x: 0, z: radius })).toBeCloseTo(0)
+    expect(roundFence({ x: radius, z: 0 })).toBeCloseTo((radius * Math.PI) / 2)
+    expect(roundFence({ x: -radius, z: 0 })).toBeCloseTo((-radius * Math.PI) / 2)
+  })
+
+  it('measures how far the intruder walks along the watched arc: a little more than straight across', () => {
+    for (const [from, to] of [
+      [0.15, 0.35],
+      [0.35, 0.55],
+      [0.55, 0.75],
+    ] as const) {
+      const walked = Math.abs(roundFence(watchedPoint(to)) - roundFence(watchedPoint(from)))
+      const straight = between(watchedPoint(from), watchedPoint(to))
+
+      expect(walked).toBeGreaterThan(straight)
+      expect(walked).toBeLessThan(1.01 * straight)
+    }
+  })
+
+  it("goes down as x_norm goes up, all across the image: the camera's right is toward smaller bearings", () => {
+    const round = ACROSS.map((xNorm) => roundFence(watchedPoint(xNorm)))
+    expect(round).toEqual([...round].sort((a, b) => b - a))
+  })
+})
+
+describe('the bearing to walk along the fence', () => {
+  it("heads for where a higher x_norm stands when walking toward the image's right, a lower one toward its left", () => {
+    for (const xNorm of [0.15, 0.35, 0.5, 0.55, 0.75]) {
+      const at = watchedPoint(xNorm)
+
+      expect(bearingAlongFence(at, 1)).toBeCloseTo(bearingTo(at, watchedPoint(xNorm + 0.001)), 2)
+      expect(bearingAlongFence(at, -1)).toBeCloseTo(bearingTo(at, watchedPoint(xNorm - 0.001)), 2)
+    }
+  })
+
+  it('runs along the fence, square to the way to the centre', () => {
+    const at = watchedPoint(0.35)
+    const inward = bearingTo(at, { x: 0, z: 0 })
+
+    expect(Math.cos(bearingAlongFence(at, 1) - inward)).toBeCloseTo(0)
+    expect(Math.cos(bearingAlongFence(at, 1) - bearingAlongFence(at, -1))).toBeCloseTo(-1)
   })
 })
