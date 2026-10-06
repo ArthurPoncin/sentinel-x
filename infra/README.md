@@ -43,7 +43,8 @@ infra/setup.sh X
 ```
 
 - It asks for the Operator's password (12 characters or more) and makes the team CA, the broker and proxy certificates, one MQTT account per client (`sentinel-01`, `api`, `predictive`), the AI services' tokens and the Operator's password hash.
-- What exists is kept: run it again after a `git pull` to pick up a new ACL. To start over: `sudo rm -rf infra/secrets` (some files belong to the containers' users).
+- Each service gets its own file, read by Compose on the Pi (`env_file`, mode 600): `api.env` (its MQTT password, the Operator's hash, both AI tokens), `vision.env` (`VISION_TOKEN`), `predictive.env` (the `predictive` MQTT password, `PREDICTIVE_TOKEN`) — the same values on both sides, so the api takes the AI services' Alerts and the broker their login.
+- What exists is kept: run it again after a `git pull` to pick up a new ACL. An install made before `vision.env` and `predictive.env` gets them on the next run, from `api.env` and `handover.txt`, nothing else made again; only if `handover.txt` no longer holds the `predictive` password is a new one made, in place of the old one in the broker's `passwd`: then `docker compose restart mosquitto`, as the script says. To start over: `sudo rm -rf infra/secrets` (some files belong to the containers' users).
 - `EXTRA_SAN=IP:<ethernet ip> infra/setup.sh X` also puts the Pi's Ethernet address in the HTTPS certificate, to test from the school network.
 - **`infra/secrets/handover.txt`** holds what the other teams need: the ESP32's MQTT password, the AI services' tokens. Hand it over out of band (USB key, in person), never in a chat or in git. The firmware also needs `infra/secrets/ca.crt` to verify the broker.
 
@@ -53,26 +54,43 @@ infra/setup.sh X
 docker compose up -d --build                    # first build: a few minutes on the Pi
 docker compose ps                               # api turns (healthy) once it reaches the broker
 docker compose logs -f api                      # follow one service
+docker compose logs -f vision predictive        # the AI services
 MOCK_FEED=true docker compose up -d api         # the scripted scenario, until the Sentinel is there
 docker compose up -d api                        # back to the real feed
 git pull && docker compose up -d --build        # update
 ```
 
-**4. Open it** from the Operator laptop, on the table Wi-Fi: import `infra/secrets/ca.crt` as a trusted authority in the browser (or the OS), then `https://192.168.X.1/` and log in. From the Pi itself: `curl --cacert infra/secrets/ca.crt https://127.0.0.1/api/v1/auth/check` → `401` until logged in.
+**4. Open it** from the Operator laptop, on the table Wi-Fi: import `infra/secrets/ca.crt` as a trusted authority in the browser (or the OS), then `https://192.168.X.1/` and log in. From the Pi itself: `curl --cacert infra/secrets/ca.crt https://127.0.0.1/api/v1/auth/check` → `401` until logged in; `https://127.0.0.1/camera` too, the camera feed being for the Operator only.
 
 | Service | Image | Reached at | Runs as |
 |---|---|---|---|
-| `reverse-proxy` | Caddy ([`caddy/`](caddy/)) | **443** (HTTPS/WSS) → `/api/*` and `/ws` to `api`, the rest to `dashboard` | `65534`, port 8443 inside |
+| `reverse-proxy` | Caddy ([`caddy/`](caddy/)) | **443** (HTTPS/WSS) → `/api/*` and `/ws` to `api`, `/camera` to `vision` (Operator session checked first), the rest to `dashboard` | `65534`, port 8443 inside |
 | `mosquitto` | `eclipse-mosquitto:2.0` ([`mosquitto/`](mosquitto/)) | **8883** (MQTTS) — ESP32 by IP, `api`/`predictive` as `mosquitto:8883` | `1883` |
 | `api` | [`../backend/`](../backend/) | `api:8080`, internal only | `node` |
 | `dashboard` | [`../dashboard/`](../dashboard/) (static, Caddy) | `dashboard:8080`, internal only | `65534` |
+| `vision` | [`../ai/vision/`](../ai/vision/) (Debian's Python 3.11 and OpenCV) | `vision:8000`, internal only; the proxy serves it as `/camera` | `10002`, + the host's `video` group |
+| `predictive` | [`../ai/predictive/`](../ai/predictive/) | nothing to reach: it reads the broker, posts to `api` | `10001` |
 
 - Every service: non-root, read-only filesystem, every capability dropped, `no-new-privileges`, log rotation. The `internal` network has no route out; only the proxy and the broker are also on `edge`, where the two published ports are.
-- The history (SQLite) lives on the `api-data` volume: it survives `docker compose down`, not `down -v`.
-- `vision` and `predictive` are sketched, commented out, in `docker-compose.yml`: uncomment them once `ai/` has them. `db` is not there: the history is SQLite inside `api`, an open point of the backend PRD (#1).
+- The history (SQLite) lives on the `api-data` volume: it survives `docker compose down`, not `down -v`. There is no `db` container: the history is the api's SQLite file, mounted read-only into `predictive` for its training. The trained model lives on the `predictive-model` volume, likewise.
+
+### The AI services
+- **The camera.** Docker refuses to create a container whose device node is missing on the host, so `vision`'s camera nodes are not in `docker-compose.yml` but in [`../docker-compose.camera.yml`](../docker-compose.camera.yml): the stack still starts on a laptop, or on the Pi with its ribbon loose — `vision` then says `camera down`, on `/health` and in the feed. On the Pi, once `ls /dev/video0` shows the camera, once, from the repo root:
+  ```bash
+  echo COMPOSE_FILE=docker-compose.yml:docker-compose.camera.yml >> .env    # every docker compose command takes both
+  docker compose up -d vision
+  ```
+  Nodes only, never `privileged`: the container sees those and nothing else of `/dev`, through the host's `video` group (`group_add`, GID 44 on Debian and Raspberry Pi OS; another one: `VIDEO_GID=$(getent group video | cut -d: -f3)` in `.env`).
+- **Which camera.** `CAMERA_SOURCE` defaults to `opencv:0`, the first V4L2 camera — a USB webcam works today. The ZIF camera needs Picamera2 (#46): OpenCV cannot read its raw node, so until then `vision` runs with its camera down on the Pi. #46 brings the package into the image, its device nodes into `docker-compose.camera.yml` and makes `picamera2` the default. To replay a video instead: put `CAMERA_SOURCE=opencv:/path/in/the/container.mp4` in `.env` and mount the file in a compose override.
+- **The feed.** The proxy asks the api first (`forward_auth` on `GET /api/v1/auth/check`): without the Operator's session, `401`; with it, `/camera` goes to `vision` with the prefix stripped, query kept (`/camera?attempt=1` → `/?attempt=1`), each picture passed on as it comes (`flush_interval -1`).
+- **Training the predictive model**, on a range of the history recorded with `MOCK_FEED` off, the api running (a read-only reader of its WAL-mode SQLite file needs the `-shm` file only the api keeps) — the procedure is in [`../ai/README.md`](../ai/README.md#capture--training--tuesday):
+  ```bash
+  docker compose run --rm predictive train --from 2026-10-13T08:00:00Z --to 2026-10-13T11:00:00Z
+  ```
+  It reads `api-data` mounted `:ro` at `/history` (the api writes it as `node`, files `0644`: readable by `predictive`'s uid 10001, writable by the api only) and writes `/model/model.joblib` on `predictive-model`; the running `predictive` takes the new model up by itself, no restart.
 
 ## Container stack (Docker-Compose, on the Pi)
-`reverse-proxy` · `mosquitto` · `api` · `db` · `dashboard` · `vision` · `predictive` — roles in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#container-stack-docker-compose-on-the-pi).
+`reverse-proxy` · `mosquitto` · `api` · `dashboard` · `vision` · `predictive` (the history: SQLite on the `api-data` volume) — roles in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#container-stack-docker-compose-on-the-pi).
 Resilient & reproducible — `docker compose up` brings the Command Post online.
 
 - **Only `reverse-proxy` (443) and `mosquitto` (8883) publish ports.** Everything else talks over the internal Compose network.
@@ -110,7 +128,7 @@ max_packet_size 4096
 - No interference with neighboring tables (own SSID, own channel if possible).
 
 ## TODO
-- [x] `docker-compose.yml` + `setup.sh` (secrets) — `reverse-proxy`, `mosquitto`, `api`, `dashboard`
+- [x] `docker-compose.yml` + `setup.sh` (secrets) — `reverse-proxy`, `mosquitto`, `api`, `dashboard`, `vision`, `predictive`
 - [x] Mosquitto config (TLS + ACL, with Cyber)
 - [ ] DB + volumes (history on the `api-data` volume for now; separate `db` to decide)
 - [x] Wi-Fi AP + DHCP + time server: `plug-and-play.sh`

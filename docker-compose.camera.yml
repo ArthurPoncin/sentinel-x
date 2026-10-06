@@ -1,0 +1,28 @@
+# The camera's device nodes for the vision service, on top of docker-compose.yml. Apart, because
+# Docker refuses to create a container whose device node is missing on the host: listed in the main
+# file, a laptop without a camera — or the Pi with its ribbon loose — could not start the stack at all.
+# On the Pi, once `ls /dev/video0` shows the camera, from the repo root, once:
+#   echo COMPOSE_FILE=docker-compose.yml:docker-compose.camera.yml >> .env
+# and every `docker compose …` takes both files. Elsewhere, for one command:
+#   docker compose -f docker-compose.yml -f docker-compose.camera.yml up -d
+# Nodes only, never `privileged`: the container sees these and nothing else of /dev, through the
+# host's `video` group (group_add in docker-compose.yml).
+services:
+  vision:
+    devices:
+      # The first V4L2 camera: CAMERA_SOURCE=opencv:0 (a USB webcam; on the Pi with the ZIF camera,
+      # its raw node, which OpenCV cannot read — Picamera2 can, #46).
+      - /dev/video0
+      # #46, Picamera2 (libcamera) on the ZIF camera also needs, to check with ls on the Pi: the media
+      # controllers of the camera and of the ISP, the sensor's sub-device, the ISP's video nodes, the
+      # buffer heaps — and the udev database to find them, read-only.
+      # - /dev/media0
+      # - /dev/media1
+      # - /dev/v4l-subdev0
+      # - /dev/video13
+      # - /dev/video14
+      # - /dev/video15
+      # - /dev/video16
+      # - /dev/dma_heap
+    # volumes:
+    #   - /run/udev:/run/udev:ro
