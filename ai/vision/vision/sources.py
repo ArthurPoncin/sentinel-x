@@ -1,6 +1,5 @@
-"""Where the frames come from: `CAMERA_SOURCE`, `opencv:<index>` (a webcam) or `opencv:<path>` (a video file,
-played in a loop). The Pi's ZIF camera (Picamera2) plugs in the same way: a `CaptureThread` and a line in
-`SOURCES`.
+"""Where the frames come from: `CAMERA_SOURCE`, `picamera2` (the Pi's ZIF camera), `opencv:<index>` (a webcam)
+or `opencv:<path>` (a video file, played in a loop). Each is a `CaptureThread` and a line in `SOURCES`.
 
 A capture thread keeps only the latest frame: inference always works on what the camera sees now, never on
 a queue that falls behind. A camera that is absent or lost stops nothing: the source says it is down and
@@ -26,6 +25,10 @@ logger = logging.getLogger(__name__)
 MAX_WIDTH, MAX_HEIGHT = 640, 480
 # A video file that does not say its frame rate plays at this one.
 _DEFAULT_FPS = 25.0
+# The ZIF camera's rate: the feed's own ceiling (STREAM_FPS), and more than detection keeps up with.
+_PICAMERA_FPS = 15.0
+# A ZIF camera with no frame for this long is lost, not a capture thread stuck in its read for good.
+_PICAMERA_TIMEOUT = 2.0
 
 
 @dataclass(frozen=True)
@@ -256,9 +259,65 @@ class OpenCVSource(CaptureThread):
             self._capture = None
 
 
+class Picamera2Source(CaptureThread):
+    """`picamera2`: the Pi's ZIF camera on its CSI port, through libcamera — OpenCV cannot read its raw node.
+    640x480 at 15 frames a second, the sensor's whole field binned down. Picamera2 is imported when the source
+    connects: only the Pi's image carries it (ai/vision/Dockerfile), and libcamera reaches the camera through
+    the device nodes of docker-compose.camera.yml."""
+
+    def __init__(self, target: str, **options: float) -> None:
+        if target:
+            raise ValueError("expected picamera2, with nothing after it")
+        super().__init__("picamera2", **options)
+        self._camera = None
+
+    def _connect(self) -> None:
+        try:
+            from picamera2 import Picamera2
+        except ImportError:
+            raise OSError("Picamera2 is not installed: only the Pi's image has it") from None
+        # Picamera2() itself would only say "list index out of range".
+        if not Picamera2.global_camera_info():
+            raise OSError("libcamera sees no camera: rpicam-hello --list-cameras on the Pi, then docker-compose.camera.yml")
+        camera = Picamera2()
+        try:
+            camera.configure(
+                camera.create_video_configuration(
+                    # RGB888 is Picamera2's name for bytes in [B, G, R] order: OpenCV's, nothing to convert.
+                    main={"size": (MAX_WIDTH, MAX_HEIGHT), "format": "RGB888"},
+                    controls={"FrameRate": _PICAMERA_FPS},
+                )
+            )
+            camera.start()
+        except Exception:
+            camera.close()
+            raise
+        self._camera = camera
+
+    def _grab(self) -> np.ndarray | None:
+        camera = self._camera
+        assert camera is not None
+        # Asked without waiting, then waited on with a limit: Picamera2's own wait has none.
+        job = camera.capture_array("main", wait=False)
+        try:
+            return camera.wait(job, timeout=_PICAMERA_TIMEOUT)
+        except TimeoutError:
+            # Picamera2's advice for a camera that stopped answering (its ribbon loose): drop what waits on
+            # it, so that closing it does not wait too.
+            camera.cancel_all_and_flush()
+            return None
+
+    def _disconnect(self) -> None:
+        camera, self._camera = self._camera, None
+        if camera is not None:
+            # Stops it first if it runs, and lets the camera go for the next connection.
+            camera.close()
+
+
 # CAMERA_SOURCE `<kind>:<argument>` → the source; the factory gets the argument ("" when there is none).
 SOURCES: dict[str, Callable[[str], FrameSource]] = {
     "opencv": OpenCVSource,
+    "picamera2": Picamera2Source,
 }
 
 
@@ -267,7 +326,7 @@ def make_source(spec: str) -> FrameSource:
     kind, _, argument = spec.partition(":")
     factory = SOURCES.get(kind)
     if factory is None:
-        raise ConfigError(f"CAMERA_SOURCE: expected one of {', '.join(f'{k}:…' for k in SOURCES)}, got {spec!r}")
+        raise ConfigError(f"CAMERA_SOURCE: expected one of {', '.join(SOURCES)}, got {spec!r}")
     try:
         return factory(argument)
     except ValueError as error:

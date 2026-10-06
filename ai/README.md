@@ -20,14 +20,15 @@ Pure, camera and model aside: each inference's person boxes in, the Alerts to po
 
 ### The service — `python -m vision`
 The camera in, the tracker's Alerts posted with `VISION_TOKEN`, the annotated feed out. Runs on a laptop with a webcam or a video file: no Pi needed.
-- **Source** (`vision.sources`, `CAMERA_SOURCE`): `opencv:0` a webcam, `opencv:/path/video.mp4` a video file played in a loop at its own frame rate. Frames larger than 640x480 are shrunk, proportions kept. A capture thread keeps only the **latest** frame. A camera absent or lost stops nothing: `/health` says `down`, the feed shows a "camera down" card, and the source opens it again on its own (after 0.5 s, doubling up to every 10 s).
+- **Source** (`vision.sources`, `CAMERA_SOURCE`): `picamera2` the Pi's ZIF camera (the stack's default), `opencv:0` a webcam, `opencv:/path/video.mp4` a video file played in a loop at its own frame rate. Frames larger than 640x480 are shrunk, proportions kept. A capture thread keeps only the **latest** frame. A camera absent or lost stops nothing: `/health` says `down`, the feed shows a "camera down" card, and the source opens it again on its own (after 0.5 s, doubling up to every 10 s).
 - **Detector** (`vision.detectors`, `DETECTOR`): `tflite`, the person detector (EfficientDet-Lite0, [below](#the-person-detector--detectortflite)), or `motion`, OpenCV's MOG2 background subtraction, worked at 320 px wide; the largest blobs are the detections, `confidence` = blob area / 4 % of the frame (about a person at the fence), capped at 1. It learns the still scene for 20 frames before reporting anything, and someone who stops moving fades into the background within seconds: motion says someone moves, not that someone is there.
 - **Loop** (`vision.service.Vision`): the detector on every `INFER_EVERY`-th new frame, detections under `MIN_CONFIDENCE` dropped, the tracker's Alerts queued on the Alert client. The tracker is ticked between frames too, so a camera that stalls still clears. On SIGTERM / Ctrl-C it stops, clears the intrusion in progress (the api would keep it raised) and sends what is queued.
 - **HTTP** on `HTTP_PORT` (8000), never published: the reverse proxy serves it under `/camera`, behind the Operator session.
   - `GET /`, whatever the query string (the dashboard asks for `/camera?attempt=N`, the proxy strips `/camera`): `multipart/x-mixed-replace; boundary=frame`, the latest frame with its boxes, their confidence and a status line (time, fps, inference ms, `INTRUSION` / `clear`), at most `STREAM_FPS` (15) a second, each picture encoded once for every client. `MAX_CLIENTS` (4) at once; the next one gets a `503`.
   - `GET /health`: `{"camera": "ok"|"down", "fps", "inference_ms", "clients", "detector"}`, `200` while the camera works, `503` when it is down. Anything else is a `404`. Requests are not logged.
 - **Configuration**, all from the environment: [`vision/.env.example`](vision/.env.example). `VISION_TOKEN` is required (32 characters or more); a bad variable stops the service at start, with its name.
-- **Another source or detector** (Picamera2 #46): a `CaptureThread` subclass with `_connect` / `_grab` / `_disconnect` (and `_wait_next` if the camera does not set the pace itself) and a line in `SOURCES`; a class with `name` and `detect(image) -> list[Detection]` and a line in `DETECTORS`.
+- **The ZIF camera** (`picamera2`): Picamera2 asks libcamera for 640x480 at 15 frames a second, in its `RGB888` format — bytes in OpenCV's `[B, G, R]` order, nothing to convert. Only the Pi's image carries Picamera2: the Dockerfile adds the Raspberry Pi apt archive (its key checked by sha256) and `python3-picamera2` when it builds for arm64. A camera libcamera does not see, or Picamera2 missing, is a camera down like any other; a camera silent for 2 s is lost and opened again.
+- **Another source or detector**: a `CaptureThread` subclass with `_connect` / `_grab` / `_disconnect` (and `_wait_next` if the camera does not set the pace itself) and a line in `SOURCES`; a class with `name` and `detect(image) -> list[Detection]` and a line in `DETECTORS`.
 
 **In development**, three terminals from the repository's root (the `ai/` venv as in [Develop & test](#develop--test)):
 
@@ -223,7 +224,8 @@ Done, without the hardware (PRD #67):
 - [x] `vision` and `predictive` in the Compose stack, their secrets from `infra/setup.sh` — #75
 
 Left, on the hardware:
-- [ ] ZIF camera capture (Picamera2) on the Pi: the source, the image with the Raspberry Pi apt repository, built on the Pi — #46
+- [x] ZIF camera capture (Picamera2): the source, the image with the Raspberry Pi apt repository, the Pi 4's device nodes — #46
+- [ ] The image built on the Pi, and the ZIF camera's picture in the dashboard's feed — #46
 - [ ] **Latency benchmark (Monday)** on the Pi 4, in [the table above](#performance-on-the-pi-4--benchmark-monday) — #46
 - [ ] A person in front of the ZIF camera, seen on the Twin and in the dashboard's feed — #46
 - [ ] Tuesday nominal-data capture session (2–4 h, real Sentinel, `MOCK_FEED` off), then `train` on that range — #47

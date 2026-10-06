@@ -1,9 +1,10 @@
 # The vision service. Built on the Pi (arm64) or anywhere else: Debian's own OpenCV and NumPy, nothing
-# from pip — the Pi OS (Bookworm, Python 3.11) ships the same builds, and Picamera2 (#46) only comes as
-# an apt package that goes with them. The context is ai/, so the image takes ai/common along:
+# from pip but the TFLite runtime — the Pi OS (Bookworm, Python 3.11) ships the same builds, and Picamera2
+# only comes as an apt package that goes with them. The context is ai/, so the image takes ai/common along:
 #   docker build -f ai/vision/Dockerfile -t sentinel-x/vision ai/
 #   docker run --env-file ai/vision/.env --read-only --cap-drop ALL --security-opt no-new-privileges \
 #     --device /dev/video0 --group-add video sentinel-x/vision
+# The ZIF camera needs more device nodes than a webcam: docker-compose.camera.yml lists them.
 FROM debian:bookworm-slim
 
 # Nothing written at runtime: no .pyc next to the code (the root file system is read-only), logs
@@ -12,18 +13,27 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app/common:/app/vision
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 python3-numpy python3-opencv \
-    && rm -rf /var/lib/apt/lists/*
-
-# --- #46, the ZIF camera (Picamera2): the Raspberry Pi apt repository, then its package. -----------
-# RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
-#     && curl -fsSL https://archive.raspberrypi.com/debian/raspberrypi.gpg.key \
-#        | gpg --dearmor -o /usr/share/keyrings/raspberrypi.gpg \
-#     && echo "deb [signed-by=/usr/share/keyrings/raspberrypi.gpg] http://archive.raspberrypi.com/debian bookworm main" \
-#        > /etc/apt/sources.list.d/raspi.list \
-#     && apt-get update && apt-get install -y --no-install-recommends python3-picamera2 \
-#     && rm -rf /var/lib/apt/lists/*
+# Debian's OpenCV and NumPy and, on arm64 (the Pi), Picamera2 and the libcamera it drives, from the
+# Raspberry Pi archive: the Pi OS's own pairing, for CAMERA_SOURCE=picamera2 (the ZIF camera). Elsewhere
+# there is no ZIF camera to read: neither the archive nor Picamera2. The archive's key is checked against
+# its sha256 before apt trusts it.
+ARG RPI_ARCHIVE_KEY_SHA256=76603890d82a492175caf17aba68dc73acb1189c9fd58ec0c19145dfa3866d56
+RUN set -eu; \
+    camera=; \
+    if [ "$(dpkg --print-architecture)" = arm64 ]; then \
+      apt-get update; \
+      apt-get install -y --no-install-recommends ca-certificates curl; \
+      curl -fsSL https://archive.raspberrypi.com/debian/raspberrypi.gpg.key -o /usr/share/keyrings/raspberrypi.asc; \
+      echo "$RPI_ARCHIVE_KEY_SHA256  /usr/share/keyrings/raspberrypi.asc" | sha256sum -c -; \
+      chmod 644 /usr/share/keyrings/raspberrypi.asc; \
+      echo "deb [signed-by=/usr/share/keyrings/raspberrypi.asc] https://archive.raspberrypi.com/debian bookworm main" \
+        > /etc/apt/sources.list.d/raspberrypi.list; \
+      apt-get purge -y --auto-remove curl; \
+      camera=python3-picamera2; \
+    fi; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends python3 python3-numpy python3-opencv $camera; \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY common/sentinel_common common/sentinel_common

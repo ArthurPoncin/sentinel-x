@@ -106,6 +106,23 @@ api_password="$(sed -n 's/^MQTT_PASSWORD=//p' "$secrets/api.env")"
 [[ -n "$sentinel_password" && -n "$api_password" ]] || die "no MQTT passwords in infra/secrets: sudo rm -rf infra/secrets and run it again."
 
 # --- 3. The stack ----------------------------------------------------------------------------
+step "ZIF camera for vision (docker-compose.camera.yml)"
+# Its device nodes go to vision only when they all exist: with one missing, Docker would refuse to
+# start the container, and `docker compose up` would stop here.
+camera_line=COMPOSE_FILE=docker-compose.yml:docker-compose.camera.yml
+missing_nodes=()
+for node in $(sed -n 's|^ *- \(/dev/[^ ]*\)$|\1|p' docker-compose.camera.yml); do
+  [[ -e "$node" ]] || missing_nodes+=("$node")
+done
+touch .env
+if ((${#missing_nodes[@]})); then
+  sed -i "\|^$camera_line\$|d" .env
+  warn "camera nodes missing (${missing_nodes[*]}): vision runs with its camera down. Check the ribbon with rpicam-hello --list-cameras, then run this again."
+else
+  grep -qx "$camera_line" .env || echo "$camera_line" >>.env
+  ok "the camera's nodes go to vision"
+fi
+
 step "Command Post stack (docker compose)"
 if $online; then with_group docker docker compose up -d --build; else with_group docker docker compose up -d; fi
 $broker_remade && with_group docker docker compose restart mosquitto >/dev/null

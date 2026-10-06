@@ -1,28 +1,34 @@
-# The camera's device nodes for the vision service, on top of docker-compose.yml. Apart, because
+# The ZIF camera's device nodes for the vision service, on top of docker-compose.yml. Apart, because
 # Docker refuses to create a container whose device node is missing on the host: listed in the main
 # file, a laptop without a camera — or the Pi with its ribbon loose — could not start the stack at all.
-# On the Pi, once `ls /dev/video0` shows the camera, from the repo root, once:
-#   echo COMPOSE_FILE=docker-compose.yml:docker-compose.camera.yml >> .env
-# and every `docker compose …` takes both files. Elsewhere, for one command:
-#   docker compose -f docker-compose.yml -f docker-compose.camera.yml up -d
+# On the Pi, infra/plug-and-play.sh takes it once every node below exists, through this line in .env:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.camera.yml
+# and every `docker compose …` then takes both files.
 # Nodes only, never `privileged`: the container sees these and nothing else of /dev, through the
-# host's `video` group (group_add in docker-compose.yml).
+# host's `video` group (group_add in docker-compose.yml), which owns them all.
 services:
   vision:
     devices:
-      # The first V4L2 camera: CAMERA_SOURCE=opencv:0 (a USB webcam; on the Pi with the ZIF camera,
-      # its raw node, which OpenCV cannot read — Picamera2 can, #46).
+      # What libcamera needs for the ZIF camera on a Pi 4, as `ls /dev` shows them there: the camera's
+      # receiver (unicam), its sensor, the ISP that turns the raw frames into pictures (both of its
+      # instances), the media controllers that tie them together, and the memory the frames live in.
+      # The ISP and unicam numbers are fixed by their drivers; another Pi model would need its own list.
+      - /dev/media0
+      - /dev/media1
+      - /dev/media2
+      - /dev/media3
+      - /dev/media4
+      - /dev/v4l-subdev0
       - /dev/video0
-      # #46, Picamera2 (libcamera) on the ZIF camera also needs, to check with ls on the Pi: the media
-      # controllers of the camera and of the ISP, the sensor's sub-device, the ISP's video nodes, the
-      # buffer heaps — and the udev database to find them, read-only.
-      # - /dev/media0
-      # - /dev/media1
-      # - /dev/v4l-subdev0
-      # - /dev/video13
-      # - /dev/video14
-      # - /dev/video15
-      # - /dev/video16
-      # - /dev/dma_heap
-    # volumes:
-    #   - /run/udev:/run/udev:ro
+      - /dev/video13
+      - /dev/video14
+      - /dev/video15
+      - /dev/video16
+      - /dev/video20
+      - /dev/video21
+      - /dev/video22
+      - /dev/video23
+      - /dev/dma_heap
+    volumes:
+      # libcamera finds the camera's nodes through the udev database: read-only.
+      - /run/udev:/run/udev:ro

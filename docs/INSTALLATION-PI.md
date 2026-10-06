@@ -134,8 +134,10 @@ Le script lui-même :
 | `flashing failed` | Maintiens le bouton **BOOT** de l'ESP32 au début de l'envoi, puis relance |
 | `missing packages…` / `Docker is missing` | Le Pi n'a pas Internet : branche l'Ethernet, puis relance |
 | `NetworkManager is not running` | Le système est trop ancien : réinstalle Raspberry Pi OS (64-bit) récent |
+| `camera nodes missing` | Le Pi ne voit pas la caméra : éteins-le, remets la nappe (contacts vers les ports HDMI), vérifie avec `rpicam-hello --list-cameras`, puis relance |
 
 Journaux :
 
 - **l'ESP32 en direct** : `~/.local/share/sentinel-x/platformio/bin/pio device monitor -d firmware` (Ctrl+C pour quitter) ;
-- **le Pi** : `docker compose logs -f api mosquitto`.
+- **le Pi** : `docker compose logs -f api mosquitto` ;
+- **la caméra** : `docker compose logs -f vision` (« Camera picamera2 up, 640x480 » quand elle marche). Dans le dashboard, une image grise « camera down, retrying » veut dire que `vision` tourne sans caméra.
