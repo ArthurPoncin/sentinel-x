@@ -1,48 +1,25 @@
 import { NavLink, Outlet, useLocation, useMatches } from 'react-router'
-import { useSignOut } from '@/features/auth'
-import { ConnectionIndicator, useLiveFeed } from '@/features/live-feed'
-import { StatusBadge } from '@/features/status'
+import { ConnectionIndicator } from '@/features/live-feed'
 import { cn } from '@/shared/lib/utils'
+import { SidebarInset, SidebarProvider } from '@/shared/ui/sidebar'
+import { AppSidebar } from './app-sidebar'
 import { layoutMode } from './layout-mode'
 
-// The two surfaces, one per screen for the demo.
-const NAV = [
-  { to: '/', label: 'Opérateur' },
-  { to: '/twin', label: 'Jumeau numérique' },
-] as const
-
-// One bar across the top, on every screen: the brand, the two surfaces, then the Status and whether
-// the feed is live, where the eye lands first.
+// The bar the app was born with, across the whole window: the brand, the two surfaces, and whether the feed is
+// live. Its words stay in English, as they were.
 function TopBar() {
-  const status = useLiveFeed((state) => state.status)
-  const signOut = useSignOut()
-
   return (
-    <header className="flex h-12 shrink-0 items-center gap-6 border-b bg-card px-5">
+    <header className="flex shrink-0 items-center gap-6 border-b bg-card px-5 py-3">
       <span className="font-bold tracking-[0.08em]">Sentinel-X</span>
       <nav className="flex flex-1 gap-4">
-        {NAV.map(({ to, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end
-            className={({ isActive }) =>
-              cn('text-muted-foreground transition-colors hover:text-foreground', isActive && 'text-foreground')
-            }
-          >
-            {label}
-          </NavLink>
-        ))}
+        <NavLink to="/" end className={({ isActive }) => (isActive ? 'text-foreground' : 'text-muted-foreground')}>
+          Operator
+        </NavLink>
+        <NavLink to="/twin" className={({ isActive }) => (isActive ? 'text-foreground' : 'text-muted-foreground')}>
+          Digital Twin
+        </NavLink>
       </nav>
-      <StatusBadge status={status} />
       <ConnectionIndicator />
-      <button
-        type="button"
-        onClick={signOut}
-        className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        Déconnexion
-      </button>
     </header>
   )
 }
@@ -61,20 +38,25 @@ export function Layout() {
 
   const stage = mode === 'stage'
   return (
-    <div className={cn('flex min-h-svh flex-col', stage && 'h-svh overflow-hidden')}>
+    <div className={cn('flex flex-col', stage ? 'h-svh overflow-hidden' : 'min-h-svh')}>
       <TopBar />
-      {stage ? (
-        // The stage's height: 100% needs a definite box, which a flex-grown one is not: hence the absolute fill.
-        <div className="relative min-h-0 flex-1">
-          <div className="absolute inset-0">
-            <Outlet />
-          </div>
-        </div>
-      ) : (
-        <main className="flex flex-1 flex-col p-4 lg:p-6">
-          <Outlet />
-        </main>
-      )}
+      <SidebarProvider className="min-h-0 flex-1" style={{ '--sidebar-width': '15rem' } as React.CSSProperties}>
+        <AppSidebar />
+        <SidebarInset className={cn('min-w-0', stage && 'overflow-hidden')}>
+          {stage ? (
+            // The stage's height: 100% needs a definite box, which a flex-grown one is not: hence the absolute fill.
+            <div className="relative min-h-0 flex-1">
+              <div className="absolute inset-0">
+                <Outlet />
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-1 flex-col p-4 lg:p-6">
+              <Outlet />
+            </div>
+          )}
+        </SidebarInset>
+      </SidebarProvider>
     </div>
   )
 }
