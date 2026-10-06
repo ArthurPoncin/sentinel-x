@@ -4,6 +4,13 @@ import { buildCommand, commandFailure, type Preset, PRESETS } from './commands'
 
 const siren = PRESETS.find((preset) => preset.id === 'siren') as Preset
 
+describe('PRESETS', () => {
+  it('offers the siren only: sound it, silence it', () => {
+    expect(PRESETS.map((preset) => preset.label)).toEqual(['Déclencher la sirène', 'Couper la sirène'])
+    expect(PRESETS.map((preset) => preset.command.actuator)).toEqual(['buzzer', 'buzzer'])
+  })
+})
+
 describe('buildCommand', () => {
   it('builds a command the contract accepts for every preset', () => {
     for (const preset of PRESETS) {

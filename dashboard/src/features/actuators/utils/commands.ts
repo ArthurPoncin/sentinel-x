@@ -1,6 +1,6 @@
 import { type CommandRequest, CommandRequestSchema } from '@/shared/contract'
 
-export type PresetId = 'siren' | 'buzzer-off' | 'led-red' | 'led-green' | 'leds-off'
+export type PresetId = 'siren' | 'siren-off'
 
 export interface Preset {
   id: PresetId
@@ -9,13 +9,10 @@ export interface Preset {
   command: Omit<CommandRequest, 'sentinel'>
 }
 
-// The few actions the Operator needs in the demo. Pattern and LED names are the firmware's.
+// The two actions the Operator needs in the demo: sound the siren, silence it. The pattern name is the firmware's.
 export const PRESETS: readonly Preset[] = [
   { id: 'siren', label: 'Déclencher la sirène', command: { actuator: 'buzzer', action: 'pattern', params: { pattern: 'siren' } } },
-  { id: 'buzzer-off', label: 'Couper le buzzer', command: { actuator: 'buzzer', action: 'off' } },
-  { id: 'led-red', label: 'LED rouge', command: { actuator: 'led', action: 'on', params: { led: 'red' } } },
-  { id: 'led-green', label: 'LED verte', command: { actuator: 'led', action: 'on', params: { led: 'green' } } },
-  { id: 'leds-off', label: 'Éteindre les LED', command: { actuator: 'led', action: 'off' } },
+  { id: 'siren-off', label: 'Couper la sirène', command: { actuator: 'buzzer', action: 'off' } },
 ]
 
 export type Built = { success: true; request: CommandRequest } | { success: false; reason: string }

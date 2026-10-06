@@ -71,7 +71,7 @@ src/
 │   ├── auth/                # AuthGate (login screen until a session exists), useSignOut()
 │   ├── status/              # StatusCard, StatusBadge — the Status the backend computes
 │   ├── telemetry/           # #21 #11 — ReadingTiles, Gas / Climate / Sound charts, toSeries()
-│   ├── alerts/              # #11 — ActiveAlerts, AlertLog, AlertToasts
+│   ├── alerts/              # #11 — ActiveAlerts, AlertLog (+ filters: filterLog()), AlertToasts
 │   ├── incidents/           # ThreatOverview, IncidentTable, useIncidents() on GET /api/v1/incidents
 │   ├── camera/              # #14 — CameraPanel on /camera, intruder marker from x_norm
 │   ├── actuators/           # #14 — ActuatorPanel, POST /api/v1/commands
@@ -108,8 +108,8 @@ src/
     ├── contract/            # re-exports backend/src/contract.ts — never redeclare a schema
     ├── config/              # feedUrl() · captureMode() · STATUS_COLORS
     ├── api/                 # getJson / postJson on the app's own origin
-    ├── lib/                 # cn(), French labels, Status/severity colors, fr-FR formats
-    ├── components/          # LevelBadge: the outline badge with a colored dot
+    ├── lib/                 # cn(), French labels, Status/severity colors, fr-FR formats · paginate(), inOrder()
+    ├── components/          # LevelBadge: the outline badge with a colored dot · Pager, SortByTime
     ├── hooks/               # use-mobile (shadcn sidebar)
     └── ui/                  # shadcn/ui components (components.json points the CLI here)
 ```
@@ -292,9 +292,11 @@ const history = useLiveFeed((state) => state.history)
 | Gas, temperature & humidity, noise curves (last 5 min) | `telemetry` | `telemetry` frames of the live history |
 | Camera, intruder marker at `x_norm` | `camera` | `GET /camera` (MJPEG), active `intrusion` Alert |
 | Active Alerts, toast on each new or escalated Alert | `alerts` | active Alerts |
-| Alarm control (siren, buzzer off, red/green LED, LEDs off) | `actuators` | `POST /api/v1/commands`; the request is checked against the contract before it leaves |
+| Alarm control: sound the siren, silence it (the kit has no LED any more) | `actuators` | `POST /api/v1/commands`; the request is checked against the contract before it leaves |
 | Threats: Incidents, neutralized, under way, mean time to nominal, Incidents per kind | `incidents` | `GET /api/v1/incidents`, fetched again after each Alert and every 15 s |
 | Alert log / Incidents tabs | `alerts` · `incidents` | `alert` frames of the live history · `GET /api/v1/incidents` |
+| Alert log filters: hours (from / to, over midnight too), severity, kind, source, state | `alerts` | `filterLog(entries, filter)`, pure |
+| Alert log and Incidents: ten rows a page, newest first; the arrow on Heure / Début flips to oldest first | `alerts` · `incidents` | `paginate()`, `inOrder()` in `shared/lib/paging.ts`; `Pager`, `SortByTime` in `shared/components/table-paging.tsx`. A new filter or order goes back to page 1 |
 
 ## Time-scrubber — `features/replay`
 
@@ -325,7 +327,7 @@ const shown = player.frames ? stateAfter(player.frames) : liveState   // replaye
 - [x] App shell + live feed (WebSocket client, store, hook) — #10
 - [x] Operator login screen (`POST /api/v1/auth/login`, `GET /api/v1/auth/check`)
 - [x] Charts + Status + Alerts — #21, #11
-- [x] Camera panel + actuator control panel — #14 (the `/camera` route in the reverse proxy and the firmware's pattern / LED names are still to agree on)
+- [x] Camera panel + actuator control panel — #14 (the `/camera` route in the reverse proxy and the firmware's siren pattern name are still to agree on)
 - [x] 3D Outpost whose Enclosure reacts to gas — #20
 - [x] Scene mapper + Status color — #12
 - [x] Twin full screen, in studio light, with an orbiting camera — #30
