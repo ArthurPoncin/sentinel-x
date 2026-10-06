@@ -49,14 +49,19 @@ function withTemp(temp: number): TwinState {
 
 const base = { sentinel: 'sentinel-01', state: 'raised', ts } as const
 
-function intrusion(alertId: string, x_norm: number): Alert {
+// As the vision service raises it: sure at 88 % unless `seen` says otherwise.
+function intrusion(
+  alertId: string,
+  x_norm: number,
+  seen: { confidence?: number; bbox?: [number, number, number, number] } = {},
+): Alert {
   return {
     ...base,
     alert_id: alertId,
     source: 'vision',
     kind: 'intrusion',
     severity: 'critical',
-    detail: { x_norm, confidence: 0.88, bbox: [0, 80, 60, 180] },
+    detail: { x_norm, confidence: 0.88, bbox: [0, 80, 60, 180], ...seen },
   }
 }
 
@@ -407,8 +412,39 @@ describe('toScene', () => {
     expect(toScene(state({ activeAlerts: [intrusion('i1', 0.2), gas, intrusion('i2', 0.7)] })).intruder).toEqual({
       alertId: 'i2',
       x_norm: 0.7,
+      confidence: 0.88,
+      label: 'PERSONNE · 88 %',
       at: watchedPoint(0.7),
     })
+  })
+
+  it('gives the confidence of the vision model with the place of the intruder, and the label that reads it', () => {
+    const seen = intrusion('i1', 0.4, { confidence: 0.62 })
+
+    expect(toScene(state({ activeAlerts: [seen] })).intruder).toMatchObject({
+      x_norm: 0.4,
+      confidence: 0.62,
+      label: 'PERSONNE · 62 %',
+    })
+  })
+
+  it('updates the label when the confidence changes on the same Alert, which stays the same intruder', () => {
+    const surer = intrusion('i1', 0.4, { confidence: 0.93 })
+    const before = toScene(state({ activeAlerts: [intrusion('i1', 0.4)] })).intruder
+    const after = toScene(state({ activeAlerts: [surer] })).intruder
+
+    expect(before?.label).toBe('PERSONNE · 88 %')
+    expect(after?.label).toBe('PERSONNE · 93 %')
+    expect(after?.alertId).toBe(before?.alertId)
+    expect(after?.at).toEqual(before?.at)
+  })
+
+  it('places the intruder by x_norm alone, whatever the bbox of its Alert', () => {
+    const elsewhere = intrusion('i1', 0.4, { bbox: [500, 10, 20, 40] })
+
+    expect(toScene(state({ activeAlerts: [elsewhere] })).intruder).toEqual(
+      toScene(state({ activeAlerts: [intrusion('i1', 0.4)] })).intruder,
+    )
   })
 
   const intruderAt = (x_norm: number) => toScene(state({ activeAlerts: [intrusion('i1', x_norm)] })).intruder?.at
