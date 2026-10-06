@@ -214,12 +214,19 @@ Every Alert a service emits is checked against `sentinel_common.contract.alert_e
 `backend/src/contract.ts`: what it refuses, the api refuses with a `400`.
 
 ## TODO
-- [ ] ZIF camera capture (Picamera2) on the Pi + **latency benchmark (Monday)**
-- [ ] Vision inference + `x_norm` extraction
-- [ ] Annotated MJPEG feed for the dashboard
-- [ ] Tuesday nominal-data capture session
-- [ ] MQTTS telemetry subscriber (sliding window)
-- [ ] Feature engineering + train Isolation Forest
-- [ ] Alert POST client (with service token)
+Done, without the hardware (PRD #67):
+- [x] Alert POST client (with service token) — #68
+- [x] Vision inference + `x_norm` extraction — #70, #74
+- [x] Annotated MJPEG feed for the dashboard — #73, under `/camera` behind the Operator session (#75)
+- [x] MQTTS telemetry subscriber (sliding window) — #72
+- [x] Feature engineering + Isolation Forest, the `train` command on the api's history — #69, #71
+- [x] `vision` and `predictive` in the Compose stack, their secrets from `infra/setup.sh` — #75
+
+Left, on the hardware:
+- [ ] ZIF camera capture (Picamera2) on the Pi: the source, the image with the Raspberry Pi apt repository, built on the Pi — #46
+- [ ] **Latency benchmark (Monday)** on the Pi 4, in [the table above](#performance-on-the-pi-4--benchmark-monday) — #46
+- [ ] A person in front of the ZIF camera, seen on the Twin and in the dashboard's feed — #46
+- [ ] Tuesday nominal-data capture session (2–4 h, real Sentinel, `MOCK_FEED` off), then `train` on that range — #47
+- [ ] Drift demo: a slow rise of heat + a little gas raises the `predictive` Alert before the firmware's `thermal` / `gas` thresholds — #47
 
 > Model weights (`*.tflite`, `*.pt`, `*.onnx`) are gitignored — share via a release or drive. Tokens live in `.env` (gitignored).
