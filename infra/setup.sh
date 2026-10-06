@@ -9,7 +9,8 @@
 #   infra/setup.sh <table number>          e.g. infra/setup.sh 4  → the Pi is 192.168.4.1
 # What exists already is kept: delete a file (sudo: some belong to the containers) to make it again.
 # OPERATOR_PASSWORD in the environment skips the prompt. EXTRA_SAN adds names to the proxy
-# certificate, e.g. EXTRA_SAN=IP:10.0.0.12 to reach the Pi on its Ethernet address too.
+# certificate, e.g. EXTRA_SAN=IP:10.0.0.12 to reach the Pi on its Ethernet address too. API_IMAGE
+# names an api image already there for this checkout, which hashes the password instead of a new build.
 set -euo pipefail
 
 table="${1:-}"
@@ -77,9 +78,15 @@ else
     read -rsp "  Again: " again; echo
     [[ "$OPERATOR_PASSWORD" == "$again" ]] || { echo "  The two do not match." >&2; exit 1; }
   fi
-  echo "  building the api image, to hash the password with the API's own code…"
-  docker build -q -t sentinel-x/api ../backend >/dev/null
-  hash="$(printf %s "$OPERATOR_PASSWORD" | docker run --rm -i sentinel-x/api node dist/hash-password.js)"
+  # The API's own code hashes it: the api image infra/plug-and-play.sh made ready for this checkout
+  # (API_IMAGE), or else one built here.
+  api_image="${API_IMAGE:-}"
+  if [[ -z "$api_image" ]] || ! docker image inspect "$api_image" >/dev/null 2>&1; then
+    echo "  building the api image, to hash the password with the API's own code…"
+    docker build -q -t sentinel-x/api ../backend >/dev/null
+    api_image=sentinel-x/api
+  fi
+  hash="$(printf %s "$OPERATOR_PASSWORD" | docker run --rm -i "$api_image" node dist/hash-password.js)"
 
   password() { openssl rand -hex 24; }
   sentinel_password="$(password)"; api_password="$(password)"; predictive_password="$(password)"

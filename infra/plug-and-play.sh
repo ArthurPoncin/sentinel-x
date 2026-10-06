@@ -10,8 +10,10 @@
 # OPERATOR_PASSWORD (else asked), ESP32_PORT (else the first /dev/ttyUSB*).
 #
 # Its interface is infra/ui.sh, in French like the step-by-step (docs/INSTALLATION-PI.md): everything
-# it needs (sudo, the Operator password) is asked first, then eight steps run on their own, the
+# it needs (sudo, the Operator password) is asked first, then nine steps run on their own, the
 # commands' output kept in ~/.local/share/sentinel-x/plug-and-play.log.
+# The images are pulled from GHCR when the CI published them for this very code (infra/images.sh,
+# .github/workflows/images.yml), and built on the Pi only otherwise: that is most of the time saved.
 set -euo pipefail
 
 usage() { echo "Usage : infra/plug-and-play.sh <numéro de table> [--no-flash]" >&2; exit 1; }
@@ -102,6 +104,36 @@ open_firewall() {
     sudo ufw allow in on wlan0 to any port "${rule%/*}" proto "${rule#*/}"
   done
 }
+# Pulls, all at once, each image whose key matches the checkout (infra/images.sh), and names it as
+# docker-compose.yml does. One line per service in $1: "<service> pulled|private|missing|changed".
+pull_images() {
+  local service
+  for service in $(infra/images.sh list); do
+    (
+      if infra/images.sh dirty "$service"; then echo "$service changed" >>"$1"; exit 0; fi
+      remote="$(infra/images.sh remote "$service")"
+      if with_group docker docker pull "$remote" 2>&1 | tee "$1.$service"; [[ ${PIPESTATUS[0]} -eq 0 ]]; then
+        with_group docker docker tag "$remote" "sentinel-x/$service"
+        echo "$service pulled" >>"$1"
+      elif grep -qiE 'denied|unauthorized' "$1.$service"; then
+        echo "$service private" >>"$1"
+      else
+        echo "$service missing" >>"$1"
+      fi
+    ) &
+  done
+  wait
+}
+build_image() {
+  local context
+  context="$(infra/images.sh context "$1")"
+  with_group docker docker build -t "sentinel-x/$1" -f "$context/$(infra/images.sh dockerfile "$1")" "$context"
+}
+join() {
+  local IFS=,
+  local joined="$*"
+  printf '%s' "${joined//,/, }"
+}
 wait_for_lease() {
   local _
   for _ in $(seq 60); do
@@ -128,7 +160,7 @@ readable_snapshot() {
   fi
 }
 
-ui_init 8 "$HOME/.local/share/sentinel-x/plug-and-play.log" "infra/plug-and-play.sh $*"
+ui_init 9 "$HOME/.local/share/sentinel-x/plug-and-play.log" "infra/plug-and-play.sh $*"
 ui_banner "SENTINEL-X · Command Post" "Table $table · Pi $pi_ip · Wi-Fi $ssid$($flash || echo " · sans flash")"
 
 # --- Before the steps: what the Pi is, and everything to ask ----------------------------------
@@ -156,7 +188,7 @@ if [[ ! -f "$secrets/api.env" && -z "${OPERATOR_PASSWORD:-}" ]]; then
   done
   export OPERATOR_PASSWORD
 fi
-ui_ok "Tout est demandé : la suite se fait seule (30 à 60 min la première fois)."
+ui_ok "Tout est demandé : la suite se fait seule."
 
 # --- 1. Software, while there is Internet ---------------------------------------------------
 ui_step "Logiciels"
@@ -184,7 +216,49 @@ fi
 ui_detail "Docker, PlatformIO, dnsmasq (DHCP), chrony (heure)"
 ui_done
 
-# --- 2. Secrets ------------------------------------------------------------------------------
+# --- 2. The images: pulled when the CI built them for this code, built here otherwise -----------
+ui_step "Images Docker"
+results="$(mktemp)"
+pulled=() built=() kept=() unpublished=() private=false
+if $online; then
+  ui_task "téléchargement des images préconstruites" pull_images "$results"
+fi
+for service in $(infra/images.sh list); do
+  state="$(sed -n "s/^$service //p" "$results")"
+  case "$state" in
+    pulled) pulled+=("$service"); continue ;;
+    private) private=true ;;
+    missing) unpublished+=("$service") ;;
+  esac
+  # Offline, an image built before serves: better than none.
+  if ! $online && with_group docker docker image inspect "sentinel-x/$service" >/dev/null 2>&1; then
+    kept+=("$service")
+    continue
+  fi
+  ui_task "construction de $service sur le Pi" build_image "$service"
+  if ((UI_RC != 0)); then
+    $online || ui_fail "l'image $service ne se construit pas sans Internet : branche l'Ethernet, puis relance."
+    ui_fail "l'image $service ne se construit pas : la fin du journal dit pourquoi."
+  fi
+  built+=("$service")
+done
+rm -f "$results" "$results".*
+if $private; then
+  ui_note "les images préconstruites sont encore privées sur GitHub : il faut les rendre publiques une fois (paquets sentinel-x-* du dépôt, Package settings → Change visibility → Public). En attendant, elles se construisent ici, c'est plus long."
+fi
+if ((${#unpublished[@]})); then
+  ui_note "pas encore d'image préconstruite pour ce code ($(join "${unpublished[@]}")) : la CI de GitHub la construit peut-être encore. Construite ici en attendant."
+fi
+summary_images=()
+((${#pulled[@]})) && summary_images+=("téléchargées : $(join "${pulled[@]}")")
+((${#built[@]})) && summary_images+=("construites ici : $(join "${built[@]}")")
+((${#kept[@]})) && summary_images+=("gardées, sans Internet : $(join "${kept[@]}")")
+images_detail=""
+for part in "${summary_images[@]}"; do images_detail+="${images_detail:+ · }$part"; done
+ui_detail "$images_detail"
+ui_done
+
+# --- 3. Secrets ------------------------------------------------------------------------------
 ui_step "Secrets et certificats"
 mkdir -p "$secrets" && chmod 700 "$secrets"
 if [[ -n "${WIFI_PASSPHRASE:-}" ]]; then
@@ -207,6 +281,8 @@ fi
 if [[ -f "$secrets/caddy/proxy.crt" ]] && ! openssl x509 -in "$secrets/caddy/proxy.crt" -noout -text 2>/dev/null | grep -q "IP Address:$pi_ip"; then
   ui_note "le certificat HTTPS est celui d'une autre table : sudo rm infra/secrets/caddy/proxy.*, puis relance."
 fi
+# The api image of the step before hashes the Operator's password: setup.sh need not build it again.
+export API_IMAGE=sentinel-x/api
 ui_run "certificats, comptes MQTT, jetons des services IA" with_group docker infra/setup.sh "$table"
 
 sentinel_password="$(sed -n 's/.*user sentinel-01, password \([0-9a-f]*\).*/\1/p' "$secrets/handover.txt")"
@@ -215,10 +291,10 @@ api_password="$(sed -n 's/^MQTT_PASSWORD=//p' "$secrets/api.env")"
 ui_detail "dans infra/secrets, jamais commités"
 ui_done
 
-# --- 3. The camera ---------------------------------------------------------------------------
+# --- 4. The camera ---------------------------------------------------------------------------
 ui_step "Caméra ZIF"
 # Its device nodes go to vision only when they all exist: with one missing, Docker would refuse to
-# start the container, and `docker compose up` would stop at the next step.
+# start the container, and `docker compose up` would stop at step 5.
 camera_line=COMPOSE_FILE=docker-compose.yml:docker-compose.camera.yml
 camera_ok=false
 missing_nodes=()
@@ -238,20 +314,15 @@ else
 fi
 ui_done
 
-# --- 4. The stack ----------------------------------------------------------------------------
-ui_step "Stack Docker"
-if $online; then
-  ui_task "construction des images et démarrage" with_group docker docker compose up -d --build
-  ((UI_RC == 0)) || ui_fail "la stack ne démarre pas : la fin du journal dit pourquoi."
-else
-  ui_task "démarrage" with_group docker docker compose up -d
-  ((UI_RC == 0)) || ui_fail "la stack ne démarre pas. Sans Internet, une image qui manque ne peut pas être construite : branche l'Ethernet, puis relance."
-fi
+# --- 5. The stack, on the images of step 2 -------------------------------------------------------
+ui_step "Démarrage de la stack"
+ui_task "démarrage des conteneurs" with_group docker docker compose up -d
+((UI_RC == 0)) || ui_fail "la stack ne démarre pas : la fin du journal dit pourquoi."
 $broker_remade && ui_run "redémarrage du broker" with_group docker docker compose restart mosquitto
 ui_detail "en marche : $(with_group docker docker compose ps --format '{{.Service}}' | tr '\n' ' ')"
 ui_done
 
-# --- 5. The Sentinel's firmware, built with the secrets of this Pi -----------------------------
+# --- 6. The Sentinel's firmware, built with the secrets of this Pi -----------------------------
 ui_step "Firmware du Sentinel"
 escape() { sed 's/\\/\\\\/g; s/"/\\"/g' <<<"$1"; }
 (
@@ -276,7 +347,7 @@ ui_task "compilation" "$pio" run -d firmware -s
 ui_detail "compilé avec les secrets de ce Pi"
 ui_done
 
-# --- 6. The table network: from here on, the Pi's Wi-Fi is the access point --------------------
+# --- 7. The table network: from here on, the Pi's Wi-Fi is the access point --------------------
 ui_step "Wi-Fi de la table"
 systemctl is-active --quiet NetworkManager || ui_fail "NetworkManager ne tourne pas : réinstalle un Raspberry Pi OS (64-bit) récent."
 if ip route get 1.1.1.1 2>/dev/null | grep -q "dev wlan0"; then
@@ -290,7 +361,7 @@ fi
 ui_detail "$ssid sur $pi_ip · 2,4 GHz, WPA2, sans Internet · le Sentinel en $sentinel_ip"
 ui_done
 
-# --- 7. Flash the Sentinel --------------------------------------------------------------------
+# --- 8. Flash the Sentinel --------------------------------------------------------------------
 ui_step "Flash de l'ESP32"
 if ! $flash; then
   ui_skip "ignoré (--no-flash)"
@@ -310,7 +381,7 @@ else
 fi
 ui_done
 
-# --- 8. Its first snapshot ---------------------------------------------------------------------
+# --- 9. Its first snapshot ---------------------------------------------------------------------
 ui_step "Première mesure du Sentinel"
 sentinel_ok=false
 ui_task "attente du Sentinel sur le Wi-Fi (2 min au plus)" wait_for_lease

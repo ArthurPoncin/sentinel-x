@@ -64,19 +64,20 @@ infra/plug-and-play.sh 4
 ```
 
 - **Tout est demandé au début** : le mot de passe `sudo`, puis **deux fois le mot de passe Opérateur** (12 caractères minimum ; retiens-le, c'est celui du dashboard). Ensuite, le script tourne seul.
-- La première fois, compte **30 à 60 minutes** : la construction des images Docker (dont `vision` et `predictive`) et la compilation du firmware sont longues sur le Pi.
-- Lance-le **en SSH par l'Ethernet** : à l'étape 6, le Wi-Fi du Pi devient le point d'accès de la table, et une session passée par le Wi-Fi serait coupée.
+- La première fois, c'est surtout des téléchargements : les images Docker arrivent toutes construites de GitHub (voir l'étape 2 ci-dessous). Si elles ne le peuvent pas, le Pi les construit lui-même, et il faut compter **30 à 60 minutes**.
+- Lance-le **en SSH par l'Ethernet** : à l'étape 7, le Wi-Fi du Pi devient le point d'accès de la table, et une session passée par le Wi-Fi serait coupée.
 
-Il déroule 8 étapes numérotées. Chacune affiche un spinner et son temps, avec en gris la dernière ligne de ce qu'elle fait ; une fois finie, elle passe à `✓` (ou à `!` s'il y a une remarque). Ce que disent les commandes (Docker, PlatformIO…) va dans un journal, `~/.local/share/sentinel-x/plug-and-play.log`, au lieu d'inonder l'écran.
+Il déroule 9 étapes numérotées. Chacune affiche un spinner et son temps, avec en gris la dernière ligne de ce qu'elle fait ; une fois finie, elle passe à `✓` (ou à `!` s'il y a une remarque). Ce que disent les commandes (Docker, PlatformIO…) va dans un journal, `~/.local/share/sentinel-x/plug-and-play.log`, au lieu d'inonder l'écran.
 
 1. **Logiciels** : Docker, PlatformIO, dnsmasq (DHCP) et chrony (heure), tant qu'il y a Internet.
-2. **Secrets et certificats** : dans `infra/secrets/`, jamais commités.
-3. **Caméra ZIF** : ses périphériques sont donnés au service `vision` s'ils sont tous là.
-4. **Stack Docker** : construction des images et démarrage.
-5. **Firmware du Sentinel** : compilé avec les secrets de ce Pi ; les mots de passe ne quittent jamais le Pi.
-6. **Wi-Fi de la table** : le Wi-Fi du Pi devient le réseau `SentinelX-4`, en 2,4 GHz, WPA2, sans Internet. L'ESP32 a toujours l'adresse `192.168.4.10`, et le Pi lui donne l'heure.
-7. **Flash de l'ESP32** par USB (`– ignoré` avec `--no-flash`).
-8. **Première mesure du Sentinel** : il attend que l'ESP32 rejoigne le Wi-Fi, puis sa première mesure sur le broker.
+2. **Images Docker** : chaque image construite par GitHub pour ce code exact est téléchargée ; les autres sont construites sur le Pi (code modifié sur le Pi, image pas encore publiée, ou pas d'Internet : alors celles déjà là servent).
+3. **Secrets et certificats** : dans `infra/secrets/`, jamais commités.
+4. **Caméra ZIF** : ses périphériques sont donnés au service `vision` s'ils sont tous là.
+5. **Démarrage de la stack** : les conteneurs, sur les images de l'étape 2.
+6. **Firmware du Sentinel** : compilé avec les secrets de ce Pi ; les mots de passe ne quittent jamais le Pi.
+7. **Wi-Fi de la table** : le Wi-Fi du Pi devient le réseau `SentinelX-4`, en 2,4 GHz, WPA2, sans Internet. L'ESP32 a toujours l'adresse `192.168.4.10`, et le Pi lui donne l'heure.
+8. **Flash de l'ESP32** par USB (`– ignoré` avec `--no-flash`).
+9. **Première mesure du Sentinel** : il attend que l'ESP32 rejoigne le Wi-Fi, puis sa première mesure sur le broker.
 
 Si une étape échoue, le script s'arrête sur un `✗`, avec la raison encadrée en rouge et les dernières lignes de la commande qui a échoué. Ctrl+C l'interrompt proprement ; relancé, il reprend sans rien casser.
 
@@ -85,7 +86,7 @@ Si une étape échoue, le script s'arrête sur un `✗`, avec la raison encadré
 Le script finit sur un encadré : **vert** « Command Post prêt » si tout s'est bien passé, **jaune** « avec des remarques » sinon.
 
 - **Wi-Fi** et **Passphrase** : note la phrase de passe du Wi-Fi de la table. Elle est aussi gardée dans `infra/secrets/wifi.env`.
-- **Sentinel** `✓ 192.168.4.10` et l'étape 8 qui affiche `première mesure : 23.4 °C · humidité 41 % · gaz 312` : **tout marche**, l'ESP32 envoie ses mesures au Pi.
+- **Sentinel** `✓ 192.168.4.10` et l'étape 9 qui affiche `première mesure : 23.4 °C · humidité 41 % · gaz 312` : **tout marche**, l'ESP32 envoie ses mesures au Pi.
 - **Caméra** `✓ donnée à vision` : la caméra ZIF va au service `vision`.
 - Sous **À voir**, chaque remarque `!` dit ce qui manque : voir aussi [Dépannage](#dépannage).
 - Sous **Ensuite**, les commandes à copier telles quelles : récupérer le certificat, puis les journaux.
@@ -144,6 +145,9 @@ Le script lui-même :
 | `pas d'ESP32 en USB` | Branche l'ESP32 sur le Pi avec un câble de données, puis relance |
 | `le flash a échoué` | Maintiens le bouton **BOOT** de l'ESP32 au début de l'envoi, puis relance |
 | `paquets manquants` / `Docker manque` / `PlatformIO manque` | Le Pi n'a pas Internet : branche l'Ethernet, puis relance |
+| `les images préconstruites sont encore privées` | Rien ne casse : le Pi les construit, c'est juste plus long. Pour aller vite, le propriétaire du dépôt (Arthur) rend publics, une fois, les paquets `sentinel-x-*` sur GitHub (*Package settings → Change visibility → Public*) |
+| `pas encore d'image préconstruite pour ce code` | La CI de GitHub la construit encore (quelques minutes après un push sur `main`) : attends la fin de l'action *Images*, puis relance |
+| `l'image … ne se construit pas` | Lis les lignes affichées sous l'encadré ; sans Internet, branche l'Ethernet, puis relance |
 | `la stack ne démarre pas` | Lis les lignes affichées sous l'encadré (le journal complet est dans `~/.local/share/sentinel-x/plug-and-play.log`) ; sans Internet, une image qui manque ne peut pas être construite |
 | `le firmware ne compile pas` | La première fois, PlatformIO télécharge ses outils : il faut Internet |
 | `NetworkManager ne tourne pas` | Le système est trop ancien : réinstalle un Raspberry Pi OS (64-bit) récent |

@@ -4,6 +4,8 @@
 # rest only talk to each other, on a network with no way out. See infra/README.md.
 # The camera's device nodes for vision are in docker-compose.camera.yml, taken on the Pi through
 # COMPOSE_FILE in .env (see that file): the stack still starts where there is no camera.
+# On the Pi, infra/plug-and-play.sh pulls the five images built here ready-made from GHCR when the CI
+# published them for this very code (infra/images.sh), and builds only the others.
 
 x-hardened: &hardened
   restart: unless-stopped
