@@ -116,7 +116,8 @@ export interface OutpostTwinProps {
 // The camera's field is a faint volume from the Enclosure's lens down to its sector on the ground: an intrusion
 // lights it, sector included, and stands the intruder on its arc, a human figurine in
 // hologram tied to the lens, which walks to where `x_norm` places it, in the brackets of its detection and
-// under the vision model's confidence; a predictive drift pulses the Probes it names, its score on a label; a presence blinks the Enclosure's
+// under the vision model's confidence, and leaves its outline for a few seconds where it was last seen once
+// the Alert is cleared; a predictive drift pulses the Probes it names, its score on a label; a presence blinks the Enclosure's
 // PIR dome and sends an amber sweep round the fence; a clap sends a wave of light from the Enclosure over the socle. Without its
 // signal it all turns grey and says so: what it shows is no longer live. It fills its parent: give that the
 // size the Twin should have on screen.

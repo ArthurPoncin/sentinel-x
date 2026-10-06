@@ -2,10 +2,13 @@ import { useFrame } from '@react-three/fiber'
 import { Fragment, memo, useEffect, useMemo, useRef } from 'react'
 import {
   AdditiveBlending,
+  BackSide,
+  BufferAttribute,
   type BufferGeometry,
   Color,
   CylinderGeometry,
   type Group,
+  type Material,
   type Mesh,
   MeshBasicMaterial,
   OctahedronGeometry,
@@ -17,7 +20,6 @@ import {
 } from 'three'
 import { useFade } from '../hooks/use-fade'
 import { brackets, detectionFrame } from '../utils/detection'
-import { fadeTo, fadeValue, settled } from '../utils/fade'
 import {
   FIGURE,
   figureHeight,
@@ -31,7 +33,7 @@ import {
 } from '../utils/figure'
 import { INTRUSION_COLOR, type SceneProps } from '../utils/scene'
 import { bearingAlongFence, bearingTo, lensHeight, lensPoint, watchedPoint } from '../utils/site'
-import { type Track, trackAt } from '../utils/track'
+import { figurineLevel, lastKnown, NO_TRACKS, type Track, tracksAt } from '../utils/track'
 import { type LimbPose, turnedTo, walkCycle, walkPhase } from '../utils/walk'
 import { LabelCard } from './label-card'
 import { boxShape, type Profile, turnedShape } from './volumes'
@@ -55,10 +57,13 @@ const FRAME_GLOW = 4
 // The label of the detection, over the marker: how wide its card is, and how far above the gem's tip, or the
 // frame's top, it starts.
 const LABEL = { width: 1.2, clear: 0.05 } as const
+// The outline the figurine leaves where it was last seen: how thick its line is, in scene units, and how bright
+// it emits. Dimmer than the ring and the marker of an intruder that is seen.
+const OUTLINE = { width: 0.007, glow: 3 } as const
 // The figurine is drawn in two goes, after the camera's field, its walls as its sector on the ground: its
-// shade, then its light. The frame of its detection comes after everything that stands on the site, and under
-// the labels.
-const DRAWN = { shade: 3, light: 4, frame: 9 } as const
+// shade, then its light. Its outline comes after both. The frame of its detection comes after everything that
+// stands on the site, and under the labels.
+const DRAWN = { shade: 3, light: 4, outline: 5, frame: 9 } as const
 
 const HOLOGRAM_VERTEX = /* glsl */ `
   varying float vHeight;
@@ -113,6 +118,42 @@ const HOLOGRAM_FRAGMENT = /* glsl */ `
   }
 `
 
+// The outline: each volume a line's width larger than it is, of which only the inside is drawn, the far side
+// of it. The volumes themselves hide all of that but what goes past their edge: a line around the figurine.
+const OUTLINE_VERTEX = /* glsl */ `
+  attribute vec3 outward;
+  varying float vHeight;
+
+  void main() {
+    vec4 world = modelMatrix * vec4(position + ${OUTLINE.width} * outward, 1.0);
+    vHeight = world.y;
+    gl_Position = projectionMatrix * viewMatrix * world;
+  }
+`
+const OUTLINE_FRAGMENT = /* glsl */ `
+  uniform vec3 color;
+  uniform float level;
+  uniform float swept;
+  varying float vHeight;
+
+  void main() {
+    // Of a figurine its sweep had not brought in whole, only what was seen: the line closes over it.
+    if (vHeight > swept + ${OUTLINE.width}) discard;
+    gl_FragColor = vec4(color * ${OUTLINE.glow.toFixed(1)} * level, 1.0);
+  }
+`
+// What hides the inside of an outline that has no figurine left in it: the volumes, of which only the depth
+// is drawn.
+const HOLLOW_FRAGMENT = /* glsl */ `
+  uniform float swept;
+  varying float vHeight;
+
+  void main() {
+    if (vHeight > swept) discard;
+    gl_FragColor = vec4(0.0);
+  }
+`
+
 // What a limb's segment is turned from: it hangs from its joint, where it is drawn from, and is rounded
 // around it and around the next one.
 function hanging({ length, radius: [top, bottom] }: Segment): Profile {
@@ -139,6 +180,55 @@ function egg({ height, radius }: typeof FIGURE.head): Profile {
   ]
 }
 
+// Gives `shape` the way out of it at each of its points: its normal there, and across a crisp edge, where
+// several points stand at one place with a normal each, the mean of them. A volume moved out along it stays in
+// one piece, where along its normals it would come apart at every edge.
+function withOutward(shape: BufferGeometry): BufferGeometry {
+  const positions = shape.getAttribute('position')
+  const normals = shape.getAttribute('normal')
+  const ways = new Map<string, Vector3>()
+  const point = new Vector3()
+  const normal = new Vector3()
+  const places = Array.from({ length: positions.count }, (_, index) => {
+    point.fromBufferAttribute(positions, index)
+    // To a hundredth of a millimetre of the maquette: the same place.
+    const place = point.toArray().map((along) => Math.round(along * 1e5)).join()
+    const way = ways.get(place) ?? new Vector3()
+    ways.set(place, way.add(normal.fromBufferAttribute(normals, index)))
+    return place
+  })
+  for (const way of ways.values()) way.normalize()
+
+  const outward = new BufferAttribute(new Float32Array(positions.count * 3), 3)
+  places.forEach((place, index) => {
+    const way = ways.get(place)
+    if (way) outward.setXYZ(index, way.x, way.y, way.z)
+  })
+  return shape.setAttribute('outward', outward)
+}
+
+// One go of what a figurine's volumes are drawn in, and when it comes among the others.
+interface Pass {
+  material: Material
+  order: number
+}
+
+// The outline of a figurine: its line, and how much of it shows. `swept` is how high the figurine's sweep had
+// got to.
+function createOutline(swept: { value: number }) {
+  const uniforms = { color: { value: new Color(INTRUSION_COLOR) }, level: { value: 0 }, swept }
+  const line = new ShaderMaterial({
+    vertexShader: OUTLINE_VERTEX,
+    fragmentShader: OUTLINE_FRAGMENT,
+    uniforms,
+    transparent: true,
+    blending: AdditiveBlending,
+    depthWrite: false,
+    side: BackSide,
+  })
+  return { uniforms, line }
+}
+
 function createFigurine() {
   const uniforms = {
     color: { value: new Color(INTRUSION_COLOR) },
@@ -158,15 +248,40 @@ function createFigurine() {
     depthWrite: false,
   })
 
+  // Its outline, which it leaves where it last stood once its Alert is cleared. Its shade, which by then
+  // shades nothing, still leaves its depth: that is what keeps the outline hollow.
+  const outline = createOutline(uniforms.swept)
+  // The outline of the intruder before it, which goes out where that one stood as a new one is raised: it has
+  // no figurine left in it, only the depth of one. Drawn when a figurine's shade is, after the camera's
+  // field: before it, it would cut its shape out of the field and of its sector.
+  const formerSwept = { value: 0 }
+  const former = createOutline(formerSwept)
+  const hollow = new ShaderMaterial({
+    vertexShader: HOLOGRAM_VERTEX,
+    fragmentShader: HOLLOW_FRAGMENT,
+    uniforms: { swept: formerSwept },
+    transparent: true,
+    colorWrite: false,
+  })
+
   const { thigh, shin, torso, upperArm, forearm, head } = FIGURE
   const shapes = {
-    head: turnedShape(egg(head)),
-    torso: boxShape([torso.width, torso.height, torso.depth], TORSO_BEVEL),
-    upperArm: turnedShape(hanging(upperArm)),
-    forearm: turnedShape(hanging(forearm)),
-    thigh: turnedShape(hanging(thigh)),
-    shin: turnedShape(hanging(shin)),
+    head: withOutward(turnedShape(egg(head))),
+    torso: withOutward(boxShape([torso.width, torso.height, torso.depth], TORSO_BEVEL)),
+    upperArm: withOutward(turnedShape(hanging(upperArm))),
+    forearm: withOutward(turnedShape(hanging(forearm))),
+    thigh: withOutward(turnedShape(hanging(thigh))),
+    shin: withOutward(turnedShape(hanging(shin))),
   }
+  const passes: readonly Pass[] = [
+    { material: shade, order: DRAWN.shade },
+    { material: light, order: DRAWN.light },
+    { material: outline.line, order: DRAWN.outline },
+  ]
+  const formerPasses: readonly Pass[] = [
+    { material: hollow, order: DRAWN.shade },
+    { material: former.line, order: DRAWN.outline },
+  ]
   // The marker: a stem standing over the head, and the gem it carries, an octahedron taller than it is wide.
   const pin = new MeshBasicMaterial({
     color: new Color(INTRUSION_COLOR).multiplyScalar(MARKER.glow),
@@ -197,9 +312,12 @@ function createFigurine() {
 
   return {
     uniforms,
-    shade,
     light,
-    shapes,
+    outline,
+    former,
+    // The figurine's volumes and what they are drawn in, and the same for the outline of the one before it.
+    body: { shapes, passes },
+    formerBody: { shapes, passes: formerPasses },
     pin,
     stem,
     gem,
@@ -207,16 +325,14 @@ function createFigurine() {
     frame,
     corners,
     dispose() {
-      shade.dispose()
-      light.dispose()
-      pin.dispose()
-      frame.dispose()
+      for (const material of [shade, light, outline.line, former.line, hollow, pin, frame]) material.dispose()
       for (const shape of [...Object.values(shapes), stem, gem, rod, corners]) shape.dispose()
     },
   }
 }
 
-type Figurine = ReturnType<typeof createFigurine>
+// A figurine's volumes, and the goes they are drawn in.
+type Drawn = ReturnType<typeof createFigurine>['body']
 type Triple = readonly [number, number, number]
 
 // What a limb is posed by: the joint it hangs from, and the one its second segment hangs from the first by.
@@ -244,18 +360,19 @@ function pose({ upper, lower }: Joints, { swing, bend }: LimbPose, fold: 1 | -1)
   if (lower) lower.rotation.x = fold * bend
 }
 
-// One of the figurine's volumes, at `at`: its shade, then its light.
-function Volume({ drawn, shape, at }: { drawn: Figurine; shape: BufferGeometry; at?: Triple }) {
+// One of the figurine's volumes, at `at`, in each of the goes it is drawn in.
+function Volume({ drawn, shape, at }: { drawn: Drawn; shape: BufferGeometry; at?: Triple }) {
   return (
     <group position={at}>
-      <mesh geometry={shape} material={drawn.shade} renderOrder={DRAWN.shade} />
-      <mesh geometry={shape} material={drawn.light} renderOrder={DRAWN.light} />
+      {drawn.passes.map(({ material, order }) => (
+        <mesh key={order} geometry={shape} material={material} renderOrder={order} />
+      ))}
     </group>
   )
 }
 
 interface LimbProps {
-  drawn: Figurine
+  drawn: Drawn
   // The joint it hangs from.
   at: Triple
   // Its two segments, and how long the first is: the second hangs from its end.
@@ -299,7 +416,7 @@ const SIDES = [
 
 // The figurine's body, on the ground at its feet and looking down its own z: a head, a torso, two arms and two
 // legs of two segments each, from the maquette's volumes. `skeleton` is what it is posed by.
-function Body({ drawn, skeleton }: { drawn: Figurine; skeleton: Skeleton }) {
+function Body({ drawn, skeleton }: { drawn: Drawn; skeleton: Skeleton }) {
   const { hip, thigh, torso, shoulder, upperArm } = FIGURE
   const { shapes } = drawn
 
@@ -337,9 +454,29 @@ function Body({ drawn, skeleton }: { drawn: Figurine; skeleton: Skeleton }) {
 }
 
 const UP = new Vector3(0, 1, 0)
-// The figurine whole, and what it fades to once its Alert is cleared.
-const WHOLE = settled([1])
-const GONE = [0]
+
+// Stands a figurine where its track has it, `standing` at its feet, in the pose of its walk: both are returned.
+function stand(standing: Group | null, skeleton: Skeleton, track: Track, lens: Vector3) {
+  const at = watchedPoint(track.x_norm)
+  standing?.position.set(at.x, 0, at.z)
+  // It faces the lens at rest and the way it goes in full stride, and turns from one to the other as it gets
+  // into its stride and out of it. Its walk cycle goes by the ground it has covered.
+  const stride = Math.abs(track.walking)
+  const toLens = bearingTo(at, lens)
+  const facing = stride === 0 ? toLens : turnedTo(toLens, bearingAlongFence(at, track.walking), stride)
+  const walk = walkCycle(walkPhase(track.walked), stride)
+  skeleton.body?.position.setY(-walk.drop)
+  skeleton.body?.rotation.set(0, facing, 0)
+  for (const { limb } of SIDES) {
+    pose(skeleton.legs[limb], walk.legs[limb], 1)
+    pose(skeleton.arms[limb], walk.arms[limb], -1)
+  }
+  return { at, walk }
+}
+
+// How high the sweep that brought a figurine in has got to: past the top of its head, so that the band of
+// light leaves it.
+const sweptHeight = (track: Track) => sweptTo(track.age) * (figureHeight() + BAND)
 
 export interface IntruderProps {
   // The intruder of the active `intrusion` Alerts, or null: there is none.
@@ -354,23 +491,29 @@ export interface IntruderProps {
 // « PERSONNE · 88 % »: both are drawn over whatever stands in front of the figurine. As `x_norm` changes the
 // figurine walks along the arc to its new place, arms and legs in opposition, turned the way it goes, the
 // line, the brackets and the label following it; once there it comes back to rest and turns to the lens again.
-// A newly raised intruder appears where it stands, at rest, in a sweep from its feet to its head; once the
-// last `intrusion` Alert is cleared, it fades out where it last stood. Unlit and brighter than white, so the
-// halo takes it all for lights. Nothing casts a shadow: the shadows are drawn once, and it moves.
+// A newly raised intruder appears where it stands, at rest, in a sweep from its feet to its head. Once the
+// last `intrusion` Alert is cleared, it fades out where it last stood and leaves its outline there, hollow,
+// still and at rest, with no pin, no ring, no line, no brackets and no label: the last known position, which
+// stays for about five seconds and goes out. An intruder raised meanwhile appears at its own place, and the
+// outline of the one before it goes out where it is. Unlit and brighter than white, so the halo takes it all
+// for lights. Nothing casts a shadow: the shadows are drawn once, and it moves.
 export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
   const group = useRef<Group>(null)
   const standing = useRef<Group>(null)
+  const marks = useRef<Group>(null)
+  const sighted = useRef<Group>(null)
   const frame = useRef<Group>(null)
   const label = useRef<Group>(null)
   const ring = useRef<MeshBasicMaterial>(null)
   const line = useRef<Mesh>(null)
   const lineMaterial = useRef<MeshBasicMaterial>(null)
-  const track = useRef<Track | null>(null)
-  const whole = useRef(WHOLE)
+  const formerStanding = useRef<Group>(null)
+  const tracks = useRef(NO_TRACKS)
   const shownNow = useFade([intruder ? 1 : 0])
   const drawn = useMemo(createFigurine, [])
   useEffect(() => () => drawn.dispose(), [drawn])
   const skeleton = useMemo(createSkeleton, [])
+  const formerSkeleton = useMemo(createSkeleton, [])
   const red = useMemo(() => new Color(INTRUSION_COLOR).multiplyScalar(GLOW), [])
   const lineRed = useMemo(() => new Color(INTRUSION_COLOR).multiplyScalar(LINE.glow), [])
   const lens = useMemo(() => {
@@ -382,36 +525,38 @@ export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
   const cameraUp = useMemo(() => new Vector3(), [])
 
   useFrame(({ clock, camera }, delta) => {
-    track.current = trackAt(track.current, intruder && { alertId: intruder.alertId, x_norm: intruder.x_norm }, delta)
-    const tracked = track.current
-    const level = shownNow()[0] ?? 0
-    // While its Alert is active the figurine is whole, its sweep brings it in: it only fades out.
-    const now = clock.elapsedTime
-    const active = tracked !== null && tracked.alertId !== null
-    whole.current = active ? WHOLE : fadeTo(whole.current, GONE, now)
-    const figurine = fadeValue(whole.current, now)[0] ?? 0
-    const shown = active || (tracked !== null && (level > 0 || figurine > 0))
-    if (group.current) group.current.visible = shown
-    if (!shown || !tracked) return
+    tracks.current = tracksAt(tracks.current, intruder && { alertId: intruder.alertId, x_norm: intruder.x_norm }, delta)
+    const { intruder: tracked, former } = tracks.current
+    if (group.current) group.current.visible = tracked !== null || former !== null
 
-    const at = watchedPoint(tracked.x_norm)
-    standing.current?.position.set(at.x, 0, at.z)
-    // It faces the lens at rest and the way it goes in full stride, and turns from one to the other as it gets
-    // into its stride and out of it. Its walk cycle goes by the ground it has covered.
-    const stride = Math.abs(tracked.walking)
-    const toLens = bearingTo(at, lens)
-    const facing = stride === 0 ? toLens : turnedTo(toLens, bearingAlongFence(at, tracked.walking), stride)
-    const walk = walkCycle(walkPhase(tracked.walked), stride)
-    skeleton.body?.position.setY(-walk.drop)
-    skeleton.body?.rotation.set(0, facing, 0)
-    for (const { limb } of SIDES) {
-      pose(skeleton.legs[limb], walk.legs[limb], 1)
-      pose(skeleton.arms[limb], walk.arms[limb], -1)
+    // The outline a new intruder puts out, where the one before it last stood.
+    if (formerStanding.current) formerStanding.current.visible = former !== null
+    if (former) {
+      stand(formerStanding.current, formerSkeleton, former, lens)
+      drawn.former.uniforms.level.value = lastKnown(former)?.level ?? 0
+      drawn.former.uniforms.swept.value = sweptHeight(former)
     }
+
+    // What tells an intruder that is seen, which its outline does not carry: all of it fades with its Alert.
+    const level = tracked ? (shownNow()[0] ?? 0) : 0
+    if (standing.current) standing.current.visible = tracked !== null
+    if (marks.current) marks.current.visible = level > 0
+    if (sighted.current) sighted.current.visible = level > 0
+    if (!tracked) return
+
+    const { at, walk } = stand(standing.current, skeleton, tracked, lens)
+    // While its Alert is active the figurine is whole, its sweep brings it in: it only fades out, and its
+    // outline comes as it goes.
+    const figurine = figurineLevel(tracked)
+    const outline = lastKnown(tracked)?.level ?? 0
     drawn.uniforms.level.value = figurine
-    // Past the top of its head, so that the band of light leaves it.
-    drawn.uniforms.swept.value = sweptTo(tracked.age) * (figureHeight() + BAND)
-    drawn.uniforms.time.value = now
+    drawn.uniforms.swept.value = sweptHeight(tracked)
+    drawn.uniforms.time.value = clock.elapsedTime
+    drawn.light.visible = figurine > 0
+    drawn.outline.uniforms.level.value = outline
+    drawn.outline.line.visible = outline > 0
+    if (level === 0) return
+
     if (ring.current) ring.current.opacity = level
     drawn.pin.opacity = level
     if (lineMaterial.current) lineMaterial.current.opacity = level
@@ -434,37 +579,44 @@ export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
   return (
     <group ref={group} visible={false}>
       <group ref={standing}>
-        <Body drawn={drawn} skeleton={skeleton} />
-        <mesh geometry={drawn.stem} material={drawn.pin} />
-        <mesh geometry={drawn.gem} material={drawn.pin} />
-        {/* On the arc itself, just above the camera's sector so it does not flicker into it. */}
-        <mesh position={[0, 0.008, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[RING.inner, RING.outer, 48]} />
-          <meshBasicMaterial ref={ring} color={red} transparent opacity={0} depthWrite={false} />
-        </mesh>
-      </group>
-      <group ref={frame}>
-        <mesh geometry={drawn.corners} material={drawn.frame} renderOrder={DRAWN.frame} />
-        <group ref={label}>
-          <LabelCard
-            text={intruder?.label ?? null}
-            color={INTRUSION_COLOR}
-            width={LABEL.width}
-            anchor="foot"
-            shown={() => shownNow()[0] ?? 0}
-          />
+        <Body drawn={drawn.body} skeleton={skeleton} />
+        <group ref={marks}>
+          <mesh geometry={drawn.stem} material={drawn.pin} />
+          <mesh geometry={drawn.gem} material={drawn.pin} />
+          {/* On the arc itself, just above the camera's sector so it does not flicker into it. */}
+          <mesh position={[0, 0.008, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[RING.inner, RING.outer, 48]} />
+            <meshBasicMaterial ref={ring} color={red} transparent opacity={0} depthWrite={false} />
+          </mesh>
         </group>
       </group>
-      <mesh ref={line} geometry={drawn.rod} position={lens}>
-        <meshBasicMaterial
-          ref={lineMaterial}
-          color={lineRed}
-          transparent
-          opacity={0}
-          blending={AdditiveBlending}
-          depthWrite={false}
-        />
-      </mesh>
+      <group ref={sighted}>
+        <group ref={frame}>
+          <mesh geometry={drawn.corners} material={drawn.frame} renderOrder={DRAWN.frame} />
+          <group ref={label}>
+            <LabelCard
+              text={intruder?.label ?? null}
+              color={INTRUSION_COLOR}
+              width={LABEL.width}
+              anchor="foot"
+              shown={() => shownNow()[0] ?? 0}
+            />
+          </group>
+        </group>
+        <mesh ref={line} geometry={drawn.rod} position={lens}>
+          <meshBasicMaterial
+            ref={lineMaterial}
+            color={lineRed}
+            transparent
+            opacity={0}
+            blending={AdditiveBlending}
+            depthWrite={false}
+          />
+        </mesh>
+      </group>
+      <group ref={formerStanding} visible={false}>
+        <Body drawn={drawn.formerBody} skeleton={formerSkeleton} />
+      </group>
     </group>
   )
 })

@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest'
+import { FADE_SECONDS } from './fade'
 import { roundFence, watchedPoint } from './site'
-import { SET_OFF, SIGHTING, type Track, trackAt, UNHURRIED } from './track'
+import {
+  figurineLevel,
+  LAST_KNOWN_SECONDS,
+  lastKnown,
+  NO_TRACKS,
+  SET_OFF,
+  SIGHTING,
+  type Track,
+  type Tracks,
+  trackAt,
+  tracksAt,
+  UNHURRIED,
+} from './track'
 
 const FRAME = 1 / 60
 
@@ -17,6 +30,7 @@ const standing = (alertId: string, x_norm: number, age = 0): Track => ({
   heading: 0,
   walked: 0,
   walking: 0,
+  lost: 0,
 })
 
 // Plays `seconds` of frames from `track` with the camera seeing its intruder at `x_norm`, and returns the
@@ -32,6 +46,21 @@ function play(track: Track, x_norm: number, seconds: number, rate = 60): Track[]
 }
 
 const last = (shown: Track[]): Track => shown[shown.length - 1] as Track
+
+// Plays `seconds` of frames from `track` with no `intrusion` Alert active, and returns what is left of the
+// figurine on each: null once there is nothing.
+function lose(track: Track, seconds: number, rate = 60): (Track | null)[] {
+  const left: (Track | null)[] = []
+  let now: Track | null = track
+  for (let frame = 0; frame < Math.round(seconds * rate); frame++) {
+    now = trackAt(now, null, 1 / rate)
+    left.push(now)
+  }
+  return left
+}
+
+// The figurine `seconds` after its Alert was cleared.
+const lostFor = (track: Track, seconds: number, rate = 60) => lose(track, seconds, rate).at(-1) ?? null
 
 // How far it is along the arc from where the camera sees `from` to where it sees `to`.
 const arc = (from: number, to: number) => Math.abs(roundFence(watchedPoint(to)) - roundFence(watchedPoint(from)))
@@ -65,8 +94,8 @@ describe("the intruder's track", () => {
     const shown = last(play(standing('i1', 0.3, 3), 0.62, 0.5))
     const cleared = trackAt(shown, null, FRAME)
 
-    expect(cleared).toEqual({ ...shown, alertId: null, heading: 0 })
-    expect(trackAt(cleared, null, FRAME)).toBe(cleared)
+    expect(cleared).toEqual({ ...shown, alertId: null, heading: 0, walking: expect.any(Number), lost: 0 })
+    expect(trackAt(cleared, null, FRAME)?.x_norm).toBe(shown.x_norm)
   })
 
   it('does not walk from where a previous intruder stood, even one raised again under the same id', () => {
@@ -323,5 +352,205 @@ describe('the figurine on the mock feed', () => {
 
     expect(atThirty.x_norm).toBeCloseTo(atSixty.x_norm, 2)
     expect(atThirty.walked).toBeCloseTo(atSixty.walked, 1)
+  })
+})
+
+describe('the last known position', () => {
+  it('is none while the intruder is seen, and none where there never was one', () => {
+    expect(lastKnown(null)).toBeNull()
+    expect(lastKnown(standing('i1', 0.55, 3))).toBeNull()
+    expect(lastKnown(last(play(standing('i1', 0.15, 1), 0.35, 0.5)))).toBeNull()
+  })
+
+  it('is where the figurine last stood, from the frame its Alert is cleared on', () => {
+    const walking = last(play(standing('i1', 0.3, 3), 0.62, 0.5))
+    const cleared = trackAt(walking, null, FRAME)
+
+    expect(walking.x_norm).toBeLessThan(0.62)
+    expect(lastKnown(cleared)?.x_norm).toBe(walking.x_norm)
+    expect(cleared?.lost).toBe(0)
+  })
+
+  it('stays there for about five seconds', () => {
+    const left = lose(standing('i1', 0.62, 3), LAST_KNOWN_SECONDS)
+
+    expect(LAST_KNOWN_SECONDS).toBeGreaterThanOrEqual(4)
+    expect(LAST_KNOWN_SECONDS).toBeLessThanOrEqual(6)
+    expect(left.every((track) => lastKnown(track)?.x_norm === 0.62)).toBe(true)
+    expect(left.at(-1)?.lost).toBeCloseTo(LAST_KNOWN_SECONDS, 1)
+  })
+
+  it('is nothing once that time and a fade have passed, for good', () => {
+    const cleared = standing('i1', 0.62, 3)
+
+    expect(lostFor(cleared, LAST_KNOWN_SECONDS + FADE_SECONDS - 0.1)).not.toBeNull()
+    expect(lostFor(cleared, LAST_KNOWN_SECONDS + FADE_SECONDS + 0.1)).toBeNull()
+    expect(lostFor(cleared, 60)).toBeNull()
+    expect(lastKnown(lostFor(cleared, 60))).toBeNull()
+  })
+
+  it('is the same whatever the frame rate, and in one step', () => {
+    // The frame its Alert is cleared on starts the count, however long that frame took.
+    const cleared = trackAt(standing('i1', 0.62, 3), null, 60) as Track
+    const atSixty = lostFor(cleared, LAST_KNOWN_SECONDS + FADE_SECONDS / 2, 60)
+
+    expect(cleared.lost).toBe(0)
+    expect(lastKnown(atSixty)?.level).toBeCloseTo(0.5, 9)
+    for (const other of [
+      lostFor(cleared, LAST_KNOWN_SECONDS + FADE_SECONDS / 2, 30),
+      trackAt(cleared, null, LAST_KNOWN_SECONDS + FADE_SECONDS / 2),
+    ]) {
+      expect(other?.lost).toBeCloseTo(atSixty?.lost ?? Number.NaN, 9)
+      expect(lastKnown(other)?.level).toBeCloseTo(lastKnown(atSixty)?.level ?? Number.NaN, 9)
+    }
+    expect(trackAt(cleared, null, 60)).toBeNull()
+  })
+
+  it('does not go back when the clock does', () => {
+    const left = lostFor(standing('i1', 0.62, 3), 2)
+    expect(trackAt(left, null, -1)?.lost).toBe(left?.lost)
+  })
+})
+
+describe('the outline the figurine leaves', () => {
+  // How much of it shows on each frame, from the one the Alert is cleared on until nothing is left.
+  const levels = (cleared: Track) =>
+    lose(cleared, LAST_KNOWN_SECONDS + 2).flatMap((track) => (track ? [lastKnown(track)?.level ?? Number.NaN] : []))
+
+  it('comes as the figurine goes, in a fade: one fades in as much as the other fades out', () => {
+    const left = lose(standing('i1', 0.62, 3), FADE_SECONDS + 0.5).map((track) => track as Track)
+
+    expect(lastKnown(left[0] ?? null)?.level).toBe(0)
+    expect(figurineLevel(left[0] as Track)).toBe(1)
+    for (const track of left) expect((lastKnown(track)?.level ?? Number.NaN) + figurineLevel(track)).toBeCloseTo(1, 9)
+
+    const half = left[Math.round((FADE_SECONDS / 2) * 60)] as Track
+    expect(lastKnown(half)?.level).toBeCloseTo(0.5, 9)
+    expect(lastKnown(left.at(-1) ?? null)?.level).toBe(1)
+    expect(figurineLevel(left.at(-1) as Track)).toBe(0)
+  })
+
+  it('shows whole from the end of that fade until the five seconds are over', () => {
+    const shown = levels(standing('i1', 0.62, 3))
+    const whole = shown.slice(Math.ceil(FADE_SECONDS * 60) + 1, Math.floor(LAST_KNOWN_SECONDS * 60))
+
+    expect(whole.length).toBeGreaterThan(4 * 60)
+    expect(whole.every((level) => level === 1)).toBe(true)
+  })
+
+  it('then goes out in a fade, without a cut', () => {
+    const shown = levels(standing('i1', 0.62, 3))
+    const going = shown.slice(Math.floor(LAST_KNOWN_SECONDS * 60))
+    const steps = going.slice(1).map((level, frame) => (going[frame] ?? 0) - level)
+
+    expect(shown.length / 60).toBeCloseTo(LAST_KNOWN_SECONDS + FADE_SECONDS, 1)
+    expect(Math.min(...steps)).toBeGreaterThanOrEqual(0)
+    expect(Math.max(...steps)).toBeLessThan(0.05)
+    expect(going.at(-1)).toBeLessThan(0.01)
+  })
+
+  it('never shows with the figurine whole: the figurine is all there is while its Alert is active', () => {
+    const walking = play(standing('i1', 0.15, 1), 0.35, 1)
+
+    expect(walking.every((track) => figurineLevel(track) === 1 && lastKnown(track) === null)).toBe(true)
+    expect(figurineLevel(lostFor(standing('i1', 0.62, 3), LAST_KNOWN_SECONDS) as Track)).toBe(0)
+  })
+
+  it('stands still, at rest: a figurine cleared in mid-stride comes out of it and no longer moves', () => {
+    const walking = last(play(standing('i1', 0.15, 1), 0.75, 0.5))
+    expect(walking.walking).toBeGreaterThan(0.95)
+
+    const left = lose(walking, LAST_KNOWN_SECONDS).map((track) => track as Track)
+    const strides = left.map((track) => track.walking)
+
+    expect(left.every((track) => track.x_norm === walking.x_norm && track.heading === 0)).toBe(true)
+    expect(left.every((track) => track.walked === walking.walked && track.age === walking.age)).toBe(true)
+    expect(strides).toEqual([...strides].sort((a, b) => b - a))
+    expect(strides.every((stride, frame) => (strides[frame - 1] ?? walking.walking) - stride < 0.15)).toBe(true)
+    // At rest before the figurine has faded out, and from then on.
+    expect(left[Math.round(FADE_SECONDS * 60)]?.walking).toBeLessThan(0.01)
+    expect(left.slice(90).every((track) => track.walking === 0)).toBe(true)
+  })
+})
+
+describe('a new intruder while the last known position still shows', () => {
+  // The first intruder's Alert cleared for `seconds`, then a second one raised at `x_norm`: every frame from
+  // that one, for a second.
+  function raisedAfter(seconds: number, x_norm: number): Tracks[] {
+    let tracks: Tracks = { ...NO_TRACKS, intruder: standing('i1', 0.62, 3) }
+    for (let frame = 0; frame < Math.round(seconds * 60); frame++) tracks = tracksAt(tracks, null, FRAME)
+
+    const shown: Tracks[] = []
+    for (let frame = 0; frame < 60; frame++) {
+      tracks = tracksAt(tracks, seen('i2', x_norm), FRAME)
+      shown.push(tracks)
+    }
+    return shown
+  }
+
+  it('follows one intruder like its track alone does, with no former one', () => {
+    let tracks = NO_TRACKS
+    let alone: Track | null = null
+    expect(tracksAt(tracks, null, FRAME)).toEqual(NO_TRACKS)
+
+    for (const intruder of [seen('i1', 0.15), seen('i1', 0.35), seen('i1', 0.35), null, null]) {
+      tracks = tracksAt(tracks, intruder, FRAME)
+      alone = trackAt(alone, intruder, FRAME)
+      expect(tracks).toEqual({ intruder: alone, former: null })
+    }
+  })
+
+  it('stands the new one at its own place, at rest, without walking there', () => {
+    const [raised] = raisedAfter(2, 0.2)
+
+    expect(raised?.intruder).toEqual(standing('i2', 0.2))
+    expect(lastKnown(raised?.intruder ?? null)).toBeNull()
+  })
+
+  it('keeps the former one where it was, and puts its outline out in a fade', () => {
+    const shown = raisedAfter(2, 0.2)
+    const former = shown.map(({ former }) => lastKnown(former))
+    const going = former.flatMap((left) => (left ? [left.level] : []))
+    const steps = going.slice(1).map((level, frame) => (going[frame] ?? 0) - level)
+
+    expect(former[0]).toEqual({ x_norm: 0.62, level: 1 })
+    expect(former.every((left) => left === null || left.x_norm === 0.62)).toBe(true)
+    expect(Math.min(...steps)).toBeGreaterThan(0)
+    expect(Math.max(...steps)).toBeLessThan(0.05)
+    expect(going.length / 60).toBeCloseTo(FADE_SECONDS, 1)
+    expect(shown.at(-1)?.former).toBeNull()
+  })
+
+  it('puts out from what shows of it an outline that had not fully come', () => {
+    const before = lastKnown(lostFor(standing('i1', 0.62, 3), FADE_SECONDS / 4 + FRAME))
+    const shown = raisedAfter(FADE_SECONDS / 4, 0.2)
+    const going = shown.flatMap(({ former }) => (former ? [lastKnown(former)?.level ?? Number.NaN] : []))
+
+    expect(before?.level).toBeGreaterThan(0.05)
+    expect(before?.level).toBeLessThan(0.5)
+    expect(going[0]).toBeLessThanOrEqual(before?.level ?? Number.NaN)
+    expect(going[0]).toBeCloseTo(before?.level ?? Number.NaN, 1)
+    expect(going).toEqual([...going].sort((a, b) => b - a))
+    expect(going.length / 60).toBeLessThan(FADE_SECONDS / 2)
+  })
+
+  it('leaves no former one once the last known position has gone out by itself', () => {
+    const [raised] = raisedAfter(LAST_KNOWN_SECONDS + FADE_SECONDS + 0.5, 0.2)
+
+    expect(raised).toEqual({ intruder: standing('i2', 0.2), former: null })
+  })
+
+  it('leaves none either when another Alert is raised while the first is active: that intruder is still seen', () => {
+    const tracks = tracksAt({ ...NO_TRACKS, intruder: standing('i1', 0.62, 3) }, seen('i2', 0.2), FRAME)
+
+    expect(tracks).toEqual({ intruder: standing('i2', 0.2), former: null })
+  })
+
+  it('leaves the new one its own last known position once it is cleared in turn', () => {
+    let tracks = raisedAfter(2, 0.2).at(-1) ?? NO_TRACKS
+    for (let frame = 0; frame < 60; frame++) tracks = tracksAt(tracks, null, FRAME)
+
+    expect(lastKnown(tracks.intruder)).toEqual({ x_norm: 0.2, level: 1 })
+    expect(tracks.former).toBeNull()
   })
 })
