@@ -1,5 +1,8 @@
 # The versions the tests ran with. Wheels exist for the Pi (aarch64): nothing to compile.
-numpy==2.5.3
+# The image runs Python 3.13. NumPy 2.5 needs 3.12 or later: on 3.11, the Pi OS's Python that vision's tests
+# also run on, the same NumPy as vision, or requirements-dev.txt asks for two versions at once.
+numpy==2.4.6; python_version < "3.12"
+numpy==2.5.3; python_version >= "3.12"
 scikit-learn==1.9.1
 joblib==1.6.0
 paho-mqtt==2.1.0
