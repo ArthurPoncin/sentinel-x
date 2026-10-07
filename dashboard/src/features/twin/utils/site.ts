@@ -44,9 +44,24 @@ export const SITE = {
     radius: 0.045,
     height: 0.3,
   },
-  // The perimeter: a fence of posts around the site, open at the gate, front left. The gate's `width` runs
-  // along the fence.
-  fence: { radius: 2.8, height: 0.26, posts: 48, gate: { bearing: -0.355, width: 0.7 } },
+  // The perimeter: a fence of posts around the site, closed at the gate, front left. A chain-link mesh runs
+  // between the posts, `height` high and `mesh.rows` diamonds up; a strand of barbed wire runs `barbed.rise`
+  // over it, on top of the posts, with a barb every `barbed.every` along it. The gate's `width` runs along
+  // the fence, from the post on one side of it to the post on the other: a pillar stands on each, and a leaf
+  // hangs from each pillar.
+  fence: {
+    radius: 2.8,
+    height: 0.26,
+    posts: 48,
+    mesh: { rows: 6 },
+    barbed: { rise: 0.04, every: 0.075 },
+    gate: {
+      bearing: -0.355,
+      width: 0.7,
+      pillar: { width: 0.045, height: 0.338 },
+      leaf: { width: 0.32, height: 0.26 },
+    },
+  },
   // Where the Enclosure's mast stands, the ground kept for its foot, and the bearing it faces: beside the
   // way in, so that its lens, which is off the mast, looks straight out through the gate.
   enclosure: { x: -0.5, z: 0.5, radius: 0.6, heading: 0 },
@@ -76,12 +91,47 @@ export function gatePoint(): GroundPoint {
   return toward(SITE.fence.gate.bearing, SITE.fence.radius)
 }
 
+// How long the fence is, from one side of the gate round the site to the other.
+export function fenceLength(): number {
+  return SITE.fence.radius * 2 * (Math.PI - halfGate())
+}
+
+// `count` points of the fence's line, evenly spaced from one side of the gate round the site to the other.
+function alongFence(count: number): GroundPoint[] {
+  const { radius, gate } = SITE.fence
+  const step = (2 * Math.PI - 2 * halfGate()) / (count - 1)
+
+  return Array.from({ length: count }, (_, index) => toward(gate.bearing + halfGate() + index * step, radius))
+}
+
 // Where the fence's posts stand: evenly spaced, from one side of the gate round the site to the other.
 export function fencePosts(): GroundPoint[] {
-  const { radius, posts, gate } = SITE.fence
-  const bay = (2 * Math.PI - 2 * halfGate()) / (posts - 1)
+  return alongFence(SITE.fence.posts)
+}
 
-  return Array.from({ length: posts }, (_, post) => toward(gate.bearing + halfGate() + post * bay, radius))
+// How wide a diamond of the fence's mesh is, and how high: the mesh is `mesh.rows` of them up.
+export function meshCell(): number {
+  return SITE.fence.height / SITE.fence.mesh.rows
+}
+
+// How high the strand of barbed wire runs: over the mesh, on top of the posts that carry it.
+export function barbedHeight(): number {
+  return SITE.fence.height + SITE.fence.barbed.rise
+}
+
+// Where the barbs of the barbed wire are, over the ground: evenly spaced along the strand between the gate's
+// two pillars, none on a pillar, as near `barbed.every` apart as its length allows.
+export function fenceBarbs(): GroundPoint[] {
+  return alongFence(Math.round(fenceLength() / SITE.fence.barbed.every) + 1).slice(1, -1)
+}
+
+// The gate, closed: the straight line it stands on, from the middle of one pillar to the middle of the other,
+// and `opening`, what the pillars leave between them for its two leaves.
+export function gateLine(): { from: GroundPoint; to: GroundPoint; opening: number } {
+  const { radius, gate } = SITE.fence
+  const [from, to] = [toward(gate.bearing + halfGate(), radius), toward(gate.bearing - halfGate(), radius)]
+
+  return { from, to, opening: Math.hypot(to.x - from.x, to.z - from.z) - gate.pillar.width }
 }
 
 // The point `share` of the way along the gas pipe, over the ground: 0 at the hall's wall, 1 at the tank. The
