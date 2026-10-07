@@ -23,6 +23,7 @@ import { NoiseWaves } from './noise-waves'
 import { OrbitCamera } from './orbit-camera'
 import { Perimeter } from './perimeter'
 import { PowerPlant } from './power-plant'
+import { Signage } from './signage'
 import { Socle } from './socle'
 
 // The studio the Outpost stands in, and the Status's color grade over it. The rim light and the ring around the
@@ -113,7 +114,8 @@ export interface OutpostTwinProps {
 // color for a moment as it rises; the Enclosure, at the site's entrance, turns red as gas rises, shows the
 // Status on its LCD and breathes it on its LED ring. A haze thickens around the gas pipe with the gas, and the
 // Enclosure sounds the Alarm while a `gas` or `thermal` Alert is active. The generator hall's roof glows red
-// with the heat, and the air ripples above it.
+// with the heat, and the air ripples above it. The site carries its signage, which no signal drives: no-entry
+// signs on each side of the gate, the danger zone around the gas tank, its name on the hall.
 // The camera's field is a faint volume from the Enclosure's lens down to its sector on the ground: an intrusion
 // lights it, sector included, and stands the intruder on its arc, a human figurine in
 // hologram tied to the lens, which walks to where `x_norm` places it, in the brackets of its detection and
@@ -144,6 +146,7 @@ export function OutpostTwin({ scene, frames, wholeStage = false }: OutpostTwinPr
         <StillShadows />
         <Socle />
         <PowerPlant {...scene.thermal} />
+        <Signage />
         <Haze density={scene.haze} />
         <NoiseWaves frames={frames} />
         <Perimeter sectorLit={scene.sector.lit} presence={scene.presence.active} />

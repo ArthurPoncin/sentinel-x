@@ -6,12 +6,15 @@ import {
   barbedHeight,
   bearingAlongFence,
   bearingTo,
+  dangerZone,
   fenceBarbs,
   fenceLength,
   fencePosts,
   type GroundPoint,
   gateLine,
   gatePoint,
+  gateSigns,
+  hallSign,
   lensHeight,
   lensPoint,
   meshCell,
@@ -50,6 +53,10 @@ function outlines(): Record<string, GroundPoint[]> {
 }
 
 const reach = (outline: GroundPoint[]) => Math.max(...outline.map(fromCentre))
+
+// How far outside `block`'s walls `point` is: 0 on a wall, negative inside.
+const outside = (point: GroundPoint, { x, z, width, depth }: Pick<Block, 'x' | 'z' | 'width' | 'depth'>) =>
+  Math.max(Math.abs(point.x - x) - width / 2, Math.abs(point.z - z) - depth / 2)
 
 const lens = lensPoint()
 // The way the Enclosure faces, and its lens looks.
@@ -197,12 +204,140 @@ describe('the gate', () => {
   })
 })
 
+describe('the no-entry signs', () => {
+  const { fence, signs } = SITE
+  const halfGate = fence.gate.width / fence.radius / 2
+  // How far round the site a point stands from the middle of the gate: negative on one side of it, positive
+  // on the other.
+  const fromGate = (point: GroundPoint) => {
+    const turn = Math.atan2(point.x, point.z) - fence.gate.bearing
+    return Math.atan2(Math.sin(turn), Math.cos(turn))
+  }
+
+  it('hang on the fence, one on each side of the gate, as far from it as each other', () => {
+    const [before, after] = gateSigns()
+
+    expect(gateSigns()).toHaveLength(2)
+    for (const sign of gateSigns()) expect(fromCentre(sign)).toBeCloseTo(fence.radius)
+    expect(before && fromGate(before)).toBeLessThan(-halfGate)
+    expect(after && fromGate(after)).toBeGreaterThan(halfGate)
+    expect(before && fromGate(before)).toBeCloseTo(-((after && fromGate(after)) ?? 0))
+  })
+
+  it('each hold in a bay of the fence, halfway between two posts, out of the way in', () => {
+    const posts = fencePosts()
+    const [before, after] = gateSigns()
+    // The posts of the bay the plan gives each sign, counted from the gate's own post.
+    const { bay } = signs.gate
+    const bays = [
+      [before, posts.at(-bay), posts.at(-bay - 1)],
+      [after, posts.at(bay - 1), posts.at(bay)],
+    ] as const
+
+    for (const [sign, nearer, farther] of bays) {
+      if (!sign || !nearer || !farther) throw new Error('a sign or a post is missing')
+      expect(between(sign, nearer)).toBeCloseTo(between(sign, farther))
+      expect(signs.gate.width).toBeLessThan(between(nearer, farther))
+      expect(between(sign, gatePoint()) - signs.gate.width / 2).toBeGreaterThan(fence.gate.width / 2)
+    }
+  })
+
+  it('hide no one the camera sees, but at the very left edge of its image', () => {
+    // The intruder stands on the fence's line, where a sign hangs: none hangs where it is seen.
+    for (const xNorm of ACROSS.filter((across) => across > 0)) {
+      for (const sign of gateSigns()) {
+        expect(between(watchedPoint(xNorm), sign), `x_norm ${xNorm}`).toBeGreaterThan(signs.gate.width / 2)
+      }
+    }
+  })
+
+  it('face out of the site, and are no taller than the fence', () => {
+    for (const sign of gateSigns()) {
+      expect(sign.bearing).toBeCloseTo(Math.atan2(sign.x, sign.z))
+    }
+    expect(signs.gate.height).toBeLessThan(fence.height)
+  })
+})
+
+describe('the danger zone', () => {
+  const { tank, signs, fence } = SITE
+  const zone = dangerZone()
+
+  it('goes all round the gas tank, clear ground between the tank and its band', () => {
+    const { margin, band } = signs.dangerZone
+
+    expect(margin).toBeGreaterThan(0)
+    expect(band).toBeGreaterThan(0)
+    expect(zone).toMatchObject({ x: tank.x, z: tank.z })
+    // Every wall of the tank is the clear ground and the band away from the zone's edge.
+    for (const corner of corners(tank)) expect(outside(corner, zone)).toBeCloseTo(-(margin + band))
+  })
+
+  it('is marked inside the fence, with room left to walk along it', () => {
+    const WALKWAY = 0.3
+
+    expect(reach(corners({ ...zone, height: 0 }))).toBeLessThan(fence.radius - WALKWAY)
+  })
+
+  it('takes no ground from anything but the tank, and the pipe that comes to it', () => {
+    const { tank: _, pipe: __, ...others } = outlines()
+
+    for (const [part, outline] of Object.entries(others)) {
+      expect(Math.min(...outline.map((point) => outside(point, zone))), part).toBeGreaterThan(0)
+    }
+    // The pipe leaves the zone: only its end at the tank is inside.
+    expect(outside(SITE.pipe.path[0], zone)).toBeGreaterThan(0)
+  })
+
+  it('is marked out of the camera sector', () => {
+    // Round the lens from straight ahead, toward its left: the sector is half the field of view either way.
+    const offAxis = (point: GroundPoint) => Math.atan2(toTheLeft(point), inFront(point))
+
+    for (const corner of corners({ ...zone, height: 0 })) {
+      expect(Math.abs(offAxis(corner))).toBeGreaterThan(SITE.camera.fov / 2)
+    }
+  })
+})
+
+describe('the gas pictogram', () => {
+  const { tank, signs } = SITE
+
+  it("holds on the tank's barrel, between its domed ends", () => {
+    // The tank is a barrel as wide as it is deep, closed by a dome at each end.
+    expect(signs.tank.width).toBeLessThan(tank.width - tank.depth)
+    // Less than a quarter of the way round it: read from one side.
+    expect(signs.tank.height).toBeLessThan((Math.PI / 2) * (tank.depth / 2))
+  })
+
+  it('is on a side of the tank, which lies along x', () => {
+    expect(Math.abs(Math.cos(signs.tank.bearing))).toBeCloseTo(1)
+  })
+})
+
+describe("the site's name", () => {
+  const { hall, signs } = SITE
+  const sign = hallSign()
+  const out = { x: Math.sin(sign.bearing), z: Math.cos(sign.bearing) }
+
+  it('is on a wall of the hall, facing out of it', () => {
+    const STEP = 0.1
+
+    expect(outside(sign, hall)).toBeCloseTo(0)
+    expect(outside({ x: sign.x + STEP * out.x, z: sign.z + STEP * out.z }, hall)).toBeCloseTo(STEP)
+  })
+
+  it('holds on that wall, off the ground and under the roof', () => {
+    // How long the wall it is on is: the hall's depth for a side wall, its width for the front or the back.
+    const wall = Math.abs(out.x) * hall.depth + Math.abs(out.z) * hall.width
+
+    expect(Math.abs(signs.hall.along) + signs.hall.width / 2).toBeLessThan(wall / 2)
+    expect(signs.hall.foot).toBeGreaterThan(0)
+    expect(signs.hall.foot + signs.hall.height).toBeLessThan(hall.height)
+  })
+})
+
 describe('the gas pipe', () => {
   const { pipe, hall, tank } = SITE
-  // How far outside `block`'s walls `point` is: 0 on a wall, negative inside.
-  const outside = (point: GroundPoint, { x, z, width, depth }: Block) =>
-    Math.max(Math.abs(point.x - x) - width / 2, Math.abs(point.z - z) - depth / 2)
-
   it("runs from the hall's wall to the tank, clear of both on the way", () => {
     const [start, ...bends] = pipe.path
     const end = bends.pop()
