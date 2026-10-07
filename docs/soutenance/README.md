@@ -1,6 +1,6 @@
 # Soutenance : le diaporama
 
-Le support de la soutenance du vendredi (issue #53) : [`index.html`](index.html), une seule page, sans réseau. Le Wi-Fi de la table n'a pas Internet, la page n'en demande pas. Ses couleurs sont celles du dashboard, ses images sont les captures du Twin de [`../twin/`](../twin/).
+Le support de la soutenance du vendredi (issue #53) : [`index.html`](index.html), une seule page, sans réseau. Une idée par diapositive, dite en une phrase ; le détail est dans les notes de l'orateur (**N**). Le Wi-Fi de la table n'a pas Internet, la page n'en demande pas. Ses couleurs sont celles du dashboard. Ses images sont des captures du Twin : celles de [`../twin/`](../twin/), et dans [`img/`](img/) six images tirées du teaser, filmé dans le Twin.
 
 ## L'ouvrir
 
@@ -19,7 +19,7 @@ Un clic avance, un clic dans le cinquième gauche de l'écran recule. `index.htm
 
 ## Les dix minutes
 
-Le chrono du sujet, à la seconde. La barre du bas découpe les dix minutes en leurs quatre parties, et son trait de couleur dit où le plan place la diapositive affichée. La page ne chronomètre rien : c'est à l'orateur de tenir sa montre.
+Le chrono du sujet, à la seconde. Le trait en bas à gauche dit où le plan en est des dix minutes à la fin de la diapositive affichée, et les notes (**N**) donnent son créneau. La page ne chronomètre rien : c'est à l'orateur de tenir sa montre.
 
 | Temps | Diapositives | Contenu |
 |---|---|---|
@@ -28,14 +28,14 @@ Le chrono du sujet, à la seconde. La barre du bas découpe les dix minutes en l
 | 2:00 à 5:00 | 5 | la démo live, ses six temps (ceux de [`../SCOPE.md`](../SCOPE.md)) et le plan B |
 | 5:00 à 10:00 | 6 à 13 | les attendus du sujet, l'architecture, le Sentinel, l'IA, la sécurité, le Twin, les chiffres, les questions |
 
-- **Le teaser** : la diapositive 4 est une salle de projection. → lance le film sur son écran, avec le son, et la salle s'éteint ; → de nouveau passe à la démo, ← l'arrête. En attendant, l'écran montre une image du film.
-- **La démo** : → fait passer le repère d'un temps au suivant, et la page prend la couleur du Status attendu. **B** noircit la page si elle reste projetée.
+- **Le teaser** : la diapositive 4 montre une image du film, plein cadre. → le lance avec le son, et tout ce qui l'entoure s'éteint ; → de nouveau passe à la démo, ← l'arrête.
+- **La démo** : → allume les six temps l'un après l'autre, et la page prend la couleur du Status attendu. **B** noircit la page si elle reste projetée.
 
 ## Le modifier
 
-Tout est dans `index.html`. Une diapositive est une `<section class="slide">` : `data-t` est son temps en secondes (la somme fait 600), `data-status` sa couleur (`nominal`, `elevated`, `critical`, `replay`), `<aside class="notes">` ses notes. Les noms et les rôles de l'équipe sont dans le tableau `TEAM`, au début du script.
+Tout est dans `index.html`. Une diapositive est une `<section class="slide">` : `data-t` est son temps en secondes (la somme fait 600), `data-status` sa couleur (`nominal`, `elevated`, `critical`, `replay`), `<aside class="notes">` ses notes. Sa phrase est un `<h2 class="say">`, la partie en couleur dans un `<em>` ; sous elle, trois ou quatre éléments au plus (`.row`, `.figures`). Ce qui ne tient pas dans une phrase va dans les notes. Ce qui se montre est encadré : une grille de cartes de même taille (`.grid` et `.panel`), une bande en bas (`.band`), une image à droite (`.split`). Le logo est celui du teaser, en tracés SVG : la page n'a besoin d'aucune police. Les noms et les rôles de l'équipe sont dans le tableau `TEAM`, au début du script.
 
-Les chiffres de la diapositive 12 sont ceux de `main` le 7 octobre 2026. Avant vendredi, les relever de nouveau :
+Les chiffres de la diapositive 12 (tests, pull requests) et de ses notes (commits, issues) sont ceux de `main` le 7 octobre 2026. Avant vendredi, les relever de nouveau :
 
 ```bash
 npm test --prefix backend && npm test --prefix dashboard     # 255 et 637 tests
