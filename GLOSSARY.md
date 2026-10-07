@@ -15,7 +15,7 @@ The 3D-printed (Fusion360), laser-engraved shell that houses the Sentinel **and*
 _Avoid_: box, case, shell.
 
 **Sentinel**:
-The sensing unit: an **ESP32** with the environmental and intrusion Probes and the Alarm hardware (a DFPlayer Mini and its speaker). Lives in the Enclosure and joins the Command Post's Wi-Fi. Carries the Probes, not the camera.
+The sensing unit: an **ESP32** with the environmental and intrusion Probes and the Alarm hardware (a speaker, driven through a transistor). Lives in the Enclosure and joins the Command Post's Wi-Fi. Carries the Probes, not the camera.
 _Avoid_: box, edge node, device, module.
 
 **Sentinel-X**:

@@ -28,7 +28,7 @@ flowchart LR
             MQ2["MQ-2 · gas"]
             PIR["PIR HC-SR501 · presence"]
             SND["CZN-15E · sound"]
-            ALARM["Alarm · DFPlayer + speaker"]
+            ALARM["Alarm · speaker"]
         end
         subgraph cp["🖥️ Command Post · Raspberry Pi 4 (Wi-Fi AP)"]
             CAM["USB webcam"]

@@ -9,7 +9,6 @@ Dans cette page, la table est la n° **4**. Remplace `4` par ton numéro de tabl
 - Le Raspberry Pi 4, son alimentation officielle (USB-C, 5 V / 3 A) et une carte microSD d'au moins 16 Go.
 - Un **câble Ethernet** branché sur un réseau qui a Internet (box, routeur, prise de l'école). Indispensable seulement la première fois.
 - L'ESP32 câblé selon [`firmware/include/pins.h`](../firmware/include/pins.h), avec un **câble USB qui transmet les données**. Beaucoup de câbles ne font que charger : avec eux, le Pi ne voit pas l'ESP32.
-- Pour l'alarme, le **DFPlayer Mini** et son enceinte, avec une **carte microSD** à part (32 Go au plus, FAT32) où tu as copié le dossier `mp3` de [`firmware/sd/`](../firmware/sd/) à la racine.
 - Une **webcam USB**, pour la détection d'intrusion.
 - En option, le **servo** qui fait tourner la webcam pour suivre la personne détectée : voir [Le servo de la caméra](#le-servo-de-la-caméra-en-option).
 - L'**écran HDMI** 800×480, branché sur un port micro-HDMI du Pi (le deuxième, côté prise jack, convient) : il affiche le statut du Poste de commande, à la place de l'écran de l'ESP32.
@@ -172,7 +171,7 @@ Les seuils se règlent dans [`firmware/include/config.h`](../firmware/include/co
 
 ## Dépannage
 
-L'écran HDMI dit si le Sentinel envoie ses mesures ([L'écran de statut](#lécran-de-statut)). S'il ne les envoie pas, son moniteur série dit ce qu'il attend : branche l'ESP32 en USB sur le Pi, puis `~/.local/share/sentinel-x/platformio/bin/pio device monitor -d firmware`. Chaque seconde, une ligne `T=… H=… air=… pir=… son=… | mp3=… wifi=… heure=… broker=… <problème>` :
+L'écran HDMI dit si le Sentinel envoie ses mesures ([L'écran de statut](#lécran-de-statut)). S'il ne les envoie pas, son moniteur série dit ce qu'il attend : branche l'ESP32 en USB sur le Pi, puis `~/.local/share/sentinel-x/platformio/bin/pio device monitor -d firmware`. Chaque seconde, une ligne `T=… H=… air=… pir=… son=… | wifi=… heure=… broker=… <problème>` :
 
 | Moniteur série | Quoi faire |
 |---|---|
@@ -181,8 +180,7 @@ L'écran HDMI dit si le Sentinel envoie ses mesures ([L'écran de statut](#lécr
 | `MQTT: mot de passe` | Relance le script : il reflashe l'ESP32 avec le bon mot de passe |
 | `heure=0` | `systemctl status chrony` |
 | `T=nan` | Câblage du DHT22 et sa résistance de 10 kΩ entre DATA et 3V3. Rien n'est envoyé tant qu'il ne répond pas |
-| `mp3=0` | Le DFPlayer ne dit pas lire sa carte : la carte microSD (FAT32, le dossier `mp3` de [`firmware/sd/`](../firmware/sd/) copié à la racine), puis son TX sur IO16. L'alarme joue quand même, à l'aveugle |
-| Pas de bip au démarrage, pas de sirène | Le RX du DFPlayer sur IO17 (par 1 kΩ), son 5 V, l'enceinte sur SPK_1 et SPK_2. `DFPlayer error 6` : un son manque sur la carte |
+| Pas de bip au démarrage, pas de sirène | Le transistor : l'ordre de ses pattes (il diffère entre le 2N2222 et le BC547), IO25 sur sa base par 1 kΩ, son émetteur à GND. L'enceinte entre le 5V (par 47 Ω) et son collecteur |
 
 L'écran HDMI :
 

@@ -46,7 +46,7 @@ The smallest end-to-end slice that proves the spine. **If only this works, the "
 - One live charts panel.
 
 ### Tier 1 — MVP *(all mandatory brief requirements)*
-- **Firmware:** all core probes (DHT, air, PIR, sound), telemetry snapshots, **own threshold Alerts with hysteresis**, **autonomous Alarm** (siren on a DFPlayer + speaker). The status screen is the Pi's HDMI screen.
+- **Firmware:** all core probes (DHT, air, PIR, sound), telemetry snapshots, **own threshold Alerts with hysteresis**, **autonomous Alarm** (siren on a speaker). The status screen is the Pi's HDMI screen.
 - **AI:** vision person detection on the USB webcam (≤640×480, <100ms; base `automaticdai/rpi-object-detection`) → `intrusion` Alert; predictive model (Isolation Forest on temp+air, **non-static**) → `predictive` Alert.
 - **Backend:** two-path ingress (MQTTS + `POST /api/v1/alerts`), Status engine, WebSocket, actuator command relay.
 - **Dashboard:** 3D Twin reacting to telemetry + Alerts, live charts, `Status`, camera feed, **reactive actuator control panel**.

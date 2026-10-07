@@ -110,9 +110,9 @@ void cycle(uint32_t now) {
     flushAlerts();
     publishTelemetry();
   }
-  Serial.printf("T=%.1f H=%.0f air=%d pir=%d son=%.2f | mp3=%d wifi=%d heure=%d broker=%d %s\n", readings.temp,
-                readings.humidity, readings.air, readings.pir, readings.sound, speaker::cardSeen(), uplink::wifiUp(),
-                uplink::timeKnown(), uplink::brokerUp(), uplink::problem());
+  Serial.printf("T=%.1f H=%.0f air=%d pir=%d son=%.2f | wifi=%d heure=%d broker=%d %s\n", readings.temp,
+                readings.humidity, readings.air, readings.pir, readings.sound, uplink::wifiUp(), uplink::timeKnown(),
+                uplink::brokerUp(), uplink::problem());
 }
 
 }  // namespace
@@ -124,6 +124,7 @@ void setup() {
   snprintf(alertTopic, sizeof alertTopic, "sentinel/%s/alert", SENTINEL_ID);
 
   speaker::begin();
+  speaker::beep(120);
   probes::begin();
   alerts::begin();
   uplink::begin(onCommand, onBrokerConnect);
