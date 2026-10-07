@@ -149,23 +149,25 @@ function Engraving() {
 }
 
 // The camera, out of the front beside the PIR dome: a plate on the body, an arm, the servo that turns it, and
-// on it a housing with its lens barrel and its glass, the eye the vision service sees through. It turns about
-// its own axis, where the site plan carries the lens, to whom it follows: by `pan` radians from where it
-// rests, toward the right of its image when positive. Its axis is clear of the front: the field it sees goes
+// on its neck a housing with its lens barrel and its glass, the eye the vision service sees through, leaned
+// down over the ground it watches. It turns about its own axis, where the site plan carries the lens, to whom
+// it follows: by `aim` radians from where it rests, toward the right of its image when positive, so its lens
+// looks at the intruder as they walk across its field. Its axis is clear of the front: the field it sees goes
 // down in front of the body, not through it. The head casts no shadow: the shadows are drawn once, and it moves.
-const CAMERA = { servo: 0.06, housing: 0.085, length: 0.2, joint: 0.04, arm: 0.03 } as const
+const CAMERA = { servo: 0.06, housing: 0.085, length: 0.2, neck: 0.03, joint: 0.04, arm: 0.03, lean: 0.5 } as const
 
-function Camera({ pan }: Pick<EnclosureProps, 'pan'>) {
+function Camera({ aim }: Pick<EnclosureProps, 'aim'>) {
   const head = useRef<Group>(null)
-  const panNow = usePan(pan)
+  const aimNow = usePan(aim)
   const { lens } = ENCLOSURE_SHAPE
-  // How far its axis is out of the front, and how far under it the arm runs.
+  // How far its axis is out of the front, and how far under it the servo's top and the arm are.
   const reach = lens.z - FRONT
-  const under = CAMERA.housing + CAMERA.joint + CAMERA.arm / 2
+  const joint = CAMERA.housing + CAMERA.neck
+  const under = joint + CAMERA.joint + CAMERA.arm / 2
 
   useFrame((_, delta) => {
     // Its right is toward smaller bearings: the other way round from a turn about y.
-    if (head.current) head.current.rotation.y = -panNow(delta)
+    if (head.current) head.current.rotation.y = -aimNow(delta)
   })
 
   return (
@@ -178,23 +180,30 @@ function Camera({ pan }: Pick<EnclosureProps, 'pan'>) {
         <boxGeometry args={[0.07, CAMERA.arm, reach + CAMERA.servo]} />
         <meshStandardMaterial {...TRIM} />
       </mesh>
-      <mesh position={[0, -CAMERA.housing - CAMERA.joint / 2, 0]} castShadow>
+      <mesh position={[0, -joint - CAMERA.joint / 2, 0]} castShadow>
         <cylinderGeometry args={[CAMERA.servo * 0.8, CAMERA.servo, CAMERA.joint, 32]} />
         <meshStandardMaterial {...TRIM} />
       </mesh>
       <group ref={head} name={ENCLOSURE_PARTS.camera}>
-        <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[CAMERA.housing, CAMERA.housing, CAMERA.length, 40]} />
-          <meshStandardMaterial color="#4a5562" metalness={0.8} roughness={0.3} />
+        <mesh position={[0, -joint / 2, 0]}>
+          <cylinderGeometry args={[0.022, 0.022, joint, 16]} />
+          <meshStandardMaterial {...TRIM} />
         </mesh>
-        <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, CAMERA.length / 2 + 0.006]}>
-          <cylinderGeometry args={[CAMERA.housing * 0.7, CAMERA.housing * 0.7, 0.012, 40]} />
-          <meshStandardMaterial color="#13304f" metalness={0.6} roughness={0.12} />
-        </mesh>
-        <mesh position={[0, 0, CAMERA.length / 2 + 0.001]}>
-          <ringGeometry args={[CAMERA.housing * 0.62, CAMERA.housing * 0.84, 40]} />
-          <meshStandardMaterial color="#aab5c0" metalness={0.9} roughness={0.2} />
-        </mesh>
+        {/* Leaned down about the lens's axis, and a little forward of it: its back stays off the body. */}
+        <group rotation={[CAMERA.lean, 0, 0]} position={[0, 0, 0.02]}>
+          <mesh rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[CAMERA.housing, CAMERA.housing, CAMERA.length, 40]} />
+            <meshStandardMaterial color="#4a5562" metalness={0.8} roughness={0.3} />
+          </mesh>
+          <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, CAMERA.length / 2 + 0.006]}>
+            <cylinderGeometry args={[CAMERA.housing * 0.7, CAMERA.housing * 0.7, 0.012, 40]} />
+            <meshStandardMaterial color="#13304f" metalness={0.6} roughness={0.12} />
+          </mesh>
+          <mesh position={[0, 0, CAMERA.length / 2 + 0.001]}>
+            <ringGeometry args={[CAMERA.housing * 0.62, CAMERA.housing * 0.84, 40]} />
+            <meshStandardMaterial color="#aab5c0" metalness={0.9} roughness={0.2} />
+          </mesh>
+        </group>
       </group>
     </group>
   )
@@ -521,8 +530,8 @@ function Crown({ ring, alarm }: Pick<SceneProps['enclosure'], 'ring' | 'alarm'>)
 export type EnclosureProps = SceneProps['enclosure'] & {
   // Whether someone is near the site: a `presence` Alert is active.
   presence: boolean
-  // How far the camera on its roof is turned from where it rests, in radians.
-  pan: number
+  // How far the camera's lens is turned from where it rests, in radians: to whom it follows.
+  aim: number
   // Its link to the Command Post: the frames it carries, whether it is up, whether it is encrypted.
   link: Pick<AntennaProps, 'frames' | 'live' | 'encrypted'>
 }
@@ -533,7 +542,7 @@ export type EnclosureProps = SceneProps['enclosure'] & {
 // predictive model says are drifting pulse, their score on a label under them; the PIR dome blinks while
 // someone is near; the antenna on its side sends an impulse of light for each frame of telemetry
 // received, a padlock by it while the feed is encrypted.
-export function Enclosure({ color, glow, lcd, ring, alarm, pulses, drift, presence, pan, link }: EnclosureProps) {
+export function Enclosure({ color, glow, lcd, ring, alarm, pulses, drift, presence, aim, link }: EnclosureProps) {
   const body = useRef<MeshStandardMaterial>(null)
   const light = useRef<PointLight>(null)
   const target = useMemo(() => new Color(color), [color])
@@ -577,7 +586,7 @@ export function Enclosure({ color, glow, lcd, ring, alarm, pulses, drift, presen
           />
         </mesh>
         <Lcd {...lcd} />
-        <Camera pan={pan} />
+        <Camera aim={aim} />
         <PirDome presence={presence} />
         <MicGrille />
         <Engraving />

@@ -438,7 +438,7 @@ const FIELD_PARTS = ['sector', 'outline', 'walls', 'edges'] as const
 // the camera, as the `intrusion` Alert says how far it is turned, and back to where it rests once that is
 // cleared: drawn anew while it turns, as the arc it lands on is another one. It is drawn before the intruder,
 // which it does not veil, and casts no shadow.
-function CameraField({ lit, pan }: SceneProps['sector'] & SceneProps['camera']) {
+function CameraField({ lit, pan }: SceneProps['sector'] & Pick<SceneProps['camera'], 'pan'>) {
   const sectorMaterial = useRef<MeshStandardMaterial>(null)
   const lineMaterial = useRef<MeshStandardMaterial>(null)
   const wallMaterial = useRef<MeshStandardMaterial>(null)

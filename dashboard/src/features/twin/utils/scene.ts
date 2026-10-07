@@ -4,7 +4,7 @@ import { detectionLabel } from './detection'
 import type { EnclosurePart } from './enclosure-parts'
 import { gasLevel } from './gas-level'
 import { heatLevel } from './heat-level'
-import { alongPipe, type GroundPoint, gatePoint, SITE, standingPoint } from './site'
+import { alongPipe, type GroundPoint, gatePoint, SITE, sightBearing, standingPoint } from './site'
 
 // What the Twin reads of the live feed: the fields of the live-feed state it needs, by shape, so
 // the route hands them over without the twin feature importing live-feed.
@@ -71,8 +71,9 @@ export interface SceneProps {
   sector: { lit: boolean }
   // How far the camera is turned from where it rests, in radians, positive toward the right of its image: the
   // `pan` of the last raised of the active `intrusion` Alerts, 0 without one, or for a camera that does not
-  // turn. Its lens on the Enclosure's front and its field turn with it.
-  camera: { pan: number }
+  // turn. Its field turns with it. `aim` is how far its lens is drawn turned, the same way round: to the
+  // intruder it follows, wherever they stand across its image, and with the field, by `pan`, without one.
+  camera: { pan: number; aim: number }
   // The intruder the last raised of the active `intrusion` Alerts sees, the one its camera follows: where it
   // stands across the camera's image, 0 = left, 1 = right, and where on the ground that is (`at`), on the
   // camera's sight line, as far along it as it is short in the image. The Alert's id and the person's `key` in
@@ -246,6 +247,7 @@ export function toScene(state: TwinState, feed: TwinFeed = { encrypted: false })
   let driftScore: number | null = null
   let intruder: SceneProps['intruder'] = null
   let pan = 0
+  let aim = 0
   let anchor: SceneProps['anchor'] = null
   let present = false
   let shimmer = false
@@ -266,6 +268,8 @@ export function toScene(state: TwinState, feed: TwinFeed = { encrypted: false })
       const { followed, others } = peopleOf(alert)
       intruder = { alertId: alert.alert_id, ...followed, x_norm, confidence, label: detectionLabel(confidence), others }
       pan = panOf(alert)
+      // From the bearing the camera rests on to the one it sights the intruder along.
+      aim = SITE.enclosure.heading - sightBearing(x_norm, pan)
     }
     if (alert.kind === 'gas' || alert.kind === 'thermal') {
       if (alarm === null || SEVERITIES.indexOf(alert.severity) > SEVERITIES.indexOf(alarm)) alarm = alert.severity
@@ -291,7 +295,7 @@ export function toScene(state: TwinState, feed: TwinFeed = { encrypted: false })
     status,
     thermal: { intensity: heatLevel(state.latestTelemetry?.readings.temp ?? null), shimmer },
     sector: { lit: intruder !== null },
-    camera: { pan },
+    camera: { pan, aim },
     intruder,
     presence: { active: present },
     floodlights: { lit: present || intruder !== null },
