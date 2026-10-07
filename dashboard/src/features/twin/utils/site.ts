@@ -69,8 +69,8 @@ export const SITE = {
   // with the vision service's CAMERA_FOV_DEG.
   camera: { fov: Math.PI / 3 },
   // The signage of a sensitive site. A no-entry sign hangs on the fence on each side of the gate, `width`
-  // along the fence, in the middle of a bay: the second from the gate, since whoever the camera sees through
-  // the gate stands in the first. The danger zone is marked on the ground around the gas tank: clear ground
+  // along the fence, in the middle of a bay: the second from the gate, clear of the way in. Whoever the
+  // camera sees stands inside the fence, `STANDING.clear` from its line: never in a plate. The danger zone is marked on the ground around the gas tank: clear ground
   // `margin` wide around its footprint, then a hatched band `band` wide. A gas pictogram is on the tank's
   // barrel, on the side that faces `bearing`: `width` along the tank, `height` round it. The site's name is on
   // the hall's wall that faces `bearing`: its middle `along` from the wall's, toward the right of whoever
@@ -85,8 +85,8 @@ export const SITE = {
 
 // Where someone the camera sees stands along its sight line.
 export const STANDING = {
-  // How far clear of the fence, of the Enclosure's own ground and of what stands on the site: the ring at
-  // their feet, and a little more.
+  // How far clear of the fence's line, of the Enclosure's own ground and of what stands on the site: the ring
+  // at their feet, and a little more. More than half a no-entry sign is wide, which hangs on that line.
   clear: 0.2,
   // The share of the image's height someone takes at the far end of where they can stand, by the fence, and
   // at the near end, by the Enclosure: there they fill the image.
@@ -318,15 +318,16 @@ export function watchedPoint(xNorm: number, pan = 0): GroundPoint {
 }
 
 // The stretch of the sight line that goes by `bearing` where someone can stand, in scene units from the lens:
-// from where it is clear of the Enclosure's own ground, which the lens is over, to a step short of the fence,
-// or of what stands on the site before it. Where there is no room between the two there is one place to
-// stand: its near end.
+// from where it is clear of the Enclosure's own ground, which the lens is over, to where it is still clear of
+// the fence's line, a step inside it all round the site, or of what stands on the site before that. Where
+// there is no room between the two there is one place to stand: its near end.
 export function standingSpan(bearing: number): { near: number; far: number } {
   const lens = lensPoint()
   const sight = toward(bearing)
-  const { enclosure } = SITE
+  const { enclosure, fence } = SITE
   const near = Math.max(0, throughCircle(lens, sight, enclosure, enclosure.radius)?.out ?? 0) + STANDING.clear
-  const far = Math.min(reachToFence(bearing) - STANDING.clear, reachToPlant(lens, sight, STANDING.clear))
+  const inside = throughCircle(lens, sight, { x: 0, z: 0 }, fence.radius - STANDING.clear)?.out ?? 0
+  const far = Math.min(inside, reachToPlant(lens, sight, STANDING.clear))
 
   return { near, far: Math.max(near, far) }
 }

@@ -244,11 +244,14 @@ describe('the no-entry signs', () => {
     }
   })
 
-  it('hide no one the camera sees, but at the very left edge of its image', () => {
-    // The intruder stands on the fence's line, where a sign hangs: none hangs where it is seen.
-    for (const xNorm of ACROSS.filter((across) => across > 0)) {
-      for (const sign of gateSigns()) {
-        expect(between(watchedPoint(xNorm), sign), `x_norm ${xNorm}`).toBeGreaterThan(signs.gate.width / 2)
+  it('stand in no one the camera sees, whichever way it is turned: they stand clear of the fence a sign hangs on', () => {
+    // A sign hangs on the fence's line; whoever is seen stands inside it, by more than half a sign is wide.
+    expect(STANDING.clear).toBeGreaterThan(signs.gate.width / 2)
+    for (const pan of [-Math.PI / 2, -0.6, 0, 0.6, Math.PI / 2]) {
+      for (const xNorm of ACROSS) {
+        for (const sign of gateSigns()) {
+          expect(between(standingPoint(xNorm, pan), sign), `pan ${pan}, x_norm ${xNorm}`).toBeGreaterThan(signs.gate.width / 2)
+        }
       }
     }
   })
@@ -524,9 +527,9 @@ describe('where someone the camera sees stands', () => {
     }
   })
 
-  it('is inside the fence and clear of it, never on it', () => {
+  it('is inside the fence and clear of its line all round the site, never on it', () => {
     for (const { pan, xNorm, hNorm } of places) {
-      expect(fromCentre(standingPoint(xNorm, pan, hNorm))).toBeLessThan(SITE.fence.radius - STANDING.clear / 2)
+      expect(fromCentre(standingPoint(xNorm, pan, hNorm))).toBeLessThanOrEqual(SITE.fence.radius - STANDING.clear + 1e-9)
     }
   })
 
@@ -553,7 +556,10 @@ describe('where someone the camera sees stands', () => {
     for (const xNorm of ACROSS) {
       const at = standingPoint(xNorm)
 
-      expect(between(at, watchedPoint(xNorm))).toBeCloseTo(STANDING.clear)
+      expect(fromCentre(at)).toBeCloseTo(SITE.fence.radius - STANDING.clear)
+      // A step from where the camera's sight meets the fence: a little more where it meets it at a slant.
+      expect(between(at, watchedPoint(xNorm))).toBeGreaterThanOrEqual(STANDING.clear - 1e-9)
+      expect(between(at, watchedPoint(xNorm))).toBeLessThan(1.5 * STANDING.clear)
       expect(at).toEqual(standingPoint(xNorm, 0, STANDING.tall.far))
     }
   })

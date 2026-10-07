@@ -462,8 +462,9 @@ describe('toScene', () => {
       const onFence = watchedPoint(x_norm)
 
       expect(at).toEqual(standingPoint(x_norm))
-      expect(fromCentre(at)).toBeLessThan(SITE.fence.radius - STANDING.clear / 2)
-      expect(Math.hypot((at?.x ?? 0) - onFence.x, (at?.z ?? 0) - onFence.z)).toBeCloseTo(STANDING.clear)
+      expect(fromCentre(at)).toBeCloseTo(SITE.fence.radius - STANDING.clear)
+      // On the way from the lens to where its sight meets the fence, a step short of it.
+      expect(Math.hypot((at?.x ?? 0) - onFence.x, (at?.z ?? 0) - onFence.z)).toBeLessThan(1.5 * STANDING.clear)
     }
   })
 
