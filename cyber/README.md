@@ -50,6 +50,7 @@ Client only: OS firewall on, no service exposed on the table network, no persona
 - Authorized engagement against other tables in the workshop (and defending ours).
 - Tooling: Nmap, Wireshark, Metasploit — MitM, payload injection, DoS against *consenting workshop targets only*.
 - Produce the **security matrix** (hardening + TLS) and the **post-pentest audit report** for the engineering dossier.
+- Plan, grille de tests et règles d'engagement : [`PENTEST-PLAN.md`](PENTEST-PLAN.md). Modèle de rapport à remplir jeudi : [`RAPPORT-AUDIT.md`](RAPPORT-AUDIT.md).
 
 ## TODO
 - [ ] Team CA + certs, MQTTS enforced (no 1883)
@@ -57,7 +58,7 @@ Client only: OS firewall on, no service exposed on the table network, no persona
 - [x] Pi hardening script and its step-by-step (`harden.sh`, `docs/DURCISSEMENT-PI.md`) — #49
 - [ ] Pi hardening applied on the Pi, checklist + Nmap output in the security matrix — #49
 - [ ] Docker hardening reviewed on every service
-- [ ] Pentest plan & rules of engagement
-- [ ] Audit report template
+- [x] Pentest plan & rules of engagement ([`PENTEST-PLAN.md`](PENTEST-PLAN.md))
+- [x] Audit report template ([`RAPPORT-AUDIT.md`](RAPPORT-AUDIT.md))
 
 > ⚠️ Pentesting is scoped to the workshop's consenting teams only. No secrets or keys committed to git.
