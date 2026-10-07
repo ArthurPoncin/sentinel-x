@@ -381,17 +381,17 @@
   .room { position: absolute; inset: 0; overflow: hidden; }
   /* The light the screen throws on the wall behind it. */
   .room .spill {
-    position: absolute; left: 50%; top: 490px; width: 1900px; height: 1100px; translate: -50% -50%;
+    position: absolute; left: 50%; top: 520px; width: 2100px; height: 1250px; translate: -50% -50%;
     background: radial-gradient(ellipse at center, color-mix(in srgb, var(--status) 26%, transparent), transparent 62%);
     opacity: 0.55; transition: opacity 1.6s, background 1.2s; animation: flicker 7s ease-in-out infinite;
   }
   @keyframes flicker { 0%, 100% { scale: 1; } 40% { scale: 1.035; } 70% { scale: 0.985; } }
-  .room .curtain { position: absolute; top: 0; bottom: 0; width: 210px; opacity: 0.8; background: repeating-linear-gradient(90deg, #06080b 0 22px, #10161d 44px, #06080b 66px); }
+  .room .curtain { position: absolute; top: 0; bottom: 0; width: 170px; opacity: 0.8; background: repeating-linear-gradient(90deg, #06080b 0 22px, #10161d 44px, #06080b 66px); }
   .room .curtain.l { left: 0; mask-image: linear-gradient(90deg, #000 30%, transparent); }
   .room .curtain.r { right: 0; mask-image: linear-gradient(270deg, #000 30%, transparent); }
   /* The floor, and the screen's light on it. */
   .room .floor {
-    position: absolute; left: 0; right: 0; bottom: 0; height: 130px;
+    position: absolute; left: 0; right: 0; bottom: 0; height: 92px;
     background:
       radial-gradient(ellipse 46% 100% at 50% 0%, color-mix(in srgb, var(--status) 16%, transparent), transparent 70%),
       linear-gradient(180deg, #0a0e13, #030405);
@@ -401,9 +401,9 @@
   .room .seats i { flex: 0 0 128px; border-radius: 34px 34px 0 0; background: linear-gradient(180deg, #0c1117, #020304); box-shadow: inset 0 2px 0 rgb(255 255 255 / 5%); }
   .room .seats i:nth-child(even) { translate: 0 12px; }
 
-  .tv { position: relative; margin-top: 124px; }
+  .tv { position: relative; margin-top: 82px; }
   .tv .panel-glass {
-    position: relative; width: 1300px; aspect-ratio: 16 / 9; padding: 0; overflow: hidden;
+    position: relative; width: 1560px; aspect-ratio: 16 / 9; padding: 0; overflow: hidden;
     border: 10px solid #05070a; border-radius: 14px; background: #000;
     box-shadow: 0 0 0 1.5px #2a3644, 0 60px 120px -30px #000, 0 0 140px -30px color-mix(in srgb, var(--status) 55%, transparent);
     transition: box-shadow 1.6s;
@@ -418,7 +418,7 @@
   @keyframes sheen { from { background-position: 120% 0; } to { background-position: -60% 0; } }
   .tv .wait { position: absolute; inset: 0; display: grid; place-items: center; background: rgb(0 0 0 / 38%); transition: opacity 0.8s; }
   .tv .play {
-    width: 150px; height: 150px; border-radius: 50%; display: grid; place-items: center;
+    width: 170px; height: 170px; border-radius: 50%; display: grid; place-items: center;
     border: 2px solid var(--status); background: rgb(11 15 20 / 55%); box-shadow: 0 0 60px -6px var(--status);
     animation: beat 2.4s ease-in-out infinite;
   }
