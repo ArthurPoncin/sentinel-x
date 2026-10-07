@@ -46,6 +46,15 @@ function alertOf<Kind extends AlertKind, Detail extends z.ZodType>(kind: Kind, d
 
 const NoDetailSchema = z.strictObject({})
 
+// Where a person stands in the camera's image. `x_norm`: 0 = left, 1 = right. `h_norm`: the share of the
+// image's height their box takes, 0–1 — twice as tall is half as far.
+const acrossImage = z.number().min(0).max(1)
+// Tells one person from another for as long as the camera sees them.
+const personId = z.number().int().nonnegative()
+
+// The people the camera sees at once: the one it follows, and at most this many others.
+export const MAX_OTHERS = 4
+
 export const AlertSchema = z.discriminatedUnion('kind', [
   alertOf('gas', NoDetailSchema),
   alertOf('thermal', NoDetailSchema),
@@ -54,10 +63,21 @@ export const AlertSchema = z.discriminatedUnion('kind', [
   alertOf(
     'intrusion',
     z.strictObject({
-      // 0 = left, 1 = right: where the Digital Twin places the intruder.
-      x_norm: z.number().min(0).max(1),
+      // The person the camera follows: where the Digital Twin places the intruder.
+      x_norm: acrossImage,
       confidence: z.number(),
       bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]),
+      // What a camera that only sees across its image leaves out, all optional: an Alert without them
+      // is one intruder on the fence, in front of a camera that does not turn.
+      id: personId.optional(),
+      h_norm: acrossImage.optional(),
+      // Degrees the camera is turned from where it rests, positive toward the right of its image.
+      pan: z.number().min(-180).max(180).optional(),
+      // Who else is in the image: the Digital Twin stands a figurine for each.
+      others: z
+        .array(z.strictObject({ id: personId, x_norm: acrossImage, h_norm: acrossImage, confidence: z.number() }))
+        .max(MAX_OTHERS)
+        .optional(),
     }),
   ),
   alertOf('predictive', z.strictObject({ anomaly_score: z.number(), drivers: z.array(z.string()) })),

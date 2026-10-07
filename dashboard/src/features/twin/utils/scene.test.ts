@@ -20,7 +20,7 @@ import {
   type TwinState,
   toScene,
 } from './scene'
-import { alongPipe, gatePoint, SITE, watchedPoint } from './site'
+import { alongPipe, gatePoint, SITE, STANDING, standingPoint, watchedPoint } from './site'
 
 const ts = '2026-10-05T14:23:00.000Z'
 
@@ -54,7 +54,7 @@ const base = { sentinel: 'sentinel-01', state: 'raised', ts } as const
 function intrusion(
   alertId: string,
   x_norm: number,
-  seen: { confidence?: number; bbox?: [number, number, number, number] } = {},
+  seen: Partial<Extract<Alert, { kind: 'intrusion' }>['detail']> = {},
 ): Alert {
   return {
     ...base,
@@ -113,6 +113,7 @@ describe('toScene', () => {
       status: STATUS_GRADES.nominal,
       thermal: { intensity: 0, shimmer: false },
       sector: { lit: false },
+      camera: { pan: 0 },
       intruder: null,
       presence: { active: false },
       floodlights: { lit: false },
@@ -414,10 +415,12 @@ describe('toScene', () => {
     expect(toScene(state({ activeAlerts: [gas] })).intruder).toBeNull()
     expect(toScene(state({ activeAlerts: [intrusion('i1', 0.2), gas, intrusion('i2', 0.7)] })).intruder).toEqual({
       alertId: 'i2',
+      key: '0',
       x_norm: 0.7,
       confidence: 0.88,
       label: 'PERSONNE · 88 %',
-      at: watchedPoint(0.7),
+      at: standingPoint(0.7),
+      others: [],
     })
   })
 
@@ -442,7 +445,7 @@ describe('toScene', () => {
     expect(after?.at).toEqual(before?.at)
   })
 
-  it('places the intruder by x_norm alone, whatever the bbox of its Alert', () => {
+  it('places the intruder whatever the bbox of its Alert', () => {
     const elsewhere = intrusion('i1', 0.4, { bbox: [500, 10, 20, 40] })
 
     expect(toScene(state({ activeAlerts: [elsewhere] })).intruder).toEqual(
@@ -450,25 +453,73 @@ describe('toScene', () => {
     )
   })
 
-  const intruderAt = (x_norm: number) => toScene(state({ activeAlerts: [intrusion('i1', x_norm)] })).intruder?.at
+  const sceneOf = (x_norm: number, seen: Parameters<typeof intrusion>[2] = {}) =>
+    toScene(state({ activeAlerts: [intrusion('i1', x_norm, seen)] }))
+  const intruderAt = (x_norm: number, seen: Parameters<typeof intrusion>[2] = {}) => sceneOf(x_norm, seen).intruder?.at
+  const fromCentre = (at: { x: number; z: number } | undefined) => Math.hypot(at?.x ?? 0, at?.z ?? 0)
 
-  it("stands the intruder on the perimeter, where the camera's sight meets the fence", () => {
+  it("stands the intruder inside the fence, on the camera's sight line: never on the fence itself", () => {
     for (const x_norm of [0, 0.15, 0.5, 0.85, 1]) {
       const at = intruderAt(x_norm)
-      expect(at).toEqual(watchedPoint(x_norm))
-      expect(Math.hypot(at?.x ?? 0, at?.z ?? 0)).toBeCloseTo(SITE.fence.radius)
+      const onFence = watchedPoint(x_norm)
+
+      expect(at).toEqual(standingPoint(x_norm))
+      expect(fromCentre(at)).toBeCloseTo(SITE.fence.radius - STANDING.clear)
+      // On the way from the lens to where its sight meets the fence, a step short of it.
+      expect(Math.hypot((at?.x ?? 0) - onFence.x, (at?.z ?? 0) - onFence.z)).toBeLessThan(1.5 * STANDING.clear)
     }
   })
 
-  it("moves the intruder along the arc as x_norm changes, from the lens's left to its right", () => {
-    // As the mock feed plays it: a new x_norm a second, the same Alert.
-    const steps = [0.15, 0.35, 0.55, 0.75].map(intruderAt)
+  it("moves the intruder across the site as x_norm changes, from the lens's left to its right", () => {
+    const steps = [0.15, 0.35, 0.55, 0.75].map((x_norm) => intruderAt(x_norm))
     // The lens looks out toward the entrance, +z: its left is toward +x.
     const across = steps.map((at) => at?.x ?? 0)
 
     expect(new Set(across.map((x) => x.toFixed(6))).size).toBe(steps.length)
     expect(across).toEqual([...across].sort((a, b) => b - a))
   })
+
+  it('walks the intruder in toward the Enclosure as it gets taller in the image', () => {
+    const steps = [0.3, 0.36, 0.46, 0.66, 1].map((h_norm) => intruderAt(0.5, { h_norm }))
+    const fromLens = steps.map((at) => Math.hypot((at?.x ?? 0) - standingPoint(0.5, 0, 1).x, (at?.z ?? 0) - standingPoint(0.5, 0, 1).z))
+
+    expect(steps[0]).toEqual(standingPoint(0.5, 0, 0.3))
+    expect(fromLens).toEqual([...fromLens].sort((a, b) => b - a))
+    expect(fromLens.at(0)).toBeGreaterThan(1)
+    expect(fromLens.at(-1)).toBe(0)
+  })
+
+  it('places the intruder from where the camera is turned to: the Alert tells it in degrees', () => {
+    expect(sceneOf(0.5).camera).toEqual({ pan: 0 })
+    expect(sceneOf(0.5, { pan: 45 }).camera.pan).toBeCloseTo(Math.PI / 4)
+    expect(sceneOf(0.5, { pan: -90 }).camera.pan).toBeCloseTo(-Math.PI / 2)
+    expect(intruderAt(0.4, { pan: 45, h_norm: 0.5 })).toEqual(standingPoint(0.4, Math.PI / 4, 0.5))
+    // Turned to its right, toward smaller bearings: the intruder is on that side of the site.
+    expect(intruderAt(0.5, { pan: 45 })?.x).toBeLessThan(intruderAt(0.5)?.x ?? 0)
+    expect(intruderAt(0.5, { pan: -45 })?.x).toBeGreaterThan(intruderAt(0.5)?.x ?? 0)
+  })
+
+  it('rests the camera again once the intrusion is cleared', () => {
+    expect(toScene(state({ activeAlerts: [gas] })).camera).toEqual({ pan: 0 })
+  })
+
+  it('tells the intruder from the others by the id its Alert gives it, and stands each of them', () => {
+    const others = [
+      { id: 4, x_norm: 0.8, h_norm: 0.35, confidence: 0.7 },
+      { id: 7, x_norm: 0.2, h_norm: 0.6, confidence: 0.9 },
+    ]
+    const { intruder } = sceneOf(0.5, { id: 3, h_norm: 0.5, pan: 20, others })
+    const pan = (20 * Math.PI) / 180
+
+    expect(intruder?.key).toBe('3')
+    expect(intruder?.at).toEqual(standingPoint(0.5, pan, 0.5))
+    expect(intruder?.others).toEqual([
+      { key: '4', at: standingPoint(0.8, pan, 0.35) },
+      { key: '7', at: standingPoint(0.2, pan, 0.6) },
+    ])
+    expect(sceneOf(0.5).intruder?.others).toEqual([])
+  })
+
 
   const presenceFor = (...activeAlerts: Alert[]) => toScene(state({ activeAlerts })).presence
 
@@ -529,7 +580,7 @@ describe('toScene', () => {
     for (const x_norm of [0.15, 0.35, 0.55, 0.75]) {
       const scene = toScene(state({ activeAlerts: [intrusion('i1', x_norm)] }))
 
-      expect(scene.anchor).toEqual({ alertId: 'i1', at: watchedPoint(x_norm) })
+      expect(scene.anchor).toEqual({ alertId: 'i1', at: standingPoint(x_norm) })
       expect(scene.anchor?.at).toEqual(scene.intruder?.at)
     }
   })

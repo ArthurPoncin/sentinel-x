@@ -324,28 +324,43 @@ api_password="$(sed -n 's/^MQTT_PASSWORD=//p' "$secrets/api.env")"
 ui_detail "dans infra/secrets, jamais commités"
 ui_done
 
-# --- 4. The webcam ---------------------------------------------------------------------------
+# --- 4. The webcam, and the servo that turns it ------------------------------------------------
 ui_step "Webcam USB"
 # Its node goes to vision only when it is plugged in: missing, Docker would refuse to start the
 # container, and `docker compose up` would stop at step 5. Found by its name in /dev/v4l/by-id,
 # which only USB devices get: whatever port it is on, and never one of the Pi's own video nodes.
-camera_line=COMPOSE_FILE=docker-compose.yml:docker-compose.camera.yml
+# Each has its compose file, taken on top of docker-compose.yml only when it is there.
+compose_files=docker-compose.yml
 camera_ok=false
 webcam=""
 for node in /dev/v4l/by-id/usb-*-video-index0; do
   if [[ -z "$webcam" && -e "$node" ]]; then webcam="$node"; fi
 done
 touch .env
-sed -i -e "\|^$camera_line\$|d" -e '/^CAMERA_DEVICE=/d' .env
+# The COMPOSE_FILE lines this step writes: with the webcam, with its servo, with both.
+sed -i -e '\|^COMPOSE_FILE=docker-compose\.yml\(:docker-compose\.camera\.yml\)\?\(:docker-compose\.pan\.yml\)\?$|d' \
+  -e '/^CAMERA_DEVICE=/d' -e '/^PAN_PWM_CHANNEL=/d' -e '/^PAN_GID=/d' .env
 if [[ -z "$webcam" ]]; then
   ui_note "pas de webcam USB : vision tournera sans caméra. Branche-la sur un port USB du Pi, puis relance avec --no-flash."
 else
-  printf '%s\nCAMERA_DEVICE=%s\n' "$camera_line" "$webcam" >>.env
+  compose_files+=:docker-compose.camera.yml
+  printf 'CAMERA_DEVICE=%s\n' "$webcam" >>.env
   camera_ok=true
   webcam_name="${webcam#/dev/v4l/by-id/usb-}"
   webcam_name="${webcam_name%-video-index0}"
   ui_detail "${webcam_name//_/ }, donnée à vision"
 fi
+# The servo is optional: infra/servo.sh gives the Pi its PWM channel, once. Like the webcam's
+# node, the channel goes to vision only when it is there, with the group that owns its files.
+servo_ok=false
+pwm_channel=/sys/class/pwm/pwmchip0/pwm0
+if [[ -e "$pwm_channel/duty_cycle" ]]; then
+  compose_files+=:docker-compose.pan.yml
+  printf 'PAN_PWM_CHANNEL=%s\nPAN_GID=%s\n' "$(readlink -f "$pwm_channel")" "$(stat -c %g "$pwm_channel/duty_cycle")" >>.env
+  servo_ok=true
+  ui_detail "servo de la caméra sur GPIO 18, donné à vision"
+fi
+[[ "$compose_files" == docker-compose.yml ]] || printf 'COMPOSE_FILE=%s\n' "$compose_files" >>.env
 ui_done
 
 # --- 5. The stack, on the images of step 2 -------------------------------------------------------
@@ -457,6 +472,7 @@ summary=(
   "Dashboard    https://$pi_ip/"
   "Sentinel     $($sentinel_ok && echo "$G_OK $sentinel_ip" || echo "$G_FAIL pas encore sur le Wi-Fi")"
   "Webcam       $($camera_ok && echo "$G_OK donnée à vision" || echo "$G_FAIL absente")"
+  "Servo        $($servo_ok && echo "$G_OK donné à vision" || echo "sans (infra/servo.sh pour l'installer)")"
   "Écran HDMI   $($screen_ok && echo "$G_OK statut affiché" || echo "$G_FAIL non détecté")"
   "Durée        $(_ui_duration "$SECONDS")"
   "Journal      $(_ui_home "$UI_LOG")"

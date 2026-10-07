@@ -151,12 +151,12 @@ export function OutpostTwin({ scene, frames, wholeStage = false }: OutpostTwinPr
         <Signage />
         <Haze density={scene.haze} />
         <NoiseWaves frames={frames} />
-        <Perimeter sectorLit={scene.sector.lit} presence={scene.presence.active} />
+        <Perimeter sectorLit={scene.sector.lit} pan={scene.camera.pan} presence={scene.presence.active} />
         <Floodlights {...scene.floodlights} />
         <Intruder intruder={scene.intruder} />
         {/* Where the site plan stands it, turned the way its lens looks. */}
         <group position={[SITE.enclosure.x, 0, SITE.enclosure.z]} rotation={[0, SITE.enclosure.heading, 0]}>
-          <Enclosure {...scene.enclosure} presence={scene.presence.active} />
+          <Enclosure {...scene.enclosure} presence={scene.presence.active} pan={scene.camera.pan} />
         </group>
         <OrbitCamera anchor={scene.anchor} frames={frames} wholeStage={wholeStage} />
         <Halo saturation={scene.signalLost ? 0 : 1} />
