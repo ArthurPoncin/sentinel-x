@@ -11,7 +11,7 @@ Local defense = 5 min: **minute 1** intro, **minute 2** teaser projection (60s),
 | # | Beat (~time) | Action on the table | What the jury sees | Proves |
 |---|---|---|---|---|
 | 0 | 0:00 | Outpost nominal | Twin green, charts flat, camera clear, `Status: nominal` | Baseline, stable flux |
-| 1 | 0:00–0:40 | Gas near the air probe (unlit lighter) | ESP32 raises `gas` warning→critical, **buzzer fires locally**, Twin box glows red, charts spike, `Status: critical` | Autonomous Alarm + telemetry → Twin |
+| 1 | 0:00–0:40 | Gas near the air probe (unlit lighter) | ESP32 raises `gas` warning→critical, **siren fires locally**, Twin box glows red, charts spike, `Status: critical` | Autonomous Alarm + telemetry → Twin |
 | 2 | 0:40–1:20 | Someone steps into the camera view and moves | `vision` service → `intrusion` Alert; **intruder marker appears on the Twin perimeter and tracks their position** | Live vision, USB webcam (Pi) → `vision` → API → Twin |
 | 3 | 1:20–1:50 | Loud clap next to the Sentinel | ESP32 raises `noise`; sound curve spikes, Twin ripples around the box | Multi-modal sensing (sound) |
 | 4 | 1:50–2:20 | Operator opens the **time-scrubber**, replays Tuesday's recorded Incident (**labelled REPLAY**) | The slow temp+air drift the model flagged *before* the critical threshold | Predictive intelligence (not a static threshold) |
@@ -46,7 +46,7 @@ The smallest end-to-end slice that proves the spine. **If only this works, the "
 - One live charts panel.
 
 ### Tier 1 — MVP *(all mandatory brief requirements)*
-- **Firmware:** all core probes (DHT, air, PIR, sound), telemetry snapshots, **own threshold Alerts with hysteresis**, **autonomous Alarm** (buzzer). The status screen is the Pi's HDMI screen.
+- **Firmware:** all core probes (DHT, air, PIR, sound), telemetry snapshots, **own threshold Alerts with hysteresis**, **autonomous Alarm** (siren on a DFPlayer + speaker). The status screen is the Pi's HDMI screen.
 - **AI:** vision person detection on the USB webcam (≤640×480, <100ms; base `automaticdai/rpi-object-detection`) → `intrusion` Alert; predictive model (Isolation Forest on temp+air, **non-static**) → `predictive` Alert.
 - **Backend:** two-path ingress (MQTTS + `POST /api/v1/alerts`), Status engine, WebSocket, actuator command relay.
 - **Dashboard:** 3D Twin reacting to telemetry + Alerts, live charts, `Status`, camera feed, **reactive actuator control panel**.

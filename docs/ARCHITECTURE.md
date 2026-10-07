@@ -28,7 +28,7 @@ flowchart LR
             MQ2["MQ-2 · gas"]
             PIR["PIR HC-SR501 · presence"]
             SND["CZN-15E · sound"]
-            ALARM["Alarm · buzzer"]
+            ALARM["Alarm · DFPlayer + speaker"]
         end
         subgraph cp["🖥️ Command Post · Raspberry Pi 4 (Wi-Fi AP)"]
             CAM["USB webcam"]
@@ -203,7 +203,7 @@ The **single unified Alert schema**, emitted by the Sentinel and by the AI servi
 {
   "cmd_id": "c9f8e7",
   "sentinel": "sentinel-01",
-  "actuator": "buzzer",       // buzzer (the only actuator)
+  "actuator": "buzzer",       // buzzer (the only actuator): the Alarm, a speaker now — the name stays
   "action": "on",             // on | off | pattern
   "params": { "pattern": "siren" },
   "ts": "2026-10-05T14:23:10Z"

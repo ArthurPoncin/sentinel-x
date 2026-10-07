@@ -26,3 +26,5 @@ constexpr uint32_t NOISE_HOLD_MS = 3000;   // quiet for this long before `noise`
 
 constexpr uint32_t PIR_WARMUP_MS = 60000;  // the HC-SR501 triggers on its own while it settles
 constexpr uint32_t PRESENCE_HOLD_MS = 5000;  // PIR low for this long before `presence` clears
+
+constexpr uint8_t ALARM_VOLUME = 20;       // DFPlayer, 0–30: louder draws more from the USB's 5 V

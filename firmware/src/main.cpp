@@ -4,9 +4,9 @@
 #include <ArduinoJson.h>
 
 #include "alerts.h"
-#include "buzzer.h"
 #include "config.h"
 #include "probes.h"
+#include "speaker.h"
 #include "uplink.h"
 
 namespace {
@@ -92,7 +92,8 @@ void onCommand(const char *payload, size_t length) {
   const char *actuator = doc["actuator"] | "";
   const char *action = doc["action"] | "";
   Serial.printf("[command] %s %s\n", actuator, action);
-  if (strcmp(actuator, "buzzer") == 0) buzzer::command(action);
+  // The contract still calls the Alarm `buzzer`: it is the speaker now.
+  if (strcmp(actuator, "buzzer") == 0) speaker::command(action);
 }
 
 // After a reconnection, the api may have missed transitions: it gets every raised Alert again.
@@ -104,14 +105,14 @@ void onBrokerConnect() {
 void cycle(uint32_t now) {
   probes::read(readings);
   alerts::evaluate(readings, now, enqueue);
-  buzzer::setLocal(alerts::critical());
+  speaker::setLocal(alerts::critical());
   if (uplink::brokerUp()) {
     flushAlerts();
     publishTelemetry();
   }
-  Serial.printf("T=%.1f H=%.0f air=%d pir=%d son=%.2f | wifi=%d heure=%d broker=%d %s\n", readings.temp,
-                readings.humidity, readings.air, readings.pir, readings.sound, uplink::wifiUp(), uplink::timeKnown(),
-                uplink::brokerUp(), uplink::problem());
+  Serial.printf("T=%.1f H=%.0f air=%d pir=%d son=%.2f | mp3=%d wifi=%d heure=%d broker=%d %s\n", readings.temp,
+                readings.humidity, readings.air, readings.pir, readings.sound, speaker::cardSeen(), uplink::wifiUp(),
+                uplink::timeKnown(), uplink::brokerUp(), uplink::problem());
 }
 
 }  // namespace
@@ -122,8 +123,7 @@ void setup() {
   snprintf(telemetryTopic, sizeof telemetryTopic, "sentinel/%s/telemetry", SENTINEL_ID);
   snprintf(alertTopic, sizeof alertTopic, "sentinel/%s/alert", SENTINEL_ID);
 
-  buzzer::begin();
-  buzzer::beep(120);
+  speaker::begin();
   probes::begin();
   alerts::begin();
   uplink::begin(onCommand, onBrokerConnect);
@@ -132,7 +132,7 @@ void setup() {
 void loop() {
   uint32_t now = millis();
   uplink::update(now);
-  buzzer::update(now);
+  speaker::update(now);
   if (now - lastCycle >= CYCLE_MS) {
     lastCycle = now;
     cycle(now);

@@ -9,7 +9,7 @@ Architecture: the brief's **Option A** — everything server-side runs on the Co
 ### Edge / IoT — `firmware/` (Sentinel, ESP32)
 - ESP32 firmware in C++ (PlatformIO).
 - Probes: DHT22 (temp/humidity), MQ-2 (gas), PIR HC-SR501 (presence), CZN-15E sound sensor (noise).
-- Alarm (buzzer). The status display is the Pi's HDMI screen (infra).
+- Alarm (DFPlayer Mini + speaker, a siren from its microSD card). The status display is the Pi's HDMI screen (infra).
 - Owns its threshold Alerts (`gas`, `thermal`, `presence`, `noise`, with hysteresis) + autonomous Alarm; publishes telemetry + Alerts over MQTTS (CA-verified, own credentials).
 
 ### AI / Data — `ai/` (Command Post, Pi)
