@@ -9,6 +9,7 @@ import {
   DRIFT_COLOR,
   DRIVER_PROBES,
   driftLabel,
+  FLOODLIGHT_COLOR,
   GAS_COLOR,
   LCD_TEXT,
   mix,
@@ -115,6 +116,7 @@ describe('toScene', () => {
       camera: { pan: 0 },
       intruder: null,
       presence: { active: false },
+      floodlights: { lit: false },
       anchor: null,
       signalLost: false,
     })
@@ -536,6 +538,32 @@ describe('toScene', () => {
     expect(presenceFor(presence('p1'), presence('p2')).active).toBe(true)
     expect(presenceFor(presence('p2')).active).toBe(true)
     expect(presenceFor().active).toBe(false)
+  })
+
+  const floodlightsFor = (...activeAlerts: Alert[]) => toScene(state({ activeAlerts })).floodlights
+
+  it('lights the floodlights while a presence Alert is active, or an intrusion one, or both', () => {
+    expect(floodlightsFor(presence('p1'))).toEqual({ lit: true })
+    expect(floodlightsFor(intrusion('i1', 0.2))).toEqual({ lit: true })
+    expect(floodlightsFor(gas, presence('p1'), intrusion('i1', 0.2))).toEqual({ lit: true })
+  })
+
+  it('leaves the floodlights dark at rest, and whatever else is raised', () => {
+    const others = [gas, thermal, sensed('noise', 'info'), predictive('d1', ['air_slope'])]
+
+    expect(floodlightsFor()).toEqual({ lit: false })
+    expect(floodlightsFor(...others)).toEqual({ lit: false })
+  })
+
+  it('keeps the floodlights lit until the last presence and the last intrusion are cleared', () => {
+    expect(floodlightsFor(presence('p1'), intrusion('i1', 0.2), intrusion('i2', 0.7)).lit).toBe(true)
+    expect(floodlightsFor(intrusion('i2', 0.7)).lit).toBe(true)
+    expect(floodlightsFor(presence('p1')).lit).toBe(true)
+    expect(floodlightsFor().lit).toBe(false)
+  })
+
+  it('lights the floodlights in white, which is no Status color', () => {
+    expect(Object.values(STATUS_COLORS)).not.toContain(FLOODLIGHT_COLOR)
   })
 
   it('shows a presence in amber, the color of the elevated Status', () => {

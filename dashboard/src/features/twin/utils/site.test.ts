@@ -9,6 +9,7 @@ import {
   fenceBarbs,
   fenceLength,
   fencePosts,
+  floodlights,
   type GroundPoint,
   gateLine,
   gatePoint,
@@ -341,6 +342,87 @@ describe("the site's name", () => {
   })
 })
 
+describe('the floodlights', () => {
+  const { fence, socle, enclosure, pipe } = SITE
+  const { foot, height, pool, bearings } = SITE.floodlights
+  const masts = floodlights()
+  // The rim of the ground a mast keeps around its axis.
+  const footprint = (mast: GroundPoint): GroundPoint[] =>
+    Array.from({ length: 16 }, (_, i) => (i * Math.PI) / 8).map((bearing) => ({
+      x: mast.x + foot * Math.sin(bearing),
+      z: mast.z + foot * Math.cos(bearing),
+    }))
+  // How far `point` is from the stretch that runs from `from` to `to`.
+  const off = (point: GroundPoint, from: GroundPoint, to: GroundPoint) => {
+    const [x, z] = [to.x - from.x, to.z - from.z]
+    const share = Math.min(1, Math.max(0, ((point.x - from.x) * x + (point.z - from.z) * z) / (x * x + z * z)))
+    return between(point, { x: from.x + x * share, z: from.z + z * share })
+  }
+
+  it('stand on the perimeter, inside the fence, one on each bearing the plan gives', () => {
+    expect(masts).toHaveLength(bearings.length)
+    masts.forEach((mast, index) => {
+      expect(Math.atan2(mast.x, mast.z)).toBeCloseTo(Math.atan2(Math.sin(bearings[index] ?? 0), Math.cos(bearings[index] ?? 0)))
+      expect(fromCentre(mast) + foot).toBeLessThan(fence.radius)
+      // Nearer the fence than anything of the plant: on the walkway kept along it.
+      expect(fromCentre(mast) + foot).toBeGreaterThan(fence.radius - 0.3)
+    })
+  })
+
+  it('rise over the fence and its gate, and look into the site', () => {
+    expect(height).toBeGreaterThan(fence.gate.pillar.height)
+    for (const mast of masts) {
+      expect(mast.x + fromCentre(mast) * Math.sin(mast.bearing)).toBeCloseTo(0)
+      expect(mast.z + fromCentre(mast) * Math.cos(mast.bearing)).toBeCloseTo(0)
+    }
+  })
+
+  it('each have ground of their own: none on a part of the site, the danger zone or another mast', () => {
+    const { hall, chimneys, transformer, tank } = SITE
+
+    masts.forEach((mast, index) => {
+      for (const [name, block] of Object.entries({ hall, transformer, tank, 'danger zone': dangerZone() })) {
+        expect(outside(mast, block), `mast ${index} and the ${name}`).toBeGreaterThan(foot)
+      }
+      for (const chimney of chimneys) expect(between(mast, chimney)).toBeGreaterThan(chimney.radius + foot)
+      pipe.path.slice(1).forEach((to, stretch) => {
+        expect(off(mast, pipe.path[stretch] ?? to, to)).toBeGreaterThan(pipe.radius + foot)
+      })
+      for (const other of masts.slice(index + 1)) expect(between(mast, other)).toBeGreaterThan(2 * foot)
+    })
+  })
+
+  it("leave the Enclosure's foot free", () => {
+    for (const mast of masts) expect(between(mast, enclosure)).toBeGreaterThan(enclosure.radius + foot)
+  })
+
+  it('leave the camera sector free, the arc where the intruder stands included', () => {
+    // Round the lens from straight ahead: the sector is half the field of view either way.
+    const offAxis = (point: GroundPoint) => Math.atan2(toTheLeft(point), inFront(point))
+
+    for (const mast of masts) {
+      for (const point of footprint(mast)) expect(Math.abs(offAxis(point))).toBeGreaterThan(SITE.camera.fov / 2)
+      for (const xNorm of ACROSS) expect(between(mast, watchedPoint(xNorm))).toBeGreaterThan(foot)
+    }
+  })
+
+  it('hide neither no-entry sign', () => {
+    for (const mast of masts) {
+      for (const sign of gateSigns()) expect(between(mast, sign)).toBeGreaterThan(SITE.signs.gate.width)
+    }
+  })
+
+  it('light a pool on the ground at their foot, toward the site, which stays on the socle', () => {
+    for (const mast of masts) {
+      expect(between(mast, mast.pool)).toBeCloseTo(pool.throw)
+      expect(fromCentre(mast.pool)).toBeCloseTo(fromCentre(mast) - pool.throw)
+      // The foot of the mast is in its own light.
+      expect(between(mast, mast.pool)).toBeLessThan(pool.radius)
+      expect(fromCentre(mast.pool) + pool.radius).toBeLessThanOrEqual(socle.radius)
+    }
+  })
+})
+
 describe('the gas pipe', () => {
   const { pipe, hall, tank } = SITE
   it("runs from the hall's wall to the tank, clear of both on the way", () => {
@@ -548,6 +630,9 @@ describe('where someone the camera sees stands', () => {
 
       for (const block of [hall, transformer, tank]) expect(fromBlock(at, block), where).toBeGreaterThan(STANDING.clear / 2)
       for (const chimney of chimneys) expect(between(at, chimney), where).toBeGreaterThan(chimney.radius + STANDING.clear / 2)
+      for (const mast of floodlights()) {
+        expect(between(at, mast), where).toBeGreaterThan(SITE.floodlights.foot + STANDING.clear / 2)
+      }
       for (const share of [0, 0.25, 0.5, 0.75, 1]) expect(between(at, alongPipe(share)), where).toBeGreaterThan(pipe.radius)
     }
   })
