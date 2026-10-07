@@ -25,6 +25,7 @@ import { NoiseWaves } from './noise-waves'
 import { OrbitCamera } from './orbit-camera'
 import { Perimeter } from './perimeter'
 import { PowerPlant } from './power-plant'
+import { Renewables } from './renewables'
 import { Rocks } from './rocks'
 import { Signage } from './signage'
 import { Socle } from './socle'
@@ -117,7 +118,9 @@ export interface OutpostTwinProps {
 // color for a moment as it rises; the Enclosure, at the site's entrance, turns red as gas rises, shows the
 // Status on its LCD and breathes it on its LED ring. A haze thickens around the gas pipe with the gas, and the
 // Enclosure sounds the Alarm while a `gas` or `thermal` Alert is active. The generator hall's roof glows red
-// with the heat, and the air ripples above it. The site carries its signage, which no signal drives: no-entry
+// with the heat, and the air ripples above it. The plant is an eco-responsible one, which no signal drives: a
+// solar field, a wind turbine whose blades turn slowly, a battery container by the transformer station. Nor
+// does a signal drive the signage the site carries: no-entry
 // signs on each side of the gate, the danger zone around the gas tank, its name on the hall. Nor does what
 // says where it stands, a remote place left to itself: rocks between the fence and the socle's rim, a track
 // from the gate to the hall's door which stops at the rim outside, a few motes of dust adrift in the wind. No
@@ -153,6 +156,7 @@ export function OutpostTwin({ scene, frames, wholeStage = false }: OutpostTwinPr
         <StillShadows />
         <Socle />
         <PowerPlant {...scene.thermal} />
+        <Renewables />
         <Signage />
         <Rocks />
         <Dust />
