@@ -17,6 +17,12 @@ export interface TwinState {
   activeAlerts: readonly Alert[]
 }
 
+// What the Twin is told of the feed it shows, which the feed's state does not say.
+export interface TwinFeed {
+  // Whether it is the live feed and travels encrypted, over WSS: never so for a replay, which is no link.
+  encrypted: boolean
+}
+
 // The overall color grade the Status gives the scene.
 export interface StatusGrade {
   // The Status itself: as it rises, the light is flooded in its color for a moment (escalation.ts).
@@ -94,6 +100,11 @@ export interface SceneProps {
   // anchor to the Alert raised before it. The camera turns to the anchor as its Alert is raised
   // (alert-framing.ts). Null while no Alert that has one is active.
   anchor: { alertId: string; at: GroundPoint } | null
+  // The Enclosure's link to the Command Post, shown at its antenna.
+  link: {
+    // Whether the padlock and « WSS » show by the antenna: the live feed is encrypted, and open right now.
+    encrypted: boolean
+  }
   // The feed was open and no longer is: the scene shows what it last knew, not the Outpost as it is now.
   signalLost: boolean
 }
@@ -117,6 +128,9 @@ export const FLOODLIGHT_COLOR = '#ffffff'
 // What a clap sends over the socle: a pale ice-white, which no Status shares. A `noise` Alert is only `info`, so
 // its wave says something was heard, not that something is wrong.
 export const NOISE_COLOR = '#cfe8ff'
+// What the antenna's impulses, and the padlock by it, are drawn in: white, like the floodlights. The link
+// beating says the feed is alive, not how the Outpost is.
+export const LINK_COLOR = '#ffffff'
 // What a drifting Probe pulses in: an orange of its own, to be told from the amber of an elevated Status.
 export const DRIFT_COLOR = '#ff6a1a'
 
@@ -224,8 +238,9 @@ function anchorOf(alert: Alert): GroundPoint | null {
   }
 }
 
-// The live state as the scene shows it: pure, no WebGL, so it is tested without a render.
-export function toScene(state: TwinState): SceneProps {
+// The live state as the scene shows it: pure, no WebGL, so it is tested without a render. Unless `feed` says
+// it is encrypted, the feed is taken for one that is not: the Twin shows no padlock it was not told of.
+export function toScene(state: TwinState, feed: TwinFeed = { encrypted: false }): SceneProps {
   const glow = gasLevel(state.latestTelemetry?.readings.air ?? null)
   const pulses = new Set<DriftingProbe>()
   let driftScore: number | null = null
@@ -281,6 +296,8 @@ export function toScene(state: TwinState): SceneProps {
     presence: { active: present },
     floodlights: { lit: present || intruder !== null },
     anchor,
+    // A feed that is not open encrypts nothing: no padlock before the first connection, nor on a signal lost.
+    link: { encrypted: feed.encrypted && state.connection === 'open' },
     // Not open is not enough: before the first connection, and while that one is still being tried,
     // there is no signal to have lost. After it, a retry in progress is still a signal lost.
     signalLost: state.connectedOnce && state.connection !== 'open',
