@@ -17,14 +17,15 @@ export interface CameraField {
   arc: SpacePoint[]
 }
 
-// The camera's field, its arc followed in `steps` steps.
-export function cameraField(steps: number): CameraField {
+// The camera's field once turned by `pan` radians from where it rests, its arc followed in `steps` steps. It
+// turns about the lens: the field leaves from the same point whichever way the camera looks.
+export function cameraField(steps: number, pan = 0): CameraField {
   const lens = lensPoint()
 
   return {
     lens: { ...lens, y: lensHeight() },
     under: { ...lens, y: 0 },
-    arc: Array.from({ length: steps + 1 }, (_, step) => ({ ...watchedPoint(step / steps), y: 0 })),
+    arc: Array.from({ length: steps + 1 }, (_, step) => ({ ...watchedPoint(step / steps, pan), y: 0 })),
   }
 }
 

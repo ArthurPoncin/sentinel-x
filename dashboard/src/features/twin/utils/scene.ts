@@ -4,7 +4,7 @@ import { detectionLabel } from './detection'
 import type { EnclosurePart } from './enclosure-parts'
 import { gasLevel } from './gas-level'
 import { heatLevel } from './heat-level'
-import { alongPipe, type GroundPoint, gatePoint, SITE, watchedPoint } from './site'
+import { alongPipe, type GroundPoint, gatePoint, SITE, standingPoint } from './site'
 
 // What the Twin reads of the live feed: the fields of the live-feed state it needs, by shape, so
 // the route hands them over without the twin feature importing live-feed.
@@ -63,12 +63,25 @@ export interface SceneProps {
   // The zone of the perimeter the camera watches, the volume from its lens down to its sector on the ground:
   // lit while an `intrusion` Alert is active, wherever the intruder stands in it.
   sector: { lit: boolean }
-  // The intruder the last raised of the active `intrusion` Alerts sees: where it stands across the camera's
-  // image, 0 = left, 1 = right, and so where on the perimeter, on the arc of the fence the camera watches. The
-  // Alert's id tells the same intruder moving from a new one: the first walks, the second appears. With it,
-  // how sure the vision model is of what it sees, 0–1, and the label that says so. `x_norm` alone places it:
-  // the Alert's `bbox` is not read.
-  intruder: { alertId: string; x_norm: number; confidence: number; label: string; at: GroundPoint } | null
+  // How far the camera is turned from where it rests, in radians, positive toward the right of its image: the
+  // `pan` of the last raised of the active `intrusion` Alerts, 0 without one, or for a camera that does not
+  // turn. Its lens on the Enclosure's roof and its field turn with it.
+  camera: { pan: number }
+  // The intruder the last raised of the active `intrusion` Alerts sees, the one its camera follows: where it
+  // stands across the camera's image, 0 = left, 1 = right, and where on the ground that is (`at`), on the
+  // camera's sight line, as far along it as it is short in the image. The Alert's id and the person's `key` in
+  // it tell the same intruder moving from a new one: the first walks, the second appears. With it, how sure
+  // the vision model is of what it sees, 0–1, and the label that says so. `x_norm`, `h_norm` and `pan` place
+  // it: the Alert's `bbox` is not read. `others` are the other people that Alert sees, a figurine each.
+  intruder: {
+    alertId: string
+    key: string
+    x_norm: number
+    confidence: number
+    label: string
+    at: GroundPoint
+    others: readonly { key: string; at: GroundPoint }[]
+  } | null
   // Someone is near the site: a `presence` Alert is active. The Enclosure's PIR dome blinks and an amber
   // sweep goes round the fence for as long.
   presence: { active: boolean }
@@ -169,12 +182,30 @@ const SEVERITY_LEVEL: Readonly<Record<Severity, StatusLevel>> = {
   critical: 'critical',
 }
 
+type Intrusion = Extract<Alert, { kind: 'intrusion' }>
+
+// How far the camera that sees an `intrusion` is turned, in radians: the Alert tells it in degrees, and not at
+// all when its camera does not turn.
+const panOf = ({ detail }: Intrusion) => ((detail.pan ?? 0) * Math.PI) / 180
+
+// Where the people an `intrusion` Alert sees stand on the ground: the one its camera follows, then the others.
+// Each has a key of their own in the Alert, the `id` it gives them; an Alert that gives none sees one person.
+function peopleOf(alert: Intrusion) {
+  const { x_norm, h_norm, id, others = [] } = alert.detail
+  const pan = panOf(alert)
+
+  return {
+    followed: { key: String(id ?? 0), at: standingPoint(x_norm, pan, h_norm) },
+    others: others.map((other) => ({ key: String(other.id), at: standingPoint(other.x_norm, pan, other.h_norm) })),
+  }
+}
+
 // Where an Alert happens on the site plan, for the camera to turn to: its anchor. The gas leaks along the pipe,
 // taken at its middle; the intruder stands where the Twin stands it.
 function anchorOf(alert: Alert): GroundPoint | null {
   switch (alert.kind) {
     case 'intrusion':
-      return watchedPoint(alert.detail.x_norm)
+      return peopleOf(alert).followed.at
     case 'gas':
       return alongPipe(0.5)
     case 'thermal':
@@ -194,6 +225,7 @@ export function toScene(state: TwinState): SceneProps {
   const pulses = new Set<DriftingProbe>()
   let driftScore: number | null = null
   let intruder: SceneProps['intruder'] = null
+  let pan = 0
   let anchor: SceneProps['anchor'] = null
   let present = false
   let shimmer = false
@@ -211,13 +243,9 @@ export function toScene(state: TwinState): SceneProps {
     }
     if (alert.kind === 'intrusion') {
       const { x_norm, confidence } = alert.detail
-      intruder = {
-        alertId: alert.alert_id,
-        x_norm,
-        confidence,
-        label: detectionLabel(confidence),
-        at: watchedPoint(x_norm),
-      }
+      const { followed, others } = peopleOf(alert)
+      intruder = { alertId: alert.alert_id, ...followed, x_norm, confidence, label: detectionLabel(confidence), others }
+      pan = panOf(alert)
     }
     if (alert.kind === 'gas' || alert.kind === 'thermal') {
       if (alarm === null || SEVERITIES.indexOf(alert.severity) > SEVERITIES.indexOf(alarm)) alarm = alert.severity
@@ -243,6 +271,7 @@ export function toScene(state: TwinState): SceneProps {
     status,
     thermal: { intensity: heatLevel(state.latestTelemetry?.readings.temp ?? null), shimmer },
     sector: { lit: intruder !== null },
+    camera: { pan },
     intruder,
     presence: { active: present },
     anchor,

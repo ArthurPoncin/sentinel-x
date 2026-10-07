@@ -26,6 +26,25 @@ describe("the camera's field", () => {
     })
   })
 
+  it('turns with the camera, about its lens: the same lens, another arc of the fence', () => {
+    const rested = cameraField(STEPS)
+    for (const pan of [-Math.PI / 2, -0.5, 0.5, Math.PI / 2]) {
+      const turned = cameraField(STEPS, pan)
+
+      expect(turned.lens).toEqual(rested.lens)
+      expect(turned.under).toEqual(rested.under)
+      turned.arc.forEach((point, step) => {
+        expect(fromCentre(point)).toBeCloseTo(SITE.fence.radius)
+        expect(between(point, watchedPoint(step / STEPS, pan))).toBeCloseTo(0)
+      })
+      // Its walls still close a volume that looks outward, whichever way it is turned.
+      expect(fieldWalls(turned)).toHaveLength(STEPS + 2)
+    }
+    // Turned by its whole field of view to its right, it watches from where its image ended on.
+    const beside = cameraField(STEPS, SITE.camera.fov)
+    expect(between(beside.arc[0] as SpacePoint, rested.arc[STEPS] as SpacePoint)).toBeCloseTo(0)
+  })
+
   it('has the sector on the ground for its base, fanned out from under the lens to the watched arc', () => {
     const field = cameraField(STEPS)
     const base = fieldBase(field)
