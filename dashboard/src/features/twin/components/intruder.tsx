@@ -263,7 +263,7 @@ function createFigurine() {
     blending: AdditiveBlending,
     depthWrite: false,
   })
-  // Its outline, which the one the camera followed leaves where it last stood. Its shade, which by then
+  // Its outline, which it leaves where it last stood. Its shade, which by then
   // shades nothing, still leaves its depth: that is what keeps the outline hollow.
   const outline = { color: { value: new Color(INTRUSION_COLOR) }, level: { value: 0 }, swept: uniforms.swept }
   const line = new ShaderMaterial({
@@ -513,11 +513,11 @@ export interface IntruderProps {
 // someone is seen elsewhere their figurine walks there over the ground, arms and legs in opposition, turned
 // the way it goes, toward the Enclosure as they come nearer the camera; once there it comes back to rest and
 // turns to the lens again. Someone newly seen appears where they stand, at rest, in a sweep from feet to
-// head. Someone the camera no longer sees fades out where they last stood. Once the last `intrusion` Alert is
-// cleared they all do, and the one the camera followed leaves its outline there, hollow, still and at rest,
-// with no pin, no ring, no line, no brackets and no label: the last known position, which stays for about
-// five seconds and goes out. An intruder raised meanwhile appears at its own place, and the outline of the
-// one before it goes out where it is. Unlit and brighter than white, so the halo takes it all for lights.
+// head. Someone the camera no longer sees fades out where they last stood, and so do they all once the last
+// `intrusion` Alert is cleared. Each leaves its outline there, hollow, still and at rest, with no pin, no
+// ring, no line, no brackets and no label: the last known position, which stays for about five seconds and
+// goes out. An intruder raised meanwhile appears at its own place, and the outlines of those before it go out
+// where they are. Unlit and brighter than white, so the halo takes it all for lights.
 // Nothing casts a shadow: the shadows are drawn once, and they move.
 export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
   const pin = useRef<Group>(null)
@@ -583,8 +583,8 @@ export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
       if (!track) return
 
       const walk = stand(figurine.posed, track, lens)
-      // While it is seen the figurine is whole, its sweep brings it in: it only fades out, and the outline of
-      // the one the camera followed comes as it goes.
+      // While it is seen the figurine is whole, its sweep brings it in: it only fades out, and its outline
+      // comes as it goes.
       const level = figurineLevel(track)
       const outline = lastKnown(track)?.level ?? 0
       figurine.uniforms.level.value = level
