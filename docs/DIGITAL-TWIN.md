@@ -15,6 +15,16 @@ A **live 3D replica** of the Sentinel-X outpost rendered in the dashboard (Three
 | `Status` (nominal/elevated/critical) | Command Post | When it rises, the whole scene is flooded in its color for 2 s, then the light goes back to neutral so the signals stand out. The rim light, the ring around the socle, the box's LCD and LED ring stay in its color |
 | Alarm (buzzer) | Sentinel | LED ring blinks and buzzer sounds while a `gas` or `thermal` Alert is active. The contract does not carry the Alarm's own state: the Twin does not show it silenced by the Operator |
 
+## What the site says of itself
+
+Not everything on the maquette is driven by the feed. The site carries the signage of a sensitive place, drawn in code like the Enclosure's engraving, in the maquette's neutral tones: color is kept for the `Status` and the signals.
+
+- **Keep out** — a sign « ACCÈS INTERDIT », in AetherCorp's name, on the fence on each side of the gate.
+- **Where the risk is** — a hatched danger zone on the ground around the gas tank, and a gas pictogram on the tank. The haze of a leak lies over the marking.
+- **Whose site it is** — « AetherCorp » and « OUTPOST 01 » on the generator hall.
+
+Built in #99: see [`../dashboard/README.md`](../dashboard/README.md#digital-twin--featurestwin).
+
 ## Signature features
 
 - **Time-scrubber** — replay a past Incident second-by-second, labelled REPLAY. Lets us script the live demo precisely and re-run it if the network hiccups. Built in #15: see [`../dashboard/README.md`](../dashboard/README.md#time-scrubber--featuresreplay).

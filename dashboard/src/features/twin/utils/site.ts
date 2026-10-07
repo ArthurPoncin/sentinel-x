@@ -67,6 +67,19 @@ export const SITE = {
   enclosure: { x: -0.5, z: 0.5, radius: 0.6, heading: 0 },
   // The camera's horizontal field of view, in radians: 60°, to set to the lens once the camera is mounted.
   camera: { fov: Math.PI / 3 },
+  // The signage of a sensitive site. A no-entry sign hangs on the fence on each side of the gate, `width`
+  // along the fence, in the middle of a bay: the second from the gate, since whoever the camera sees through
+  // the gate stands in the first. The danger zone is marked on the ground around the gas tank: clear ground
+  // `margin` wide around its footprint, then a hatched band `band` wide. A gas pictogram is on the tank's
+  // barrel, on the side that faces `bearing`: `width` along the tank, `height` round it. The site's name is on
+  // the hall's wall that faces `bearing`: its middle `along` from the wall's, toward the right of whoever
+  // reads it, its lower edge `foot` above the ground.
+  signs: {
+    gate: { bay: 2, width: 0.3, height: 0.22 },
+    dangerZone: { margin: 0.1, band: 0.14 },
+    tank: { bearing: 0, width: 0.34, height: 0.2 },
+    hall: { bearing: 0, along: -0.09, width: 0.6, height: 0.24, foot: 0.1 },
+  },
 } as const
 
 // The point `distance` away from the socle's centre along `bearing`.
@@ -109,6 +122,11 @@ export function fencePosts(): GroundPoint[] {
   return alongFence(SITE.fence.posts)
 }
 
+// The angle from one post of the fence to the next, seen from the socle's centre: a bay.
+function fenceBay(): number {
+  return fenceLength() / SITE.fence.radius / (SITE.fence.posts - 1)
+}
+
 // How wide a diamond of the fence's mesh is, and how high: the mesh is `mesh.rows` of them up.
 export function meshCell(): number {
   return SITE.fence.height / SITE.fence.mesh.rows
@@ -132,6 +150,44 @@ export function gateLine(): { from: GroundPoint; to: GroundPoint; opening: numbe
   const [from, to] = [toward(gate.bearing + halfGate(), radius), toward(gate.bearing - halfGate(), radius)]
 
   return { from, to, opening: Math.hypot(to.x - from.x, to.z - from.z) - gate.pillar.width }
+}
+
+// A sign of the site: where its middle is over the ground, and the bearing it faces.
+export interface SignPoint extends GroundPoint {
+  bearing: number
+}
+
+// Where the two no-entry signs hang: on the fence's line, in the middle of the bay the plan gives them on each
+// side of the gate, facing out of the site.
+export function gateSigns(): SignPoint[] {
+  const { radius, gate } = SITE.fence
+
+  return [-1, 1].map((side) => {
+    const bearing = gate.bearing + side * (halfGate() + (SITE.signs.gate.bay - 0.5) * fenceBay())
+    return { ...toward(bearing, radius), bearing }
+  })
+}
+
+// The ground marked as dangerous around the gas tank, out to the outer edge of its band: the tank's
+// footprint, the clear ground around it, then the band.
+export function dangerZone(): GroundPoint & Pick<Block, 'width' | 'depth'> {
+  const { tank, signs } = SITE
+  const around = 2 * (signs.dangerZone.margin + signs.dangerZone.band)
+
+  return { x: tank.x, z: tank.z, width: tank.width + around, depth: tank.depth + around }
+}
+
+// Where the site's name is written: on the hall's wall that faces the bearing the plan gives, as far along
+// it as the plan says, facing out of the hall.
+export function hallSign(): SignPoint {
+  const { hall, signs } = SITE
+  const { bearing, along } = signs.hall
+
+  return {
+    x: hall.x + (Math.sin(bearing) * hall.width) / 2 + along * Math.cos(bearing),
+    z: hall.z + (Math.cos(bearing) * hall.depth) / 2 - along * Math.sin(bearing),
+    bearing,
+  }
 }
 
 // The point `share` of the way along the gas pipe, over the ground: 0 at the hall's wall, 1 at the tank. The
