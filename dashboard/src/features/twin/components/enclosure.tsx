@@ -24,6 +24,7 @@ import { ENCLOSURE_PARTS, ENCLOSURE_SHAPE, ENGRAVING } from '../utils/enclosure-
 import { domeFlash } from '../utils/presence'
 import { pulse } from '../utils/pulse'
 import { DRIFT_COLOR, type DriftingProbe, GAS_COLOR, PRESENCE_COLOR, type SceneProps } from '../utils/scene'
+import { Antenna, type AntennaProps } from './antenna'
 import { LabelCard, useCanvasTexture } from './label-card'
 
 // The Enclosure stands on a mast at an exaggerated scale, to stay readable from the back of the room.
@@ -461,14 +462,17 @@ export type EnclosureProps = SceneProps['enclosure'] & {
   presence: boolean
   // How far the camera on its roof is turned from where it rests, in radians.
   pan: number
+  // Its link to the Command Post: the frames it carries, whether it is up, whether it is encrypted.
+  link: Pick<AntennaProps, 'frames' | 'live' | 'encrypted'>
 }
 
 // The Sentinel-X product: a dark bevelled module on a mast, its Probes and actuators each a part of its
 // own (ENCLOSURE_PARTS). The body turns red and glows as gas rises; the LCD shows the Status and the
 // LED ring breathes in its color, until the Alarm makes it blink and the buzzer sound; the Probes the
 // predictive model says are drifting pulse, their score on a label under them; the PIR dome blinks while
-// someone is near.
-export function Enclosure({ color, glow, lcd, ring, alarm, pulses, drift, presence, pan }: EnclosureProps) {
+// someone is near; the antenna on its side sends an impulse of light for each frame of telemetry
+// received, a padlock by it while the feed is encrypted.
+export function Enclosure({ color, glow, lcd, ring, alarm, pulses, drift, presence, pan, link }: EnclosureProps) {
   const body = useRef<MeshStandardMaterial>(null)
   const light = useRef<PointLight>(null)
   const target = useMemo(() => new Color(color), [color])
@@ -517,6 +521,8 @@ export function Enclosure({ color, glow, lcd, ring, alarm, pulses, drift, presen
         <Engraving />
         <ProbeCompartment pulses={pulses} drift={drift} />
         <Crown ring={ring} alarm={alarm} />
+        {/* On the right side, behind the engraving: its tip stands just over the roof. */}
+        <Antenna {...link} position={[BODY.width / 2 + 0.1, -0.4, -0.39]} />
         {/* What the gas throws on the ground around the Enclosure: from inside the body, it lights what
             is around without burning its own faces. */}
         <pointLight ref={light} color={GAS_COLOR} intensity={0} distance={7} />
