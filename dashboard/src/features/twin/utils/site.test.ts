@@ -13,16 +13,20 @@ import {
   type GroundPoint,
   gateLine,
   gatePoint,
+  fromPath,
   gateSigns,
+  hallDoor,
   hallSign,
   lensHeight,
   lensPoint,
   meshCell,
+  rocks,
   SITE,
   STANDING,
   sightBearing,
   standingPoint,
   standingSpan,
+  track,
   watchedPoint,
 } from './site'
 
@@ -339,6 +343,197 @@ describe("the site's name", () => {
     expect(Math.abs(signs.hall.along) + signs.hall.width / 2).toBeLessThan(wall / 2)
     expect(signs.hall.foot).toBeGreaterThan(0)
     expect(signs.hall.foot + signs.hall.height).toBeLessThan(hall.height)
+  })
+})
+
+describe("the hall's door", () => {
+  const { hall, signs } = SITE
+  const door = hallDoor()
+
+  it("is on the hall's front wall, and holds on it under the roof", () => {
+    expect(door.z).toBeCloseTo(hall.z + hall.depth / 2)
+    expect(outside(door, hall)).toBeCloseTo(0)
+    expect(Math.abs(hall.door.along) + hall.door.width / 2).toBeLessThan(hall.width / 2)
+    expect(hall.door.height).toBeLessThan(hall.height)
+  })
+
+  it("is clear of the site's name and of the pipe, which come to the same wall", () => {
+    const pipe = SITE.pipe.path[0]
+
+    expect(Math.abs(door.x - hallSign().x)).toBeGreaterThan((hall.door.width + signs.hall.width) / 2)
+    expect(Math.abs(door.x - pipe.x)).toBeGreaterThan(hall.door.width / 2 + SITE.pipe.radius)
+  })
+})
+
+describe('the track', () => {
+  const { socle, fence, hall } = SITE
+  const { toHall, toEdge } = track()
+  const half = SITE.track.width / 2
+  // How far round the site a point stands from the middle of the gate.
+  const fromGate = (point: GroundPoint) => {
+    const turn = Math.atan2(point.x, point.z) - fence.gate.bearing
+    return Math.abs(Math.atan2(Math.sin(turn), Math.cos(turn)))
+  }
+
+  it("links the gate to the hall's door", () => {
+    expect(toHall.at(0)).toEqual(gatePoint())
+    expect(toHall.at(-1)).toEqual(hallDoor())
+  })
+
+  it('links the gate to the rim of the socle, straight out, and stops there', () => {
+    const [from, to] = [toEdge.at(0), toEdge.at(-1)]
+    if (!from || !to) throw new Error('the track has no way out')
+
+    expect(from).toEqual(gatePoint())
+    expect(fromCentre(to)).toBeCloseTo(socle.radius)
+    expect(Math.atan2(to.x, to.z)).toBeCloseTo(fence.gate.bearing)
+    for (const point of toEdge) expect(fromCentre(point)).toBeLessThanOrEqual(socle.radius + 1e-9)
+  })
+
+  it('is one unbroken line each way, in steps shorter than it is wide', () => {
+    for (const path of [toHall, toEdge]) {
+      path.slice(1).forEach((point, index) => {
+        const step = between(point, path[index] ?? point)
+
+        expect(step).toBeGreaterThan(0)
+        expect(step).toBeLessThan(2 * SITE.track.width)
+      })
+    }
+  })
+
+  it('goes through the gate, between its two pillars, and through the fence nowhere else', () => {
+    const { from, to, opening } = gateLine()
+
+    expect(SITE.track.width).toBeLessThan(opening)
+    expect(between(from, gatePoint())).toBeCloseTo(between(to, gatePoint()))
+    for (const point of toHall.slice(1)) {
+      expect(fromCentre(point)).toBeLessThan(fence.radius)
+      // Once through the gate it is inside whole, both its sides.
+      if (between(point, gatePoint()) > SITE.track.width) expect(fromCentre(point) + half).toBeLessThan(fence.radius)
+    }
+    // It leaves the gate square to the fence, on both sides of it.
+    for (const next of [toHall.at(1), toEdge.at(1)]) expect(next && fromGate(next)).toBeCloseTo(0)
+  })
+
+  it('goes round the gas tank and the pipe: clear of the danger zone, of the pipe and of everything that stands', () => {
+    const zone = dangerZone()
+    // Along the track, close enough together to miss nothing between two of them.
+    const along = toHall.slice(1).flatMap((to, index) => {
+      const from = toHall[index] ?? to
+      return Array.from({ length: 8 }, (_, step) => ({
+        x: from.x + ((to.x - from.x) * step) / 8,
+        z: from.z + ((to.z - from.z) * step) / 8,
+      }))
+    })
+    const { hall: _, pipe, ...parts } = outlines()
+
+    for (const point of along) {
+      expect(outside(point, zone)).toBeGreaterThan(half)
+      // The hall is where it ends: it comes to the door and no further.
+      expect(outside(point, hall)).toBeGreaterThanOrEqual(-1e-9)
+    }
+    expect(fromPath(SITE.pipe.path[0], toHall)).toBeGreaterThan(half + SITE.pipe.radius)
+    for (const point of pipe ?? []) expect(fromPath(point, toHall)).toBeGreaterThan(half)
+    for (const [part, outline] of Object.entries(parts)) {
+      for (const point of outline) expect(fromPath(point, toHall), part).toBeGreaterThan(half)
+    }
+  })
+
+  it('passes clear of the floodlights, the foot of each mast off it', () => {
+    for (const mast of floodlights()) {
+      expect(fromPath(mast, toHall)).toBeGreaterThan(half + SITE.floodlights.foot)
+    }
+  })
+
+  it('comes to the door square to the wall, on the side of the pipe the door is on', () => {
+    const [before, door] = [toHall.at(-2), toHall.at(-1)]
+    const pipe = SITE.pipe.path[0]
+    if (!before || !door) throw new Error('the track has no way in')
+
+    expect(before.x).toBeCloseTo(door.x)
+    expect(before.z).toBeGreaterThan(door.z)
+    for (const point of toHall.slice(-8)) expect(Math.sign(point.x - pipe.x)).toBe(Math.sign(door.x - pipe.x))
+  })
+})
+
+describe('fromPath', () => {
+  const path = [
+    { x: 0, z: 0 },
+    { x: 2, z: 0 },
+    { x: 2, z: 1 },
+  ]
+
+  it('is how far a point is from the nearest point of a path, its ends included', () => {
+    expect(fromPath({ x: 1, z: 0 }, path)).toBeCloseTo(0)
+    expect(fromPath({ x: 1, z: -0.5 }, path)).toBeCloseTo(0.5)
+    expect(fromPath({ x: -3, z: 4 }, path)).toBeCloseTo(5)
+    expect(fromPath({ x: 2.5, z: 0.5 }, path)).toBeCloseTo(0.5)
+    expect(fromPath({ x: 2, z: 3 }, path)).toBeCloseTo(2)
+  })
+})
+
+describe('the rocks', () => {
+  const { socle, fence } = SITE
+  const plan = SITE.rocks
+  const laid = rocks()
+  const paths = Object.values(track())
+
+  it('are as many as the plan asks for, each of a size the plan allows', () => {
+    expect(laid).toHaveLength(plan.count)
+    for (const rock of laid) {
+      expect(rock.radius).toBeGreaterThanOrEqual(plan.radius[0])
+      expect(rock.radius).toBeLessThanOrEqual(plan.radius[1])
+      expect(rock.height).toBeGreaterThanOrEqual(rock.radius * plan.squat[0] - 1e-9)
+      expect(rock.height).toBeLessThanOrEqual(rock.radius * plan.squat[1] + 1e-9)
+    }
+  })
+
+  it('lie outside the fence, whole, clear of its posts', () => {
+    for (const rock of laid) expect(fromCentre(rock) - rock.radius).toBeGreaterThanOrEqual(fence.radius + plan.off - 1e-9)
+  })
+
+  it("lie on the socle, whole, inside the Status's ring", () => {
+    for (const rock of laid) {
+      expect(fromCentre(rock) + rock.radius).toBeLessThanOrEqual(socle.radius - socle.ring + 1e-9)
+    }
+  })
+
+  it('leave the gate clear, from one no-entry sign to the other: none in front of it, none in front of a sign', () => {
+    const { from, to } = gateLine()
+    const reach = (point: GroundPoint, rock: GroundPoint) => {
+      const turn = Math.atan2(rock.x, rock.z) - Math.atan2(point.x, point.z)
+      return Math.abs(Math.atan2(Math.sin(turn), Math.cos(turn))) * fence.radius
+    }
+
+    for (const rock of laid) {
+      // Round the fence, from the gate's pillars and from the middle of each sign.
+      for (const pillar of [from, to]) expect(reach(pillar, rock)).toBeGreaterThan(rock.radius)
+      for (const sign of gateSigns()) expect(reach(sign, rock)).toBeGreaterThan(SITE.signs.gate.width / 2 + rock.radius)
+      expect(reach(gatePoint(), rock)).toBeGreaterThan(fence.gate.width / 2 + rock.radius)
+    }
+  })
+
+  it('leave the track clear', () => {
+    for (const rock of laid) {
+      for (const path of paths) expect(fromPath(rock, path)).toBeGreaterThan(SITE.track.width / 2 + rock.radius)
+    }
+  })
+
+  it('are the same at every call', () => {
+    expect(rocks()).toEqual(laid)
+  })
+
+  it('lie all round the site, no two on the same ground', () => {
+    // A rock at least in each sixth of the turn the gate leaves them.
+    const sixths = new Set(laid.map((rock) => Math.floor(((Math.atan2(rock.x, rock.z) + Math.PI) / (2 * Math.PI)) * 6)))
+    expect(sixths.size).toBe(6)
+
+    for (const [index, rock] of laid.entries()) {
+      for (const other of laid.slice(index + 1)) {
+        // They may lean on each other, in a heap: neither covers the other's middle.
+        expect(between(rock, other)).toBeGreaterThan(Math.max(rock.radius, other.radius))
+      }
+    }
   })
 })
 

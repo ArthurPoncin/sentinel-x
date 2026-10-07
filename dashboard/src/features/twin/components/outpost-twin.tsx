@@ -15,6 +15,7 @@ import { useStatusLight } from '../hooks/use-status-light'
 import { FIELD_OF_VIEW } from '../utils/framing'
 import type { SceneProps, StatusGrade } from '../utils/scene'
 import { SITE } from '../utils/site'
+import { Dust } from './dust'
 import { Enclosure } from './enclosure'
 import { Floodlights } from './floodlights'
 import { Halo } from './halo'
@@ -24,6 +25,7 @@ import { NoiseWaves } from './noise-waves'
 import { OrbitCamera } from './orbit-camera'
 import { Perimeter } from './perimeter'
 import { PowerPlant } from './power-plant'
+import { Rocks } from './rocks'
 import { Signage } from './signage'
 import { Socle } from './socle'
 
@@ -74,7 +76,7 @@ function Grade({ level, light, rim, perimeter }: StatusGrade) {
       {/* Just enough fill for the faces neither light reaches. */}
       <ambientLight ref={fill} color={initial.light} intensity={0.06} />
       <mesh position={[0, 0.005, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[SITE.socle.radius - 0.06, SITE.socle.radius, 128]} />
+        <ringGeometry args={[SITE.socle.radius - SITE.socle.ring, SITE.socle.radius, 128]} />
         {/* Unlit: it shows the Status whatever the light, and the halo takes it for a light of its own. */}
         <meshBasicMaterial ref={ring} color={initial.perimeter} />
       </mesh>
@@ -116,7 +118,10 @@ export interface OutpostTwinProps {
 // Status on its LCD and breathes it on its LED ring. A haze thickens around the gas pipe with the gas, and the
 // Enclosure sounds the Alarm while a `gas` or `thermal` Alert is active. The generator hall's roof glows red
 // with the heat, and the air ripples above it. The site carries its signage, which no signal drives: no-entry
-// signs on each side of the gate, the danger zone around the gas tank, its name on the hall.
+// signs on each side of the gate, the danger zone around the gas tank, its name on the hall. Nor does what
+// says where it stands, a remote place left to itself: rocks between the fence and the socle's rim, a track
+// from the gate to the hall's door which stops at the rim outside, a few motes of dust adrift in the wind. No
+// vehicle and no one: the only human the Twin shows is the intruder.
 // The camera's field is a faint volume from the Enclosure's lens down to its sector on the ground: an intrusion
 // lights it, sector included, and stands the intruder on its arc, a human figurine in
 // hologram tied to the lens, which walks to where `x_norm` places it, in the brackets of its detection and
@@ -149,6 +154,8 @@ export function OutpostTwin({ scene, frames, wholeStage = false }: OutpostTwinPr
         <Socle />
         <PowerPlant {...scene.thermal} />
         <Signage />
+        <Rocks />
+        <Dust />
         <Haze density={scene.haze} />
         <NoiseWaves frames={frames} />
         <Perimeter sectorLit={scene.sector.lit} pan={scene.camera.pan} presence={scene.presence.active} />
