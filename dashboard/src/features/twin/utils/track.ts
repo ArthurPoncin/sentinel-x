@@ -162,7 +162,7 @@ export function figurineLevel(track: Track): number {
 }
 
 // How much of what tells someone the camera sees shows, 0–1: the ring at their feet, the frame of their
-// detection, and for the one it follows the pin, the line to the lens and the label. It comes as the figurine
+// detection, the line to the lens, and for the one it follows the pin and the label. It comes as the figurine
 // is swept in and goes as it fades out.
 export function marksLevel(track: Track): number {
   return track.seen ? faded(track.age) : 1 - faded(track.lost)
