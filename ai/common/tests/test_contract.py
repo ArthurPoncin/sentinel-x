@@ -37,6 +37,41 @@ def test_accepts_the_examples_of_the_architecture():
     assert alert_errors(predictive(source="predictive", value=0.91)) == []
 
 
+def seen(**changes):
+    """An intrusion's detail, with what `changes` add to it or replace in it."""
+    return intrusion(detail={**intrusion()["detail"], **changes})
+
+
+def other(**changes):
+    return {"id": 4, "x_norm": 0.81, "h_norm": 0.33, "confidence": 0.71, **changes}
+
+
+def test_accepts_an_intrusion_seen_by_a_camera_that_turns():
+    assert alert_errors(seen(id=3, h_norm=0.61, pan=-35.5, others=[other()])) == []
+    assert alert_errors(seen(pan=0, others=[])) == []
+    assert alert_errors(seen(others=[other(id=n) for n in range(4)])) == []
+
+
+@pytest.mark.parametrize(
+    "alert",
+    [
+        seen(h_norm=1.4),
+        seen(pan=200),
+        seen(pan=True),
+        seen(id=1.5),
+        seen(id=-1),
+        seen(others=other()),
+        seen(others=[other(id=n) for n in range(5)]),
+        seen(others=[other(x_norm=-0.1)]),
+        seen(others=[other(bbox=[0, 0, 1, 1])]),
+        seen(others=[{key: value for key, value in other().items() if key != "h_norm"}]),
+        seen(others=[other(confidence=float("nan"))]),
+    ],
+)
+def test_refuses_what_the_api_refuses_of_a_camera_that_turns(alert):
+    assert alert_errors(alert) != []
+
+
 @pytest.mark.parametrize(
     "alert",
     [

@@ -7,7 +7,7 @@ We implement the brief's **Option A**: the Local Server ("PC Serveur Local") is 
 | Node | Hardware | Role |
 |---|---|---|
 | **Sentinel** | ESP32 + probes + Alarm | Senses, decides its own local Alerts, fires the Alarm autonomously |
-| **Command Post** | Raspberry Pi 4 + USB webcam + HDMI status screen | The single server: Wi-Fi AP, MQTT broker, API and its history, dashboard host, vision + predictive AI |
+| **Command Post** | Raspberry Pi 4 + USB webcam on a servo + HDMI status screen | The single server: Wi-Fi AP, MQTT broker, API and its history, dashboard host, vision + predictive AI |
 | *Operator laptop* | any laptop | Browser only — nothing of the system runs on it |
 
 The Sentinel and the Command Post live in the same 3D-printed **Enclosure** (see [Physical layout](#physical-layout-option-a)).
@@ -32,6 +32,7 @@ flowchart LR
         end
         subgraph cp["🖥️ Command Post · Raspberry Pi 4 (Wi-Fi AP)"]
             CAM["USB webcam"]
+            SERVO["servo · turns the webcam"]
             SCREEN["HDMI screen 800x480 · IP / Status"]
             subgraph docker["Docker-Compose"]
                 PROXY["reverse-proxy · HTTPS/WSS :443"]
@@ -51,6 +52,7 @@ flowchart LR
     BROKER <--> API
     API <--> DB
     CAM --> VISION
+    VISION -- "PWM (GPIO 18): pan" --> SERVO
     BROKER -- "MQTTS: telemetry + alerts (read-only)" --> SCREEN
     VISION -- "POST /api/v1/alerts + token" --> API
     BROKER -- "MQTTS: live telemetry" --> PRED
@@ -66,7 +68,8 @@ flowchart LR
 
 The Enclosure (Fusion360, 3D-printed, laser-engraved) houses the Sentinel **and** the Command Post:
 
-- **Pi 4 + USB webcam** — active cooling and vents (the Pi runs hot under inference); webcam fixed at the front, lens exposed.
+- **Pi 4 + USB webcam** — active cooling and vents (the Pi runs hot under inference). The webcam stands on top of the Enclosure, on a **servo** (S1213, analog) that turns it left and right to follow whoever it sees: about half a turn of travel, a quarter either way of where it rests, with slack on its USB cable.
+- **The servo**: signal on the Pi's **GPIO 18** (pin 12, hardware PWM), ground on the Pi's, **5 V from a supply of its own** with the grounds joined — a servo that stalls draws more than the Pi's 5 V pin gives, and the Pi restarts. `vision` drives it ([`../ai/`](../ai/README.md#the-camera-on-its-servo--pan_drivepwm)); the stack runs the same without one.
 - **DHT22 and MQ-2 in a separate ventilated compartment**, away from the Pi and from each other (the MQ-2 has a heater). Otherwise the probes measure the Pi's own heat and the predictive model learns inference load as "thermal drift".
 - **Status screen visible** through the shell, clean cable passthroughs, no visible wires (brief requirement).
 - **Power:** official 15 W USB-C supply (5.1 V / 3 A) for the Pi 4.
@@ -80,7 +83,7 @@ Each node owns the Alerts it can decide **alone**, so the Sentinel stays autonom
 | `gas`, `thermal` | **Sentinel (ESP32)** | Threshold with hysteresis; fires the **Alarm locally and immediately** |
 | `presence` | **Sentinel** | PIR digital |
 | `noise` | **Sentinel** | Share of the cycle with sound above the sensor's threshold, with hysteresis |
-| `intrusion` | **Command Post · `vision`** | TFLite person detection on the USB webcam |
+| `intrusion` | **Command Post · `vision`** | TFLite person detection on the USB webcam; one Alert however many people it sees, which follows the nearest |
 | `predictive` | **Command Post · `predictive`** | Isolation Forest on temp+air drift |
 | *(Status)* | **Command Post · `api`** | Not an Alert — aggregates all active Alerts into the Outpost `Status` |
 
@@ -147,12 +150,23 @@ The **single unified Alert schema**, emitted by the Sentinel and by the AI servi
 **`detail` by kind:**
 
 ```jsonc
-// intrusion — x_norm (0=left, 1=right) drives the intruder's position in the 3D twin
-"detail": { "x_norm": 0.42, "confidence": 0.88, "bbox": [120, 80, 60, 180] }
+// intrusion — the person the camera follows: x_norm (0=left, 1=right) is where they are across its image,
+// bbox their box in its pixels. The rest is optional, and tells the 3D twin where they stand on the site:
+//   h_norm   the share of the image's height they take, 0–1: twice as tall is half as far
+//   pan      degrees the camera is turned from where it rests, positive toward the right of its image
+//   id       tells them from the others for as long as the camera sees them
+//   others   the other people in the image, at most 4: a figurine each in the twin
+"detail": {
+  "x_norm": 0.42, "confidence": 0.88, "bbox": [120, 80, 60, 180],
+  "id": 1, "h_norm": 0.61, "pan": -35.0,
+  "others": [{ "id": 2, "x_norm": 0.81, "h_norm": 0.33, "confidence": 0.71 }]
+}
 
 // predictive — the learned-model output, not a static threshold
 "detail": { "anomaly_score": 0.91, "drivers": ["temp_slope", "air_slope"] }
 ```
+
+**Intrusion, without the optional fields** — an Alert that carries only `x_norm`, `confidence` and `bbox` is still valid: one intruder, in front of a camera that does not turn, stood just inside the fence. The history recorded before these fields existed replays as it was.
 
 **Predictive `drivers`** — a closed vocabulary, the names of the model's 7 features over its 120 s window: `temp`, `humidity`, `air` (the last Readings), `temp_slope`, `air_slope` (least-squares trend, per minute), `temp_mean`, `air_mean`. Listed: the features furthest from their nominal spread (robust z-score ≥ 3), at most 3, furthest first — or the furthest one alone if none is that far. `anomaly_score` is the Isolation Forest's score, 0–1 (~0.5 for the usual).
 
@@ -304,7 +318,7 @@ This plan is the basis of the network schema deliverable (engineering report) �
 | `mosquitto` | MQTT broker (MQTTS, ACL) | 8883 |
 | `api` | REST + WebSocket, Alert pipeline, `Status`, auth; keeps the telemetry + Alert history (time-scrubber, predictive training) in an SQLite file on the `api-data` volume — there is no separate `db` container | — |
 | `dashboard` | Web app + 3D Digital Twin (rendered in the Operator's browser) | — |
-| `vision` | Person detection on the USB webcam (OpenCV, its device node via `devices:` in `docker-compose.camera.yml` and the host's `video` group); serves the annotated camera feed | — |
+| `vision` | Person detection on the USB webcam (OpenCV, its device node via `devices:` in `docker-compose.camera.yml` and the host's `video` group); turns the webcam's servo to whom it follows (the servo's PWM channel via `docker-compose.pan.yml` and the host's `gpio` group); serves the annotated camera feed | — |
 | `predictive` | Isolation Forest on live telemetry (MQTTS subscriber); trains on the api's SQLite history, the `api-data` volume mounted read-only (and opened `mode=ro`); its model on the `predictive-model` volume | — |
 
 `docker compose up` brings the whole Command Post online. Hardening rules for every service (non-root, no `privileged`, `cap_drop: ALL`…) are in [`../cyber/`](../cyber/).

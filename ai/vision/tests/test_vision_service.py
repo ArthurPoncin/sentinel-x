@@ -1,5 +1,6 @@
 import http.client
 import json
+import math
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -12,6 +13,7 @@ from sentinel_common.alerts import AlertClient
 from sentinel_common.config import ConfigError
 from sentinel_common.contract import alert_errors
 from vision.detectors import MotionDetector
+from vision.pan import PanFollower
 from vision.service import StreamServer, Vision, load_settings
 from vision.sources import Frame
 from vision.tracker import Detection
@@ -206,6 +208,120 @@ def test_health_gives_the_camera_the_frame_rate_and_the_inference_time(clock, po
     assert vision.health()["fps"] == 0.0
 
 
+# --- the camera on its servo --------------------------------------------------------------------------
+
+
+class FakeDrive:
+    """A servo that only notes where it is told to turn."""
+
+    name = "fake"
+
+    def __init__(self):
+        self.turned = []
+        self.closed = False
+
+    def open(self):
+        pass
+
+    def turn(self, angle):
+        self.turned.append(angle)
+
+    def close(self):
+        self.closed = True
+
+
+class Standing:
+    """Sees someone who stands `bearing` degrees round from where the camera rests, wherever that is in
+    the image of a camera turned as `follower` says: the room, seen through a camera that turns."""
+
+    name = "standing"
+
+    def __init__(self, follower, bearing, fov=60):
+        self.follower, self.bearing, self.fov = follower, bearing, fov
+
+    def detect(self, image):
+        if self.bearing is None:
+            return []
+        off_axis = self.bearing - self.follower.angle
+        if abs(off_axis) > self.fov / 2:
+            return []
+        return [person(0.5 + math.tan(math.radians(off_axis)) / (2 * math.tan(math.radians(self.fov / 2))))]
+
+
+def make_turning(posted, clock, bearing, **options):
+    source, follower, drive = FakeSource(), PanFollower(), FakeDrive()
+    room = Standing(follower, bearing)
+    return source, room, drive, make_vision(source, room, posted, clock, pan=(follower, drive), **options)
+
+
+def test_the_camera_turns_to_the_person_followed_and_the_alerts_say_how_far(clock, posted):
+    source, room, drive, vision = make_turning(posted, clock, bearing=20.0)
+    for _ in range(30):
+        frame_at(vision, source, clock)
+    # Within its deadband of them, and never faster than its 60 degrees a second.
+    assert 16 <= drive.turned[-1] <= 20
+    assert all(later - earlier <= 6 + 1e-9 for earlier, later in zip(drive.turned, drive.turned[1:]))
+    assert {a["state"] for a in posted} == {"raised"} and len({a["alert_id"] for a in posted}) == 1
+    first, last = posted[0]["detail"], posted[-1]["detail"]
+    assert (first["pan"], first["x_norm"]) == (0.0, pytest.approx(0.815, abs=1e-3))
+    assert last["pan"] == pytest.approx(drive.turned[-1], abs=0.05)
+    assert abs(last["x_norm"] - 0.5) < 0.07
+    assert first["id"] == last["id"]
+
+
+def test_the_camera_does_not_turn_for_a_first_sighting(clock, posted):
+    source, room, drive, vision = make_turning(posted, clock, bearing=20.0)
+    frame_at(vision, source, clock)
+    room.bearing = None
+    for _ in range(10):
+        frame_at(vision, source, clock)
+    assert posted == [] and set(drive.turned) == {0.0}
+
+
+def test_the_camera_waits_where_it_lost_them_then_goes_back_to_rest_once_the_intrusion_is_cleared(clock, posted):
+    source, room, drive, vision = make_turning(posted, clock, bearing=-25.0)
+    for _ in range(30):
+        frame_at(vision, source, clock)
+    lost_at = drive.turned[-1]
+    assert -25 <= lost_at <= -21
+    room.bearing = None
+    for _ in range(29):
+        frame_at(vision, source, clock)
+    assert drive.turned[-1] == lost_at and posted[-1]["state"] == "raised"
+    frame_at(vision, source, clock)
+    assert posted[-1]["state"] == "cleared" and posted[-1]["detail"]["pan"] == pytest.approx(lost_at, abs=0.05)
+    # Back at 30 degrees a second: half the way after 0.4 s, there within the second.
+    for _ in range(4):
+        frame_at(vision, source, clock)
+    assert lost_at < drive.turned[-1] < 0
+    for _ in range(8):
+        frame_at(vision, source, clock)
+    assert drive.turned[-1] == 0
+
+
+def test_health_and_the_feed_say_how_far_the_camera_is_turned(clock, posted):
+    source, room, drive, vision = make_turning(posted, clock, bearing=20.0)
+    assert vision.health()["pan"] == 0.0
+    for _ in range(30):
+        frame_at(vision, source, clock)
+    assert vision.health()["pan"] == pytest.approx(drive.turned[-1], abs=0.05)
+    assert vision.jpeg()[1][:2] == b"\xff\xd8"
+
+
+def test_finish_parks_the_camera_where_it_rests_and_lets_the_servo_go(clock, posted):
+    source, room, drive, vision = make_turning(posted, clock, bearing=30.0)
+    for _ in range(30):
+        frame_at(vision, source, clock)
+    turned, before = drive.turned[-1], len(drive.turned)
+    waits = []
+    vision.finish(sleep=waits.append)
+    parked = drive.turned[before:]
+    assert parked[-1] == 0 and drive.closed
+    assert all(abs(later - earlier) <= 3 + 1e-9 for earlier, later in zip([turned, *parked], parked))
+    assert waits == [0.05] * len(parked)
+    assert posted[-1]["state"] == "cleared"
+
+
 class FakeApi:
     """POST /api/v1/alerts on 127.0.0.1, answering 202 like the api."""
 
@@ -250,7 +366,15 @@ def test_the_alerts_reach_the_api_with_the_vision_token(clock):
         bodies = [body for _, _, body in api.requests]
         assert [b["state"] for b in bodies] == ["raised", "cleared"]
         assert all(alert_errors(b) == [] for b in bodies)
-        assert bodies[0]["detail"] == {"x_norm": 0.25, "confidence": 0.9, "bbox": [130, 80, 60, 180]}
+        assert bodies[0]["detail"] == {
+            "x_norm": 0.25,
+            "confidence": 0.9,
+            "bbox": [130, 80, 60, 180],
+            "id": 1,
+            "h_norm": 0.375,
+            "pan": 0.0,
+            "others": [],
+        }
     finally:
         api.server.shutdown()
         api.server.server_close()
@@ -425,7 +549,8 @@ def test_nothing_else_is_served(served, path):
 @pytest.fixture
 def env(monkeypatch):
     for name in ("CAMERA_SOURCE", "DETECTOR", "INFER_EVERY", "ALERTS_URL", "VISION_SENTINEL", "CLEAR_AFTER_S",
-                 "MIN_CONFIDENCE", "HTTP_HOST", "HTTP_PORT", "STREAM_FPS", "MAX_CLIENTS", "JPEG_QUALITY"):
+                 "MIN_CONFIDENCE", "HTTP_HOST", "HTTP_PORT", "STREAM_FPS", "MAX_CLIENTS", "JPEG_QUALITY",
+                 "CAMERA_FOV_DEG", "PAN_DRIVE"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("VISION_TOKEN", TOKEN)
     return monkeypatch
@@ -438,6 +563,8 @@ def test_settings_default_to_the_compose_stack(env):
     assert (settings.http_host, settings.http_port) == ("0.0.0.0", 8000)
     assert (settings.infer_every, settings.stream_fps, settings.max_clients) == (1, 15, 4)
     assert (settings.sentinel, settings.clear_after, settings.min_confidence) == ("sentinel-01", 3.0, 0.5)
+    # A fixed camera, with the field of view the Twin draws.
+    assert (settings.pan_drive, settings.camera_fov) == ("none", 60)
     assert TOKEN not in repr(settings)
 
 
@@ -448,9 +575,19 @@ def test_settings_default_to_the_compose_stack(env):
         ("STREAM_FPS", "30", "STREAM_FPS: expected a number >= 1 and <= 15"),
         ("INFER_EVERY", "0", "INFER_EVERY"),
         ("VISION_TOKEN", "short", "VISION_TOKEN: too short"),
+        ("PAN_DRIVE", "stepper", "PAN_DRIVE: expected one of none, pwm"),
+        ("CAMERA_FOV_DEG", "200", "CAMERA_FOV_DEG"),
     ],
 )
 def test_a_bad_setting_is_named(env, name, value, message):
     env.setenv(name, value)
     with pytest.raises(ConfigError, match=message):
         load_settings()
+
+
+def test_a_camera_that_turns_needs_a_person_detector(env):
+    env.setenv("PAN_DRIVE", "pwm")
+    with pytest.raises(ConfigError, match="PAN_DRIVE: a camera that turns needs a person detector"):
+        load_settings()
+    env.setenv("DETECTOR", "tflite")
+    assert load_settings().pan_drive == "pwm"

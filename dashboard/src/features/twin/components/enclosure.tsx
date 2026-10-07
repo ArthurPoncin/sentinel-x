@@ -15,6 +15,7 @@ import {
 } from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { useColorFade, useFade } from '../hooks/use-fade'
+import { usePan } from '../hooks/use-pan'
 import { useSweep } from '../hooks/use-sweep'
 import { ARC_REACH, ARCS, arcsAt, blink } from '../utils/alarm'
 import { breath } from '../utils/breathing'
@@ -95,22 +96,44 @@ function Engraving() {
   )
 }
 
-// The camera: a lens barrel and its glass, the eye the vision service sees through.
-function CameraLens() {
+// The camera, on the roof beside the crown: a pedestal, the servo that turns it, and on it a housing with its
+// lens barrel and its glass, the eye the vision service sees through. It turns about its own axis, where the
+// site plan carries the lens, to whom it follows: by `pan` radians from where it rests, toward the right of
+// its image when positive. It casts no shadow: the shadows are drawn once, and it moves.
+const CAMERA = { pedestal: 0.075, housing: 0.085, length: 0.2 } as const
+
+function Camera({ pan }: Pick<EnclosureProps, 'pan'>) {
+  const head = useRef<Group>(null)
+  const panNow = usePan(pan)
+  const { lens } = ENCLOSURE_SHAPE
+  // How high its lens is over the roof.
+  const height = lens.y - BODY_Y - TOP
+
+  useFrame((_, delta) => {
+    // Its right is toward smaller bearings: the other way round from a turn about y.
+    if (head.current) head.current.rotation.y = -panNow(delta)
+  })
+
   return (
-    <group name={ENCLOSURE_PARTS.camera} position={[ENCLOSURE_SHAPE.lens.x, ENCLOSURE_SHAPE.lens.y - BODY_Y, FRONT]}>
-      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0.05]} castShadow>
-        <cylinderGeometry args={[0.14, 0.15, 0.1, 48]} />
-        <meshStandardMaterial color="#4a5562" metalness={0.8} roughness={0.3} />
+    <group position={[lens.x, TOP, lens.z]}>
+      <mesh position={[0, (height - CAMERA.housing) / 2, 0]} castShadow>
+        <cylinderGeometry args={[CAMERA.pedestal * 0.8, CAMERA.pedestal, height - CAMERA.housing, 32]} />
+        <meshStandardMaterial {...TRIM} />
       </mesh>
-      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, ENCLOSURE_SHAPE.lens.z - FRONT]}>
-        <cylinderGeometry args={[0.1, 0.1, 0.012, 48]} />
-        <meshStandardMaterial color="#13304f" metalness={0.6} roughness={0.12} />
-      </mesh>
-      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0.102]}>
-        <ringGeometry args={[0.085, 0.115, 48]} />
-        <meshStandardMaterial color="#aab5c0" metalness={0.9} roughness={0.2} />
-      </mesh>
+      <group ref={head} name={ENCLOSURE_PARTS.camera} position={[0, height, 0]}>
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[CAMERA.housing, CAMERA.housing, CAMERA.length, 40]} />
+          <meshStandardMaterial color="#4a5562" metalness={0.8} roughness={0.3} />
+        </mesh>
+        <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, CAMERA.length / 2 + 0.006]}>
+          <cylinderGeometry args={[CAMERA.housing * 0.7, CAMERA.housing * 0.7, 0.012, 40]} />
+          <meshStandardMaterial color="#13304f" metalness={0.6} roughness={0.12} />
+        </mesh>
+        <mesh position={[0, 0, CAMERA.length / 2 + 0.001]}>
+          <ringGeometry args={[CAMERA.housing * 0.62, CAMERA.housing * 0.84, 40]} />
+          <meshStandardMaterial color="#aab5c0" metalness={0.9} roughness={0.2} />
+        </mesh>
+      </group>
     </group>
   )
 }
@@ -436,6 +459,8 @@ function Crown({ ring, alarm }: Pick<SceneProps['enclosure'], 'ring' | 'alarm'>)
 export type EnclosureProps = SceneProps['enclosure'] & {
   // Whether someone is near the site: a `presence` Alert is active.
   presence: boolean
+  // How far the camera on its roof is turned from where it rests, in radians.
+  pan: number
 }
 
 // The Sentinel-X product: a dark bevelled module on a mast, its Probes and actuators each a part of its
@@ -443,7 +468,7 @@ export type EnclosureProps = SceneProps['enclosure'] & {
 // LED ring breathes in its color, until the Alarm makes it blink and the buzzer sound; the Probes the
 // predictive model says are drifting pulse, their score on a label under them; the PIR dome blinks while
 // someone is near.
-export function Enclosure({ color, glow, lcd, ring, alarm, pulses, drift, presence }: EnclosureProps) {
+export function Enclosure({ color, glow, lcd, ring, alarm, pulses, drift, presence, pan }: EnclosureProps) {
   const body = useRef<MeshStandardMaterial>(null)
   const light = useRef<PointLight>(null)
   const target = useMemo(() => new Color(color), [color])
@@ -486,7 +511,7 @@ export function Enclosure({ color, glow, lcd, ring, alarm, pulses, drift, presen
           />
         </mesh>
         <Lcd {...lcd} />
-        <CameraLens />
+        <Camera pan={pan} />
         <PirDome presence={presence} />
         <MicGrille />
         <Engraving />

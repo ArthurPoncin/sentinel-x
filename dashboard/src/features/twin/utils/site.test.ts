@@ -4,12 +4,12 @@ import {
   alongPipe,
   type Block,
   barbedHeight,
-  bearingAlongFence,
   bearingTo,
   dangerZone,
   fenceBarbs,
   fenceLength,
   fencePosts,
+  floodlights,
   type GroundPoint,
   gateLine,
   gatePoint,
@@ -21,8 +21,11 @@ import {
   lensPoint,
   meshCell,
   rocks,
-  roundFence,
   SITE,
+  STANDING,
+  sightBearing,
+  standingPoint,
+  standingSpan,
   track,
   watchedPoint,
 } from './site'
@@ -246,11 +249,14 @@ describe('the no-entry signs', () => {
     }
   })
 
-  it('hide no one the camera sees, but at the very left edge of its image', () => {
-    // The intruder stands on the fence's line, where a sign hangs: none hangs where it is seen.
-    for (const xNorm of ACROSS.filter((across) => across > 0)) {
-      for (const sign of gateSigns()) {
-        expect(between(watchedPoint(xNorm), sign), `x_norm ${xNorm}`).toBeGreaterThan(signs.gate.width / 2)
+  it('stand in no one the camera sees, whichever way it is turned: they stand clear of the fence a sign hangs on', () => {
+    // A sign hangs on the fence's line; whoever is seen stands inside it, by more than half a sign is wide.
+    expect(STANDING.clear).toBeGreaterThan(signs.gate.width / 2)
+    for (const pan of [-Math.PI / 2, -0.6, 0, 0.6, Math.PI / 2]) {
+      for (const xNorm of ACROSS) {
+        for (const sign of gateSigns()) {
+          expect(between(standingPoint(xNorm, pan), sign), `pan ${pan}, x_norm ${xNorm}`).toBeGreaterThan(signs.gate.width / 2)
+        }
       }
     }
   })
@@ -433,6 +439,12 @@ describe('the track', () => {
     }
   })
 
+  it('passes clear of the floodlights, the foot of each mast off it', () => {
+    for (const mast of floodlights()) {
+      expect(fromPath(mast, toHall)).toBeGreaterThan(half + SITE.floodlights.foot)
+    }
+  })
+
   it('comes to the door square to the wall, on the side of the pipe the door is on', () => {
     const [before, door] = [toHall.at(-2), toHall.at(-1)]
     const pipe = SITE.pipe.path[0]
@@ -525,6 +537,87 @@ describe('the rocks', () => {
   })
 })
 
+describe('the floodlights', () => {
+  const { fence, socle, enclosure, pipe } = SITE
+  const { foot, height, pool, bearings } = SITE.floodlights
+  const masts = floodlights()
+  // The rim of the ground a mast keeps around its axis.
+  const footprint = (mast: GroundPoint): GroundPoint[] =>
+    Array.from({ length: 16 }, (_, i) => (i * Math.PI) / 8).map((bearing) => ({
+      x: mast.x + foot * Math.sin(bearing),
+      z: mast.z + foot * Math.cos(bearing),
+    }))
+  // How far `point` is from the stretch that runs from `from` to `to`.
+  const off = (point: GroundPoint, from: GroundPoint, to: GroundPoint) => {
+    const [x, z] = [to.x - from.x, to.z - from.z]
+    const share = Math.min(1, Math.max(0, ((point.x - from.x) * x + (point.z - from.z) * z) / (x * x + z * z)))
+    return between(point, { x: from.x + x * share, z: from.z + z * share })
+  }
+
+  it('stand on the perimeter, inside the fence, one on each bearing the plan gives', () => {
+    expect(masts).toHaveLength(bearings.length)
+    masts.forEach((mast, index) => {
+      expect(Math.atan2(mast.x, mast.z)).toBeCloseTo(Math.atan2(Math.sin(bearings[index] ?? 0), Math.cos(bearings[index] ?? 0)))
+      expect(fromCentre(mast) + foot).toBeLessThan(fence.radius)
+      // Nearer the fence than anything of the plant: on the walkway kept along it.
+      expect(fromCentre(mast) + foot).toBeGreaterThan(fence.radius - 0.3)
+    })
+  })
+
+  it('rise over the fence and its gate, and look into the site', () => {
+    expect(height).toBeGreaterThan(fence.gate.pillar.height)
+    for (const mast of masts) {
+      expect(mast.x + fromCentre(mast) * Math.sin(mast.bearing)).toBeCloseTo(0)
+      expect(mast.z + fromCentre(mast) * Math.cos(mast.bearing)).toBeCloseTo(0)
+    }
+  })
+
+  it('each have ground of their own: none on a part of the site, the danger zone or another mast', () => {
+    const { hall, chimneys, transformer, tank } = SITE
+
+    masts.forEach((mast, index) => {
+      for (const [name, block] of Object.entries({ hall, transformer, tank, 'danger zone': dangerZone() })) {
+        expect(outside(mast, block), `mast ${index} and the ${name}`).toBeGreaterThan(foot)
+      }
+      for (const chimney of chimneys) expect(between(mast, chimney)).toBeGreaterThan(chimney.radius + foot)
+      pipe.path.slice(1).forEach((to, stretch) => {
+        expect(off(mast, pipe.path[stretch] ?? to, to)).toBeGreaterThan(pipe.radius + foot)
+      })
+      for (const other of masts.slice(index + 1)) expect(between(mast, other)).toBeGreaterThan(2 * foot)
+    })
+  })
+
+  it("leave the Enclosure's foot free", () => {
+    for (const mast of masts) expect(between(mast, enclosure)).toBeGreaterThan(enclosure.radius + foot)
+  })
+
+  it('leave the camera sector free, the arc where the intruder stands included', () => {
+    // Round the lens from straight ahead: the sector is half the field of view either way.
+    const offAxis = (point: GroundPoint) => Math.atan2(toTheLeft(point), inFront(point))
+
+    for (const mast of masts) {
+      for (const point of footprint(mast)) expect(Math.abs(offAxis(point))).toBeGreaterThan(SITE.camera.fov / 2)
+      for (const xNorm of ACROSS) expect(between(mast, watchedPoint(xNorm))).toBeGreaterThan(foot)
+    }
+  })
+
+  it('hide neither no-entry sign', () => {
+    for (const mast of masts) {
+      for (const sign of gateSigns()) expect(between(mast, sign)).toBeGreaterThan(SITE.signs.gate.width)
+    }
+  })
+
+  it('light a pool on the ground at their foot, toward the site, which stays on the socle', () => {
+    for (const mast of masts) {
+      expect(between(mast, mast.pool)).toBeCloseTo(pool.throw)
+      expect(fromCentre(mast.pool)).toBeCloseTo(fromCentre(mast) - pool.throw)
+      // The foot of the mast is in its own light.
+      expect(between(mast, mast.pool)).toBeLessThan(pool.radius)
+      expect(fromCentre(mast.pool) + pool.radius).toBeLessThanOrEqual(socle.radius)
+    }
+  })
+})
+
 describe('the gas pipe', () => {
   const { pipe, hall, tank } = SITE
   it("runs from the hall's wall to the tank, clear of both on the way", () => {
@@ -602,14 +695,17 @@ describe('the Enclosure', () => {
     expect(lensHeight()).toBeGreaterThan(SITE.fence.height)
   })
 
-  it('faces the camera sector: its lens looks out through the gate and covers it all', () => {
+  it('faces the camera sector: at rest its lens looks out through the gate and covers it all', () => {
     expect(between(watchedPoint(0.5), entrance)).toBeCloseTo(0)
     expect(fence.gate.width).toBeLessThan(between(watchedPoint(0), watchedPoint(1)))
   })
 
-  it('has nothing of the plant in its field of view', () => {
+  it('has nothing of the plant in its field of view while its camera rests', () => {
+    // How far round from the way the lens looks `point` is.
+    const offAxis = (point: GroundPoint) => Math.abs(Math.atan2(toTheLeft(point), inFront(point)))
+
     for (const [part, outline] of Object.entries(plant)) {
-      expect(Math.max(...outline.map(inFront)), part).toBeLessThan(0)
+      expect(Math.min(...outline.map(offAxis)), part).toBeGreaterThan(SITE.camera.fov / 2)
     }
   })
 })
@@ -660,50 +756,133 @@ describe('the bearing to face', () => {
   })
 })
 
-describe('the way round the fence', () => {
-  it('is 0 toward the entrance and grows toward x, in scene units along the fence', () => {
-    const { radius } = SITE.fence
+// How far the camera turns either way of where it rests: a servo's half turn. And how far across its image.
+const QUARTER = Math.PI / 2
+const PANS = [-QUARTER, -1, -0.4, 0, 0.4, 1, QUARTER]
+// How tall someone is in the image, from as short as at the fence to filling it.
+const TALL = [STANDING.tall.far, 0.4, 0.5, 0.7, STANDING.tall.near]
 
-    expect(roundFence({ x: 0, z: radius })).toBeCloseTo(0)
-    expect(roundFence({ x: radius, z: 0 })).toBeCloseTo((radius * Math.PI) / 2)
-    expect(roundFence({ x: -radius, z: 0 })).toBeCloseTo((-radius * Math.PI) / 2)
-  })
+// How far `point` is from a rectangle of the plan; 0 inside it.
+const fromBlock = (point: GroundPoint, { x, z, width, depth }: Block) =>
+  Math.hypot(Math.max(0, Math.abs(point.x - x) - width / 2), Math.max(0, Math.abs(point.z - z) - depth / 2))
 
-  it('measures how far the intruder walks along the watched arc: a little more than straight across', () => {
-    for (const [from, to] of [
-      [0.15, 0.35],
-      [0.35, 0.55],
-      [0.55, 0.75],
-    ] as const) {
-      const walked = Math.abs(roundFence(watchedPoint(to)) - roundFence(watchedPoint(from)))
-      const straight = between(watchedPoint(from), watchedPoint(to))
-
-      expect(walked).toBeGreaterThan(straight)
-      expect(walked).toBeLessThan(1.01 * straight)
+describe('the camera on its servo', () => {
+  it('turns about its lens: the lens stays where it is, and its sight leaves from there', () => {
+    for (const pan of PANS) {
+      for (const xNorm of ACROSS) {
+        expect(bearingTo(lens, watchedPoint(xNorm, pan))).toBeCloseTo(sightBearing(xNorm, pan))
+        expect(fromCentre(watchedPoint(xNorm, pan))).toBeCloseTo(SITE.fence.radius)
+      }
     }
   })
 
-  it("goes down as x_norm goes up, all across the image: the camera's right is toward smaller bearings", () => {
-    const round = ACROSS.map((xNorm) => roundFence(watchedPoint(xNorm)))
-    expect(round).toEqual([...round].sort((a, b) => b - a))
+  it("turns toward the right of its image for a positive pan, by that very angle", () => {
+    expect(sightBearing(0.5)).toBeCloseTo(SITE.enclosure.heading)
+    for (const pan of [0.3, 1, QUARTER]) {
+      expect(sightBearing(0.5, pan)).toBeCloseTo(SITE.enclosure.heading - pan)
+      expect(toTheLeft(watchedPoint(0.5, pan))).toBeLessThan(0)
+      expect(toTheLeft(watchedPoint(0.5, -pan))).toBeGreaterThan(0)
+    }
+  })
+
+  it('keeps its field of view as it turns: what was at an edge of its image is in the middle once turned by half of it', () => {
+    const half = SITE.camera.fov / 2
+
+    expect(sightBearing(1) - sightBearing(0)).toBeCloseTo(-SITE.camera.fov)
+    expect(sightBearing(0.5, half)).toBeCloseTo(sightBearing(1))
+    expect(sightBearing(0.5, -half)).toBeCloseTo(sightBearing(0))
+    expect(sightBearing(1, 0.7) - sightBearing(0, 0.7)).toBeCloseTo(-SITE.camera.fov)
   })
 })
 
-describe('the bearing to walk along the fence', () => {
-  it("heads for where a higher x_norm stands when walking toward the image's right, a lower one toward its left", () => {
-    for (const xNorm of [0.15, 0.35, 0.5, 0.55, 0.75]) {
-      const at = watchedPoint(xNorm)
+describe('where someone the camera sees stands', () => {
+  const places = PANS.flatMap((pan) => ACROSS.flatMap((xNorm) => [undefined, ...TALL].map((hNorm) => ({ pan, xNorm, hNorm }))))
 
-      expect(bearingAlongFence(at, 1)).toBeCloseTo(bearingTo(at, watchedPoint(xNorm + 0.001)), 2)
-      expect(bearingAlongFence(at, -1)).toBeCloseTo(bearingTo(at, watchedPoint(xNorm - 0.001)), 2)
+  it('is on the sight line the camera sees them along', () => {
+    for (const { pan, xNorm, hNorm } of places) {
+      expect(bearingTo(lens, standingPoint(xNorm, pan, hNorm))).toBeCloseTo(sightBearing(xNorm, pan))
     }
   })
 
-  it('runs along the fence, square to the way to the centre', () => {
-    const at = watchedPoint(0.35)
-    const inward = bearingTo(at, { x: 0, z: 0 })
+  it('is inside the fence and clear of its line all round the site, never on it', () => {
+    for (const { pan, xNorm, hNorm } of places) {
+      expect(fromCentre(standingPoint(xNorm, pan, hNorm))).toBeLessThanOrEqual(SITE.fence.radius - STANDING.clear + 1e-9)
+    }
+  })
 
-    expect(Math.cos(bearingAlongFence(at, 1) - inward)).toBeCloseTo(0)
-    expect(Math.cos(bearingAlongFence(at, 1) - bearingAlongFence(at, -1))).toBeCloseTo(-1)
+  it("is clear of the Enclosure's own ground, which the lens is over", () => {
+    expect(between(lens, SITE.enclosure)).toBeLessThan(SITE.enclosure.radius)
+    for (const { pan, xNorm, hNorm } of places) {
+      expect(between(standingPoint(xNorm, pan, hNorm), SITE.enclosure)).toBeGreaterThan(SITE.enclosure.radius + STANDING.clear / 2)
+    }
+  })
+
+  it('is never in what stands on the site, however far the camera turns', () => {
+    const { hall, transformer, tank, chimneys, pipe } = SITE
+    for (const { pan, xNorm, hNorm } of places) {
+      const at = standingPoint(xNorm, pan, hNorm)
+      const where = `pan ${pan}, x_norm ${xNorm}, h_norm ${hNorm}`
+
+      for (const block of [hall, transformer, tank]) expect(fromBlock(at, block), where).toBeGreaterThan(STANDING.clear / 2)
+      for (const chimney of chimneys) expect(between(at, chimney), where).toBeGreaterThan(chimney.radius + STANDING.clear / 2)
+      for (const mast of floodlights()) {
+        expect(between(at, mast), where).toBeGreaterThan(SITE.floodlights.foot + STANDING.clear / 2)
+      }
+      for (const share of [0, 0.25, 0.5, 0.75, 1]) expect(between(at, alongPipe(share)), where).toBeGreaterThan(pipe.radius)
+    }
+  })
+
+  it('is just inside the fence when the Alert does not say how tall they are', () => {
+    for (const xNorm of ACROSS) {
+      const at = standingPoint(xNorm)
+
+      expect(fromCentre(at)).toBeCloseTo(SITE.fence.radius - STANDING.clear)
+      // A step from where the camera's sight meets the fence: a little more where it meets it at a slant.
+      expect(between(at, watchedPoint(xNorm))).toBeGreaterThanOrEqual(STANDING.clear - 1e-9)
+      expect(between(at, watchedPoint(xNorm))).toBeLessThan(1.5 * STANDING.clear)
+      expect(at).toEqual(standingPoint(xNorm, 0, STANDING.tall.far))
+    }
+  })
+
+  it('is nearer the Enclosure the taller they are in the image: they walk in as they come to the camera', () => {
+    for (const pan of [-0.4, 0, 0.4]) {
+      for (const xNorm of ACROSS) {
+        const away = TALL.map((hNorm) => between(lens, standingPoint(xNorm, pan, hNorm)))
+
+        expect(away).toEqual([...away].sort((a, b) => b - a))
+        expect(away.at(0)).toBeGreaterThan((away.at(-1) ?? 0) + 1)
+      }
+    }
+  })
+
+  it('goes from one end of where one can stand to the other, and no further for someone taller or shorter still', () => {
+    const { near, far } = standingSpan(sightBearing(0.5))
+
+    expect(far).toBeGreaterThan(near)
+    expect(between(lens, standingPoint(0.5, 0, STANDING.tall.far))).toBeCloseTo(far)
+    expect(between(lens, standingPoint(0.5, 0, STANDING.tall.near))).toBeCloseTo(near)
+    expect(standingPoint(0.5, 0, 0.05)).toEqual(standingPoint(0.5, 0, STANDING.tall.far))
+    expect(standingPoint(0.5, 0, 1)).toEqual(standingPoint(0.5, 0, STANDING.tall.near))
+  })
+
+  it('is as far as a lens makes them short: halfway in height is not halfway in distance', () => {
+    const { near, far } = standingSpan(sightBearing(0.5))
+    const { tall } = STANDING
+    // Twice as tall as at the far end.
+    const away = between(lens, standingPoint(0.5, 0, 2 * tall.far))
+
+    expect((away - near) / (far - near)).toBeCloseTo((1 / (2 * tall.far) - 1 / tall.near) / (1 / tall.far - 1 / tall.near))
+    expect(away).toBeLessThan((near + far) / 2)
+  })
+
+  it('stops short of what stands on the site when the camera looks at it: the gas pipe, before the tank', () => {
+    // Turned a quarter turn to its left, the camera looks along the site toward the gas pipe and the tank.
+    const bearing = sightBearing(0.5, -QUARTER)
+    const { near, far } = standingSpan(bearing)
+    const fence = between(lens, watchedPoint(0.5, -QUARTER))
+
+    expect(far).toBeLessThan(fence - 1)
+    expect(far).toBeGreaterThanOrEqual(near)
+    expect(standingPoint(0.5, -QUARTER).x).toBeLessThan(SITE.pipe.path[0].x - SITE.pipe.radius)
   })
 })

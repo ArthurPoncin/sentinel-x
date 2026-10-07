@@ -1,15 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import { FADE_SECONDS } from './fade'
-import { roundFence, watchedPoint } from './site'
+import { type GroundPoint, standingPoint } from './site'
 import {
   figurineLevel,
+  type Intrusion,
   LAST_KNOWN_SECONDS,
   lastKnown,
+  MOST_FIGURINES,
+  marksLevel,
   NO_TRACKS,
   SET_OFF,
   SIGHTING,
+  type Sighting,
   type Track,
-  type Tracks,
   trackAt,
   tracksAt,
   UNHURRIED,
@@ -17,38 +20,48 @@ import {
 
 const FRAME = 1 / 60
 
-const seen = (alertId: string, x_norm: number) => ({ alertId, x_norm })
+// A place on the ground `x` along a line the tests walk the figurine on, or anywhere else when `z` is given.
+const place = (x: number, z = 2): GroundPoint => ({ x, z })
+const between = (a: GroundPoint, b: GroundPoint) => Math.hypot(a.x - b.x, a.z - b.z)
 
-// A figurine at rest where the camera sees it, its Alert shown for `age` seconds.
-const standing = (alertId: string, x_norm: number, age = 0): Track => ({
+// Someone the camera sees at `x` along that line.
+const seen = (key: string, x: number, alertId = 'a1') => ({ alertId, key, at: place(x), followed: true })
+
+// A figurine at rest where the camera sees it, shown for `age` seconds.
+const standing = (key: string, x: number, age = 0, alertId = 'a1'): Track => ({
   alertId,
-  x_norm,
+  key,
+  seen: true,
+  followed: true,
+  at: place(x),
   age,
-  seen: x_norm,
+  sighted: place(x),
   since: age,
   pace: 0,
-  heading: 0,
+  course: 0,
   walked: 0,
   walking: 0,
   lost: 0,
 })
 
-// Plays `seconds` of frames from `track` with the camera seeing its intruder at `x_norm`, and returns the
-// figurine on each.
-function play(track: Track, x_norm: number, seconds: number, rate = 60): Track[] {
+// Plays `seconds` of frames from `track` with the camera seeing its person at `at`, and returns the figurine
+// on each.
+function playTo(track: Track, at: GroundPoint, seconds: number, rate = 60): Track[] {
   const shown: Track[] = []
   let last = track
   for (let frame = 0; frame < Math.round(seconds * rate); frame++) {
-    last = trackAt(last, seen(last.alertId ?? 'intruder', x_norm), 1 / rate) ?? last
+    last = trackAt(last, { alertId: last.alertId, key: last.key, at, followed: last.followed }, 1 / rate) ?? last
     shown.push(last)
   }
   return shown
 }
 
+const play = (track: Track, x: number, seconds: number, rate = 60) => playTo(track, place(x), seconds, rate)
+
 const last = (shown: Track[]): Track => shown[shown.length - 1] as Track
 
-// Plays `seconds` of frames from `track` with no `intrusion` Alert active, and returns what is left of the
-// figurine on each: null once there is nothing.
+// Plays `seconds` of frames from `track` with the camera no longer seeing its person, and returns what is
+// left of the figurine on each: null once there is nothing.
 function lose(track: Track, seconds: number, rate = 60): (Track | null)[] {
   const left: (Track | null)[] = []
   let now: Track | null = track
@@ -59,17 +72,27 @@ function lose(track: Track, seconds: number, rate = 60): (Track | null)[] {
   return left
 }
 
-// The figurine `seconds` after its Alert was cleared.
+// The figurine `seconds` after it was last seen.
 const lostFor = (track: Track, seconds: number, rate = 60) => lose(track, seconds, rate).at(-1) ?? null
 
-// How far it is along the arc from where the camera sees `from` to where it sees `to`.
-const arc = (from: number, to: number) => Math.abs(roundFence(watchedPoint(to)) - roundFence(watchedPoint(from)))
+// Toward growing x, and the other way: the bearings the figurine walks along on the tests' line.
+const [RIGHT, LEFT] = [Math.PI / 2, -Math.PI / 2]
 
-// The mock feed's intruder: 0.15, 0.35, 0.55, 0.75, one a second, cleared a second later. The figurine on
-// every frame until then.
+// The mock feed's intruder (backend/src/mock-feed.ts): where the camera sees it across its image, how tall and
+// how far turned, one sighting a second, cleared a second after the last.
+const MOCK = [
+  { x_norm: 0.886, h_norm: 0.3, pan: 0 },
+  { x_norm: 0.439, h_norm: 0.36, pan: 14 },
+  { x_norm: 0.439, h_norm: 0.46, pan: -2 },
+  { x_norm: 0.439, h_norm: 0.66, pan: -20 },
+] as const
+const mockPlace = ({ x_norm, h_norm, pan }: (typeof MOCK)[number]) => standingPoint(x_norm, (pan * Math.PI) / 180, h_norm)
+
+// The figurine on every frame of the mock feed's intrusion, until it is cleared.
 function crossing(rate = 60): Track[] {
-  const shown: Track[] = [trackAt(null, seen('intruder', 0.15), 1 / rate) as Track]
-  for (const x_norm of [0.15, 0.35, 0.55, 0.75]) shown.push(...play(last(shown), x_norm, 1, rate))
+  const [first] = MOCK
+  const shown: Track[] = [trackAt(null, { alertId: 'a1', key: 'intruder', at: mockPlace(first), followed: true }, 1 / rate) as Track]
+  for (const sighting of MOCK) shown.push(...playTo(last(shown), mockPlace(sighting), 1, rate))
   return shown
 }
 
@@ -78,116 +101,134 @@ describe("the intruder's track", () => {
     expect(trackAt(null, null, FRAME)).toBeNull()
   })
 
-  it('stands the figurine where a newly raised intruder is, at rest, without walking there', () => {
-    expect(trackAt(null, seen('i1', 0.55), FRAME)).toEqual(standing('i1', 0.55))
+  it('stands the figurine where someone newly seen is, at rest, without walking there', () => {
+    expect(trackAt(null, seen('p1', 0.55), FRAME)).toEqual(standing('p1', 0.55))
   })
 
-  it('stays where it stands while the camera sees it at the same place', () => {
-    const shown = play(standing('i1', 0.55), 0.55, 2)
+  it('stays where it stands while the camera sees them at the same place', () => {
+    const shown = play(standing('p1', 0.55), 0.55, 2)
 
-    expect(shown.every(({ x_norm, heading, walked, walking }) => x_norm === 0.55 && !heading && !walked && !walking)).toBe(
-      true,
-    )
+    expect(shown.every(({ at, walked, walking }) => at.x === 0.55 && at.z === 2 && !walked && !walking)).toBe(true)
   })
 
-  it('stays where it last stood once cleared, so the figurine fades out there', () => {
-    const shown = last(play(standing('i1', 0.3, 3), 0.62, 0.5))
+  it('stays where it last stood once they are no longer seen, so the figurine fades out there', () => {
+    const shown = last(play(standing('p1', 0.3, 3), 0.62, 0.5))
     const cleared = trackAt(shown, null, FRAME)
 
-    expect(cleared).toEqual({ ...shown, alertId: null, heading: 0, walking: expect.any(Number), lost: 0 })
-    expect(trackAt(cleared, null, FRAME)?.x_norm).toBe(shown.x_norm)
+    expect(cleared).toEqual({ ...shown, seen: false, walking: expect.any(Number), lost: 0 })
+    expect(trackAt(cleared, null, FRAME)?.at).toEqual(shown.at)
   })
 
-  it('does not walk from where a previous intruder stood, even one raised again under the same id', () => {
-    const cleared = trackAt(last(play(standing('intruder', 0.55, 3), 0.75, 0.5)), null, FRAME)
-    expect(trackAt(cleared, seen('intruder', 0.15), FRAME)).toEqual(standing('intruder', 0.15))
+  it('does not walk from where a previous intruder stood, even one seen again under the same key', () => {
+    const cleared = trackAt(last(play(standing('p1', 0.55, 3), 0.75, 0.5)), null, FRAME)
+    expect(trackAt(cleared, seen('p1', 0.15), FRAME)).toEqual(standing('p1', 0.15))
   })
 
-  it('stands the figurine where another Alert, raised while the first is active, sees its intruder', () => {
-    const walking = last(play(standing('i1', 0.2, 3), 0.4, 0.5))
-    expect(trackAt(walking, seen('i2', 0.7), FRAME)).toEqual(standing('i2', 0.7))
+  it('stands the figurine where another Alert, or another person of the same one, is seen', () => {
+    const walking = last(play(standing('p1', 0.2, 3), 0.4, 0.5))
+
+    expect(trackAt(walking, seen('p1', 0.7, 'a2'), FRAME)).toEqual(standing('p1', 0.7, 0, 'a2'))
+    expect(trackAt(walking, seen('p2', 0.7), FRAME)).toEqual(standing('p2', 0.7))
   })
 
-  it('ages with the time its Alert has been shown, wherever the intruder goes, so its sweep plays once', () => {
-    let shown = trackAt(null, seen('i1', 0.15), FRAME)
+  it('ages with the time it has been shown, wherever its person goes, so its sweep plays once', () => {
+    let shown = trackAt(null, seen('p1', 0.15), FRAME)
     expect(shown?.age).toBe(0)
 
-    for (let frame = 0; frame < 60; frame++) shown = trackAt(shown, seen('i1', frame < 30 ? 0.15 : 0.35), FRAME)
+    for (let frame = 0; frame < 60; frame++) shown = trackAt(shown, seen('p1', frame < 30 ? 0.15 : 0.35), FRAME)
     expect(shown?.age).toBeCloseTo(1)
   })
 
-  it('no longer ages once cleared, and does not go back when the clock does', () => {
-    const cleared = trackAt(standing('i1', 0.62, 0.3), null, 1)
+  it('no longer ages once they are no longer seen, and does not go back when the clock does', () => {
+    const cleared = trackAt(standing('p1', 0.62, 0.3), null, 1)
     expect(cleared?.age).toBe(0.3)
 
-    const walking = last(play(standing('i1', 0.3, 1), 0.62, 0.3))
-    const back = trackAt(walking, seen('i1', 0.62), -1)
+    const walking = last(play(standing('p1', 0.3, 1), 0.62, 0.3))
+    const back = trackAt(walking, seen('p1', 0.62), -1)
     expect(back?.age).toBe(walking.age)
-    expect(back?.x_norm).toBe(walking.x_norm)
+    expect(back?.at).toEqual(walking.at)
     expect(back?.walked).toBe(walking.walked)
+  })
+
+  it('says whether its person is the one the camera follows, as the Alert tells it', () => {
+    const other = trackAt(null, { ...seen('p2', 0.4), followed: false }, FRAME)
+    expect(other?.followed).toBe(false)
+    // The one before them left: the camera follows this one now, and its figurine is the same.
+    const handed = trackAt(other, seen('p2', 0.4), FRAME)
+    expect(handed).toEqual({ ...other, followed: true, age: FRAME, since: FRAME })
   })
 })
 
-describe("the figurine's walk to where it was seen", () => {
+describe("the figurine's walk to where its person was seen", () => {
   it('walks there, it does not jump: no frame covers more than a tenth of the way', () => {
-    const shown = play(standing('i1', 0.15, 1), 0.35, 1)
-    const steps = shown.map(({ x_norm }, frame) => x_norm - (shown[frame - 1]?.x_norm ?? 0.15))
+    const shown = play(standing('p1', 0.15, 1), 0.35, 1)
+    const steps = shown.map(({ at }, frame) => at.x - (shown[frame - 1]?.at.x ?? 0.15))
 
-    expect(shown[0]?.x_norm).toBeGreaterThan(0.15)
-    expect(shown[0]?.x_norm).toBeLessThan(0.35)
+    expect(shown[0]?.at.x).toBeGreaterThan(0.15)
+    expect(shown[0]?.at.x).toBeLessThan(0.35)
     expect(Math.max(...steps)).toBeLessThan(0.1 * (0.35 - 0.15))
   })
 
-  it('keeps a steady pace: every frame covers the same share of the image until it gets there', () => {
-    const shown = play(standing('i1', 0.15, 1), 0.35, 1)
-    const steps = shown.map(({ x_norm }, frame) => x_norm - (shown[frame - 1]?.x_norm ?? 0.15))
+  it('keeps a steady pace: every frame covers the same ground until it gets there', () => {
+    const shown = play(standing('p1', 0.15, 1), 0.35, 1)
+    const steps = shown.map(({ at }, frame) => at.x - (shown[frame - 1]?.at.x ?? 0.15))
 
     for (const step of steps) expect(step).toBeCloseTo(steps[0] ?? Number.NaN, 9)
   })
 
-  it('takes as long to get there as the camera took to see it move, and a little longer', () => {
+  it('takes as long to get there as the camera took to see them move, and a little longer', () => {
     // Seen at 0.15 for a second, then at 0.35.
-    const shown = play(standing('i1', 0.15, 1), 0.35, 2)
-    const arrived = shown.findIndex(({ x_norm }) => x_norm === 0.35)
+    const shown = play(standing('p1', 0.15, 1), 0.35, 2)
+    const arrived = shown.findIndex(({ at }) => at.x === 0.35)
 
     expect(UNHURRIED).toBeGreaterThan(1)
     expect(UNHURRIED).toBeLessThan(1.5)
     expect((arrived + 1) * FRAME).toBeCloseTo(UNHURRIED, 1)
-    expect(shown[59]?.x_norm).toBeLessThan(0.35)
-    expect(shown[59]?.x_norm).toBeGreaterThan(0.15 + 0.8 * 0.2)
+    expect(shown[59]?.at.x).toBeLessThan(0.35)
+    expect(shown[59]?.at.x).toBeGreaterThan(0.15 + 0.8 * 0.2)
   })
 
-  it('never goes past where it was seen, and stops right there', () => {
-    const shown = play(standing('i1', 0.15, 1), 0.35, 3)
+  it('never goes past where they were seen, and stops right there', () => {
+    const shown = play(standing('p1', 0.15, 1), 0.35, 3)
 
-    expect(shown.every(({ x_norm }) => x_norm >= 0.15 && x_norm <= 0.35)).toBe(true)
-    expect(last(shown).x_norm).toBe(0.35)
-    expect(last(shown).heading).toBe(0)
+    expect(shown.every(({ at }) => at.x >= 0.15 && at.x <= 0.35 && at.z === 2)).toBe(true)
+    expect(last(shown).at).toEqual(place(0.35))
+    expect(last(shown).walking).toBe(0)
   })
 
   it('goes the other way just as well', () => {
-    const shown = play(standing('i1', 0.75, 1), 0.15, 3)
+    const shown = play(standing('p1', 0.75, 1), 0.15, 3)
 
-    expect(shown.every(({ x_norm }) => x_norm >= 0.15 && x_norm <= 0.75)).toBe(true)
-    expect(last(shown).x_norm).toBe(0.15)
+    expect(shown.every(({ at }) => at.x >= 0.15 && at.x <= 0.75)).toBe(true)
+    expect(last(shown).at).toEqual(place(0.15))
+  })
+
+  it('goes straight there over the ground, whichever way that is: toward the Enclosure as along the fence', () => {
+    const [from, to] = [place(0.4, 2.4), place(-0.2, 1.1)]
+    const shown = playTo({ ...standing('p1', 0, 1), at: from, sighted: from }, to, 3)
+
+    for (const { at } of shown) expect(between(from, at) + between(at, to)).toBeCloseTo(between(from, to), 9)
+    expect(shown.every(({ at }, frame) => between(at, to) <= between(shown[frame - 1]?.at ?? from, to))).toBe(true)
+    expect(last(shown).at).toEqual(to)
+    expect(last(shown).walked).toBeCloseTo(between(from, to), 9)
   })
 
   it('is the same whatever the frame rate', () => {
-    const atSixty = last(play(standing('i1', 0.15, 1), 0.35, 0.5, 60))
-    const atThirty = last(play(standing('i1', 0.15, 1), 0.35, 0.5, 30))
-    const inOneStep = trackAt(trackAt(standing('i1', 0.15, 1), seen('i1', 0.35), 0), seen('i1', 0.35), 0.5)
+    const atSixty = last(play(standing('p1', 0.15, 1), 0.35, 0.5, 60))
+    const atThirty = last(play(standing('p1', 0.15, 1), 0.35, 0.5, 30))
+    const inOneStep = trackAt(trackAt(standing('p1', 0.15, 1), seen('p1', 0.35), 0), seen('p1', 0.35), 0.5)
 
     for (const other of [atThirty, inOneStep]) {
-      expect(other?.x_norm).toBeCloseTo(atSixty.x_norm, 9)
+      expect(other?.at.x).toBeCloseTo(atSixty.at.x, 9)
       expect(other?.walked).toBeCloseTo(atSixty.walked, 9)
       expect(other?.walking).toBeCloseTo(atSixty.walking, 9)
     }
   })
 
   it('goes at the pace of the sightings: twice as fast for twice as far in the same time', () => {
-    const near = trackAt(standing('i1', 0.15, 1), seen('i1', 0.25), FRAME)
-    const far = trackAt(standing('i1', 0.15, 1), seen('i1', 0.35), FRAME)
-    const sooner = trackAt(standing('i1', 0.15, 0.5), seen('i1', 0.35), FRAME)
+    const near = trackAt(standing('p1', 0.15, 1), seen('p1', 0.25), FRAME)
+    const far = trackAt(standing('p1', 0.15, 1), seen('p1', 0.35), FRAME)
+    const sooner = trackAt(standing('p1', 0.15, 0.5), seen('p1', 0.35), FRAME)
 
     expect(far?.pace).toBeCloseTo(2 * (near?.pace ?? Number.NaN))
     expect(sooner?.pace).toBeCloseTo(2 * (far?.pace ?? Number.NaN))
@@ -195,8 +236,8 @@ describe("the figurine's walk to where it was seen", () => {
   })
 
   it('does not dash for two sightings in a row, nor crawl for one that comes after it stood for long', () => {
-    const atOnce = trackAt(standing('i1', 0.15, 0), seen('i1', 0.35), FRAME)
-    const atLast = trackAt(standing('i1', 0.15, 60), seen('i1', 0.35), FRAME)
+    const atOnce = trackAt(standing('p1', 0.15, 0), seen('p1', 0.35), FRAME)
+    const atLast = trackAt(standing('p1', 0.15, 60), seen('p1', 0.35), FRAME)
 
     expect(atOnce?.pace).toBeCloseTo(0.2 / (UNHURRIED * SIGHTING.shortest))
     expect(atLast?.pace).toBeCloseTo(0.2 / (UNHURRIED * SIGHTING.longest))
@@ -204,68 +245,79 @@ describe("the figurine's walk to where it was seen", () => {
     expect(SIGHTING.longest).toBeGreaterThan(SIGHTING.shortest)
   })
 
-  it('walks on from where it has got to when it is seen further on before it gets there', () => {
-    const halfway = last(play(standing('i1', 0.15, 1), 0.35, 0.5))
+  it('walks on from where it has got to when they are seen further on before it gets there', () => {
+    const halfway = last(play(standing('p1', 0.15, 1), 0.35, 0.5))
     const shown = play(halfway, 0.55, 2)
 
-    expect(shown[0]?.x_norm).toBeGreaterThan(halfway.x_norm)
-    expect(shown.every(({ x_norm }, frame) => x_norm >= (shown[frame - 1]?.x_norm ?? halfway.x_norm))).toBe(true)
-    expect(last(shown).x_norm).toBe(0.55)
+    expect(shown[0]?.at.x).toBeGreaterThan(halfway.at.x)
+    expect(shown.every(({ at }, frame) => at.x >= (shown[frame - 1]?.at.x ?? halfway.at.x))).toBe(true)
+    expect(last(shown).at).toEqual(place(0.55))
   })
 })
 
 describe('the way the figurine walks', () => {
-  it("is the sign of its move across the image: 1 toward its right, -1 toward its left, 0 while it stands", () => {
-    expect(trackAt(standing('i1', 0.35, 1), seen('i1', 0.55), FRAME)?.heading).toBe(1)
-    expect(trackAt(standing('i1', 0.35, 1), seen('i1', 0.15), FRAME)?.heading).toBe(-1)
-    expect(trackAt(standing('i1', 0.35, 1), seen('i1', 0.35), FRAME)?.heading).toBe(0)
+  it('is the bearing from where it stands to where its person was seen, taken as it sets off', () => {
+    expect(trackAt(standing('p1', 0.35, 1), seen('p1', 0.55), FRAME)?.course).toBeCloseTo(RIGHT)
+    expect(trackAt(standing('p1', 0.35, 1), seen('p1', 0.15), FRAME)?.course).toBeCloseTo(LEFT)
+    // Toward the entrance is bearing 0, like every bearing of the plan.
+    const inward = trackAt(standing('p1', 0.35, 1), { ...seen('p1', 0.35), at: place(0.35, 1) }, FRAME)
+    expect(Math.abs(inward?.course ?? 0)).toBeCloseTo(Math.PI)
   })
 
-  it('is kept all the way there, and is none once it has stopped', () => {
-    const shown = play(standing('i1', 0.75, 1), 0.55, 3)
-    const arrived = shown.findIndex(({ x_norm }) => x_norm === 0.55)
+  it('is kept all the way there, and once it has stopped', () => {
+    const shown = play(standing('p1', 0.75, 1), 0.55, 3)
 
-    expect(shown.slice(0, arrived + 1).every(({ heading }) => heading === -1)).toBe(true)
-    expect(shown.slice(arrived + 1).every(({ heading }) => heading === 0)).toBe(true)
+    expect(shown.every(({ course }) => Math.abs(course - LEFT) < 1e-9)).toBe(true)
   })
 
-  it('is none for a newly raised Alert, whatever stood before: no move, no step, no stride', () => {
-    const walking = last(play(standing('i1', 0.15, 1), 0.75, 0.5))
-    expect(walking.heading).toBe(1)
+  it('is none for someone newly seen, whatever stood before: no move, no step, no stride', () => {
+    const walking = last(play(standing('p1', 0.15, 1), 0.75, 0.5))
+    expect(walking.walking).toBeGreaterThan(0.95)
 
-    for (const raised of [trackAt(walking, seen('i2', 0.2), FRAME), trackAt(trackAt(walking, null, FRAME), seen('i1', 0.2), FRAME)]) {
-      expect(raised?.x_norm).toBe(0.2)
-      expect(raised?.heading).toBe(0)
+    for (const raised of [trackAt(walking, seen('p1', 0.2, 'a2'), FRAME), trackAt(trackAt(walking, null, FRAME), seen('p1', 0.2), FRAME)]) {
+      expect(raised?.at).toEqual(place(0.2))
       expect(raised?.walked).toBe(0)
       expect(raised?.walking).toBe(0)
       expect(raised?.pace).toBe(0)
     }
   })
 
-  it('is none once the Alert is cleared: the figurine fades out where it stopped', () => {
-    const walking = last(play(standing('i1', 0.15, 1), 0.75, 0.5))
-    expect(trackAt(walking, null, FRAME)?.heading).toBe(0)
+  it('turns to the way back as it walks when its person walks back, without a jolt and without stopping', () => {
+    const there = last(play(standing('p1', 0.15, 1), 0.55, 0.6))
+    expect(there.walking).toBeGreaterThan(0.95)
+    expect(there.course).toBeCloseTo(RIGHT)
+
+    // Half a second of its way back: it has not got there yet.
+    const back = play(there, 0.15, 0.5)
+    // How far round it still is from the way it goes.
+    const off = [there, ...back].map(({ course }) => Math.abs(Math.atan2(Math.sin(course - LEFT), Math.cos(course - LEFT))))
+
+    expect(off).toEqual([...off].sort((a, b) => b - a))
+    expect(off.every((angle, frame) => (off[frame - 1] ?? angle) - angle < 0.5)).toBe(true)
+    expect(off.at(-1)).toBeLessThan(0.1)
+    expect(back.every(({ walking }) => walking > 0.95)).toBe(true)
+    expect(back.every(({ at }, frame) => at.x < (back[frame - 1]?.at.x ?? there.at.x))).toBe(true)
   })
 })
 
 describe('the ground the figurine covers', () => {
-  it('is the arc between where it stood and where it has walked to, in scene units', () => {
-    const shown = play(standing('i1', 0.15, 1), 0.35, 3)
+  it('is how far it is from where it stood to where it has walked to, in scene units', () => {
+    const shown = play(standing('p1', 0.15, 1), 0.35, 3)
 
-    expect(last(shown).walked).toBeCloseTo(arc(0.15, 0.35), 9)
-    expect(shown[29]?.walked).toBeCloseTo(arc(0.15, shown[29]?.x_norm ?? Number.NaN), 9)
+    expect(last(shown).walked).toBeCloseTo(0.2, 9)
+    expect(shown[29]?.walked).toBeCloseTo((shown[29]?.at.x ?? Number.NaN) - 0.15, 9)
   })
 
   it('only adds up: walking back covers as much ground again', () => {
-    const there = last(play(standing('i1', 0.15, 1), 0.35, 3))
+    const there = last(play(standing('p1', 0.15, 1), 0.35, 3))
     const back = play(there, 0.15, 3)
 
     expect(back.every(({ walked }, frame) => walked >= (back[frame - 1]?.walked ?? there.walked))).toBe(true)
-    expect(last(back).walked).toBeCloseTo(2 * arc(0.15, 0.35), 9)
+    expect(last(back).walked).toBeCloseTo(0.4, 9)
   })
 
   it('does not grow while it stands: no step is taken without ground covered', () => {
-    const there = last(play(standing('i1', 0.15, 1), 0.35, 3))
+    const there = last(play(standing('p1', 0.15, 1), 0.35, 3))
     const waiting = play(there, 0.35, 5)
 
     expect(waiting.every(({ walked }) => walked === there.walked)).toBe(true)
@@ -274,7 +326,7 @@ describe('the ground the figurine covers', () => {
 
 describe("the figurine's stride", () => {
   it('is got into as it sets off: eased, and all but full in a few tenths of a second', () => {
-    const shown = play(standing('i1', 0.15, 1), 0.35, 1)
+    const shown = play(standing('p1', 0.15, 1), 0.35, 1)
     const strides = shown.map(({ walking }) => walking)
 
     expect(strides[0]).toBeGreaterThan(0)
@@ -285,16 +337,17 @@ describe("the figurine's stride", () => {
     expect(SET_OFF).toBeGreaterThan(0)
   })
 
-  it('is toward the left as well: the same, the other way', () => {
-    const toRight = last(play(standing('i1', 0.35, 1), 0.55, 0.3))
-    const toLeft = last(play(standing('i1', 0.35, 1), 0.15, 0.3))
+  it('is the same whichever way it walks', () => {
+    const toRight = last(play(standing('p1', 0.35, 1), 0.55, 0.3))
+    const toLeft = last(play(standing('p1', 0.35, 1), 0.15, 0.3))
 
-    expect(toLeft.walking).toBeCloseTo(-toRight.walking, 9)
+    expect(toLeft.walking).toBeCloseTo(toRight.walking, 9)
+    expect(toLeft.walking).toBeGreaterThan(0.5)
   })
 
   it('is got out of once it has stopped: back to rest, for good, without a jolt', () => {
-    const shown = play(standing('i1', 0.15, 1), 0.35, 4)
-    const arrived = shown.findIndex(({ x_norm }) => x_norm === 0.35)
+    const shown = play(standing('p1', 0.15, 1), 0.35, 4)
+    const arrived = shown.findIndex(({ at }) => at.x === 0.35)
     const strides = shown.slice(arrived).map(({ walking }) => walking)
 
     expect(strides).toEqual([...strides].sort((a, b) => b - a))
@@ -302,55 +355,42 @@ describe("the figurine's stride", () => {
     expect(shown[arrived + 30]?.walking).toBeLessThan(0.05)
     expect(last(shown).walking).toBe(0)
   })
-
-  it('turns round through rest when the intruder walks back, without a jolt', () => {
-    const there = last(play(standing('i1', 0.15, 1), 0.55, 0.6))
-    expect(there.walking).toBeGreaterThan(0.95)
-
-    // Half a second of its way back: it has not got there yet.
-    const back = play(there, 0.15, 0.5)
-    const strides = back.map(({ walking }) => walking)
-
-    expect(strides).toEqual([...strides].sort((a, b) => b - a))
-    expect(strides.every((stride, frame) => (strides[frame - 1] ?? there.walking) - stride < 0.3)).toBe(true)
-    expect(last(back).walking).toBeLessThan(-0.95)
-  })
 })
 
 describe('the figurine on the mock feed', () => {
-  it('crosses the field from left to right, walking all the way without marking time', () => {
+  it('walks in from the fence toward the Enclosure, all the way without marking time', () => {
     const shown = crossing()
+    const [from, to] = [mockPlace(MOCK[0]), mockPlace(MOCK[3])]
     // From the frame the camera first sees it move.
-    const moving = shown.slice(shown.findIndex(({ heading }) => heading !== 0))
+    const moving = shown.slice(shown.findIndex(({ walking }) => walking > 0))
+    const fromCentre = ({ x, z }: GroundPoint) => Math.hypot(x, z)
 
     expect(moving.length).toBeGreaterThan(170)
-    expect(moving.every(({ heading }) => heading === 1)).toBe(true)
-    expect(moving.every(({ x_norm }, frame) => x_norm > (moving[frame - 1]?.x_norm ?? 0.15))).toBe(true)
-    expect(last(shown).x_norm).toBeGreaterThan(0.7)
-    expect(last(shown).x_norm).toBeLessThanOrEqual(0.75)
+    expect(moving.every(({ at }, frame) => between(at, moving[frame - 1]?.at ?? from) > 0)).toBe(true)
+    expect(fromCentre(to)).toBeLessThan(fromCentre(from) - 0.8)
+    expect(between(last(shown).at, to)).toBeLessThan(0.15)
   })
 
   it('keeps a walking pace from one sighting to the next: no more than a third faster or slower', () => {
     const shown = crossing()
-    const paces = shown.filter(({ heading }) => heading !== 0).map(({ pace }) => pace)
+    const paces = shown.filter(({ walking, seen }) => seen && walking > 0).map(({ pace }) => pace)
 
     expect(Math.max(...paces) / Math.min(...paces)).toBeLessThan(4 / 3)
-    expect(Math.min(...paces)).toBeGreaterThan(0.15)
-    expect(Math.max(...paces)).toBeLessThan(0.25)
+    expect(Math.min(...paces)).toBeGreaterThan(0.25)
+    expect(Math.max(...paces)).toBeLessThan(0.5)
   })
 
   it('is in full stride from its first steps to its last', () => {
     const shown = crossing()
-    const first = shown.findIndex(({ heading }) => heading !== 0)
+    const first = shown.findIndex(({ walking }) => walking > 0)
 
     expect(shown.slice(first + 30).every(({ walking }) => walking > 0.95)).toBe(true)
-    expect(last(shown).walked).toBeCloseTo(arc(0.15, last(shown).x_norm), 9)
   })
 
   it('is the same at 30 images a second', () => {
     const [atSixty, atThirty] = [last(crossing(60)), last(crossing(30))]
 
-    expect(atThirty.x_norm).toBeCloseTo(atSixty.x_norm, 2)
+    expect(between(atThirty.at, atSixty.at)).toBeLessThan(0.02)
     expect(atThirty.walked).toBeCloseTo(atSixty.walked, 1)
   })
 })
@@ -358,30 +398,30 @@ describe('the figurine on the mock feed', () => {
 describe('the last known position', () => {
   it('is none while the intruder is seen, and none where there never was one', () => {
     expect(lastKnown(null)).toBeNull()
-    expect(lastKnown(standing('i1', 0.55, 3))).toBeNull()
-    expect(lastKnown(last(play(standing('i1', 0.15, 1), 0.35, 0.5)))).toBeNull()
+    expect(lastKnown(standing('p1', 0.55, 3))).toBeNull()
+    expect(lastKnown(last(play(standing('p1', 0.15, 1), 0.35, 0.5)))).toBeNull()
   })
 
-  it('is where the figurine last stood, from the frame its Alert is cleared on', () => {
-    const walking = last(play(standing('i1', 0.3, 3), 0.62, 0.5))
+  it('is where the figurine last stood, from the frame it is first missed on', () => {
+    const walking = last(play(standing('p1', 0.3, 3), 0.62, 0.5))
     const cleared = trackAt(walking, null, FRAME)
 
-    expect(walking.x_norm).toBeLessThan(0.62)
-    expect(lastKnown(cleared)?.x_norm).toBe(walking.x_norm)
+    expect(walking.at.x).toBeLessThan(0.62)
+    expect(lastKnown(cleared)?.at).toEqual(walking.at)
     expect(cleared?.lost).toBe(0)
   })
 
   it('stays there for about five seconds', () => {
-    const left = lose(standing('i1', 0.62, 3), LAST_KNOWN_SECONDS)
+    const left = lose(standing('p1', 0.62, 3), LAST_KNOWN_SECONDS)
 
     expect(LAST_KNOWN_SECONDS).toBeGreaterThanOrEqual(4)
     expect(LAST_KNOWN_SECONDS).toBeLessThanOrEqual(6)
-    expect(left.every((track) => lastKnown(track)?.x_norm === 0.62)).toBe(true)
+    expect(left.every((track) => lastKnown(track)?.at.x === 0.62)).toBe(true)
     expect(left.at(-1)?.lost).toBeCloseTo(LAST_KNOWN_SECONDS, 1)
   })
 
   it('is nothing once that time and a fade have passed, for good', () => {
-    const cleared = standing('i1', 0.62, 3)
+    const cleared = standing('p1', 0.62, 3)
 
     expect(lostFor(cleared, LAST_KNOWN_SECONDS + FADE_SECONDS - 0.1)).not.toBeNull()
     expect(lostFor(cleared, LAST_KNOWN_SECONDS + FADE_SECONDS + 0.1)).toBeNull()
@@ -390,8 +430,8 @@ describe('the last known position', () => {
   })
 
   it('is the same whatever the frame rate, and in one step', () => {
-    // The frame its Alert is cleared on starts the count, however long that frame took.
-    const cleared = trackAt(standing('i1', 0.62, 3), null, 60) as Track
+    // The frame it is first missed on starts the count, however long that frame took.
+    const cleared = trackAt(standing('p1', 0.62, 3), null, 60) as Track
     const atSixty = lostFor(cleared, LAST_KNOWN_SECONDS + FADE_SECONDS / 2, 60)
 
     expect(cleared.lost).toBe(0)
@@ -407,18 +447,28 @@ describe('the last known position', () => {
   })
 
   it('does not go back when the clock does', () => {
-    const left = lostFor(standing('i1', 0.62, 3), 2)
+    const left = lostFor(standing('p1', 0.62, 3), 2)
     expect(trackAt(left, null, -1)?.lost).toBe(left?.lost)
+  })
+
+  it('is left by anyone the camera saw, followed or not', () => {
+    const other = { ...standing('p2', 0.4, 3), followed: false }
+    const left = lose(other, LAST_KNOWN_SECONDS + FADE_SECONDS + 0.5)
+
+    expect(figurineLevel(left[0] as Track)).toBe(1)
+    expect(lastKnown(left[60] ?? null)).toEqual({ at: other.at, level: 1 })
+    expect(left.filter((track) => track !== null).length / 60).toBeCloseTo(LAST_KNOWN_SECONDS + FADE_SECONDS, 1)
+    expect(left.at(-1)).toBeNull()
   })
 })
 
 describe('the outline the figurine leaves', () => {
-  // How much of it shows on each frame, from the one the Alert is cleared on until nothing is left.
+  // How much of it shows on each frame, from the one it is first missed on until nothing is left.
   const levels = (cleared: Track) =>
     lose(cleared, LAST_KNOWN_SECONDS + 2).flatMap((track) => (track ? [lastKnown(track)?.level ?? Number.NaN] : []))
 
   it('comes as the figurine goes, in a fade: one fades in as much as the other fades out', () => {
-    const left = lose(standing('i1', 0.62, 3), FADE_SECONDS + 0.5).map((track) => track as Track)
+    const left = lose(standing('p1', 0.62, 3), FADE_SECONDS + 0.5).map((track) => track as Track)
 
     expect(lastKnown(left[0] ?? null)?.level).toBe(0)
     expect(figurineLevel(left[0] as Track)).toBe(1)
@@ -431,7 +481,7 @@ describe('the outline the figurine leaves', () => {
   })
 
   it('shows whole from the end of that fade until the five seconds are over', () => {
-    const shown = levels(standing('i1', 0.62, 3))
+    const shown = levels(standing('p1', 0.62, 3))
     const whole = shown.slice(Math.ceil(FADE_SECONDS * 60) + 1, Math.floor(LAST_KNOWN_SECONDS * 60))
 
     expect(whole.length).toBeGreaterThan(4 * 60)
@@ -439,7 +489,7 @@ describe('the outline the figurine leaves', () => {
   })
 
   it('then goes out in a fade, without a cut', () => {
-    const shown = levels(standing('i1', 0.62, 3))
+    const shown = levels(standing('p1', 0.62, 3))
     const going = shown.slice(Math.floor(LAST_KNOWN_SECONDS * 60))
     const steps = going.slice(1).map((level, frame) => (going[frame] ?? 0) - level)
 
@@ -449,21 +499,21 @@ describe('the outline the figurine leaves', () => {
     expect(going.at(-1)).toBeLessThan(0.01)
   })
 
-  it('never shows with the figurine whole: the figurine is all there is while its Alert is active', () => {
-    const walking = play(standing('i1', 0.15, 1), 0.35, 1)
+  it('never shows with the figurine whole: the figurine is all there is while it is seen', () => {
+    const walking = play(standing('p1', 0.15, 1), 0.35, 1)
 
     expect(walking.every((track) => figurineLevel(track) === 1 && lastKnown(track) === null)).toBe(true)
-    expect(figurineLevel(lostFor(standing('i1', 0.62, 3), LAST_KNOWN_SECONDS) as Track)).toBe(0)
+    expect(figurineLevel(lostFor(standing('p1', 0.62, 3), LAST_KNOWN_SECONDS) as Track)).toBe(0)
   })
 
-  it('stands still, at rest: a figurine cleared in mid-stride comes out of it and no longer moves', () => {
-    const walking = last(play(standing('i1', 0.15, 1), 0.75, 0.5))
+  it('stands still, at rest: a figurine lost in mid-stride comes out of it and no longer moves', () => {
+    const walking = last(play(standing('p1', 0.15, 1), 0.75, 0.5))
     expect(walking.walking).toBeGreaterThan(0.95)
 
     const left = lose(walking, LAST_KNOWN_SECONDS).map((track) => track as Track)
     const strides = left.map((track) => track.walking)
 
-    expect(left.every((track) => track.x_norm === walking.x_norm && track.heading === 0)).toBe(true)
+    expect(left.every((track) => track.at === walking.at && track.course === walking.course)).toBe(true)
     expect(left.every((track) => track.walked === walking.walked && track.age === walking.age)).toBe(true)
     expect(strides).toEqual([...strides].sort((a, b) => b - a))
     expect(strides.every((stride, frame) => (strides[frame - 1] ?? walking.walking) - stride < 0.15)).toBe(true)
@@ -473,62 +523,164 @@ describe('the outline the figurine leaves', () => {
   })
 })
 
+describe('what tells someone the camera sees', () => {
+  it('comes in a fade as the figurine appears, and is whole from then on', () => {
+    const shown = play(standing('p1', 0.55), 0.55, 1)
+    const levels = shown.map(marksLevel)
+
+    expect(marksLevel(standing('p1', 0.55))).toBe(0)
+    expect(levels).toEqual([...levels].sort((a, b) => a - b))
+    expect(levels[Math.round((FADE_SECONDS / 2) * 60) - 1]).toBeCloseTo(0.5, 1)
+    expect(levels.at(-1)).toBe(1)
+  })
+
+  it('goes with the figurine once they are no longer seen', () => {
+    for (const track of lose(standing('p1', 0.62, 3), 1)) {
+      expect(marksLevel(track as Track)).toBe(figurineLevel(track as Track))
+    }
+  })
+})
+
+describe('the figurines of an intrusion', () => {
+  const told = (alertId: string, ...people: Sighting[]): Intrusion => ({ alertId, people })
+  const person = (key: string, x: number, followed = false): Sighting => ({ key, at: place(x), followed })
+  const after = (tracks: readonly Track[], intrusion: Intrusion | null, seconds: number) => {
+    let now = tracks
+    for (let frame = 0; frame < Math.round(seconds * 60); frame++) now = tracksAt(now, intrusion, FRAME)
+    return now
+  }
+
+  it('are none while there is no intrusion', () => {
+    expect(tracksAt(NO_TRACKS, null, FRAME)).toEqual([])
+  })
+
+  it('follow one intruder like its track alone does', () => {
+    let tracks = NO_TRACKS
+    let alone: Track | null = null
+
+    for (const x of [0.15, 0.35, 0.35, null, null]) {
+      tracks = tracksAt(tracks, x === null ? null : told('a1', person('p1', x, true)), FRAME)
+      alone = trackAt(alone, x === null ? null : seen('p1', x), FRAME)
+      expect(tracks).toEqual([alone])
+    }
+  })
+
+  it('stand one for each person the Alert tells of, the one the camera follows first', () => {
+    const tracks = tracksAt(NO_TRACKS, told('a1', person('p1', 0.5, true), person('p3', 0.2), person('p2', 0.8)), FRAME)
+
+    expect(tracks.map(({ key, followed, at }) => [key, followed, at.x])).toEqual([
+      ['p1', true, 0.5],
+      ['p3', false, 0.2],
+      ['p2', false, 0.8],
+    ])
+  })
+
+  it('walk each to where their own person is seen, whatever the order the Alert tells them in', () => {
+    const before = after(NO_TRACKS, told('a1', person('p1', 0.5, true), person('p2', 0.8)), 1)
+    const tracks = after(before, told('a1', person('p2', 0.7), person('p1', 0.4, true)), 3)
+
+    expect(tracks.map(({ key, at, walked }) => [key, at.x, walked.toFixed(3)])).toEqual([
+      ['p2', 0.7, '0.100'],
+      ['p1', 0.4, '0.100'],
+    ])
+  })
+
+  it('leave the outline of someone the Alert no longer tells of, where they stood, the others as they were', () => {
+    const before = after(NO_TRACKS, told('a1', person('p1', 0.5, true), person('p2', 0.8)), 1)
+    const [stays, leaves] = tracksAt(before, told('a1', person('p1', 0.5, true)), FRAME)
+
+    expect(stays).toMatchObject({ key: 'p1', seen: true })
+    expect(leaves).toMatchObject({ key: 'p2', seen: false, at: place(0.8), lost: 0 })
+    const gone = after(before, told('a1', person('p1', 0.5, true)), 1)
+    expect(lastKnown(gone[1] ?? null)).toEqual({ at: place(0.8), level: 1 })
+    const later = after(before, told('a1', person('p1', 0.5, true)), LAST_KNOWN_SECONDS + FADE_SECONDS + 0.1)
+    expect(later.map(({ key }) => key)).toEqual(['p1'])
+  })
+
+  it('hand the camera over to another person without moving anyone: the one it followed leaves its outline', () => {
+    const before = after(NO_TRACKS, told('a1', person('p1', 0.5, true), person('p2', 0.8)), 1)
+    const handed = after(before, told('a1', person('p2', 0.8, true)), 1)
+
+    expect(handed.map(({ key, seen, followed }) => [key, seen, followed])).toEqual([
+      ['p2', true, true],
+      ['p1', false, true],
+    ])
+    expect(handed[0]?.age).toBeCloseTo(2, 1)
+    expect(lastKnown(handed[1] ?? null)).toEqual({ at: place(0.5), level: 1 })
+  })
+
+  it('leave the last known position of everyone the camera saw once the Alert is cleared', () => {
+    const before = after(NO_TRACKS, told('a1', person('p1', 0.5, true), person('p2', 0.8)), 1)
+    const cleared = after(before, null, 1)
+
+    expect(cleared.map(({ key }) => key)).toEqual(['p1', 'p2'])
+    expect(cleared.map(lastKnown)).toEqual([
+      { at: place(0.5), level: 1 },
+      { at: place(0.8), level: 1 },
+    ])
+    expect(after(before, null, LAST_KNOWN_SECONDS + FADE_SECONDS + 0.1)).toEqual([])
+  })
+
+  it('never draw more than the Twin has figurines for: those lost longest go first', () => {
+    let tracks = NO_TRACKS
+    for (let round = 0; round < 6; round++) {
+      const people = [0, 1, 2, 3, 4].map((n) => person(`r${round}p${n}`, n / 10, true))
+      tracks = tracksAt(tracks, told('a1', ...people), FRAME)
+    }
+
+    expect(tracks).toHaveLength(MOST_FIGURINES)
+    expect(tracks.slice(0, 5).map(({ key }) => key)).toEqual(['r5p0', 'r5p1', 'r5p2', 'r5p3', 'r5p4'])
+    expect(tracks.slice(5).every(({ seen }) => !seen)).toBe(true)
+    expect(tracks.slice(5, 10).every(({ key }) => key.startsWith('r4'))).toBe(true)
+  })
+})
+
 describe('a new intruder while the last known position still shows', () => {
-  // The first intruder's Alert cleared for `seconds`, then a second one raised at `x_norm`: every frame from
-  // that one, for a second.
-  function raisedAfter(seconds: number, x_norm: number): Tracks[] {
-    let tracks: Tracks = { ...NO_TRACKS, intruder: standing('i1', 0.62, 3) }
+  const told = (alertId: string, x: number): Intrusion => ({ alertId, people: [{ key: 'p1', at: place(x), followed: true }] })
+  // The first intruder's Alert cleared for `seconds`, then a second one raised at `x`: every frame from that
+  // one, for a second.
+  function raisedAfter(seconds: number, x: number): Track[][] {
+    let tracks: readonly Track[] = [standing('p1', 0.62, 3)]
     for (let frame = 0; frame < Math.round(seconds * 60); frame++) tracks = tracksAt(tracks, null, FRAME)
 
-    const shown: Tracks[] = []
+    const shown: Track[][] = []
     for (let frame = 0; frame < 60; frame++) {
-      tracks = tracksAt(tracks, seen('i2', x_norm), FRAME)
-      shown.push(tracks)
+      tracks = tracksAt(tracks, told('a2', x), FRAME)
+      shown.push([...tracks])
     }
     return shown
   }
-
-  it('follows one intruder like its track alone does, with no former one', () => {
-    let tracks = NO_TRACKS
-    let alone: Track | null = null
-    expect(tracksAt(tracks, null, FRAME)).toEqual(NO_TRACKS)
-
-    for (const intruder of [seen('i1', 0.15), seen('i1', 0.35), seen('i1', 0.35), null, null]) {
-      tracks = tracksAt(tracks, intruder, FRAME)
-      alone = trackAt(alone, intruder, FRAME)
-      expect(tracks).toEqual({ intruder: alone, former: null })
-    }
-  })
+  const former = (tracks: readonly Track[]) => tracks.find(({ alertId }) => alertId === 'a1') ?? null
 
   it('stands the new one at its own place, at rest, without walking there', () => {
     const [raised] = raisedAfter(2, 0.2)
 
-    expect(raised?.intruder).toEqual(standing('i2', 0.2))
-    expect(lastKnown(raised?.intruder ?? null)).toBeNull()
+    expect(raised?.[0]).toEqual(standing('p1', 0.2, 0, 'a2'))
+    expect(lastKnown(raised?.[0] ?? null)).toBeNull()
   })
 
   it('keeps the former one where it was, and puts its outline out in a fade', () => {
     const shown = raisedAfter(2, 0.2)
-    const former = shown.map(({ former }) => lastKnown(former))
-    const going = former.flatMap((left) => (left ? [left.level] : []))
+    const left = shown.map((tracks) => lastKnown(former(tracks)))
+    const going = left.flatMap((known) => (known ? [known.level] : []))
     const steps = going.slice(1).map((level, frame) => (going[frame] ?? 0) - level)
 
-    expect(former[0]).toEqual({ x_norm: 0.62, level: 1 })
-    expect(former.every((left) => left === null || left.x_norm === 0.62)).toBe(true)
+    expect(left[0]).toEqual({ at: place(0.62), level: 1 })
+    expect(left.every((known) => known === null || known.at.x === 0.62)).toBe(true)
     expect(Math.min(...steps)).toBeGreaterThan(0)
     expect(Math.max(...steps)).toBeLessThan(0.05)
     expect(going.length / 60).toBeCloseTo(FADE_SECONDS, 1)
-    expect(shown.at(-1)?.former).toBeNull()
+    expect(former(shown.at(-1) ?? [])).toBeNull()
   })
 
   it('puts out from what shows of it an outline that had not fully come', () => {
-    const before = lastKnown(lostFor(standing('i1', 0.62, 3), FADE_SECONDS / 4 + FRAME))
+    const before = lastKnown(lostFor(standing('p1', 0.62, 3), FADE_SECONDS / 4 + FRAME))
     const shown = raisedAfter(FADE_SECONDS / 4, 0.2)
-    const going = shown.flatMap(({ former }) => (former ? [lastKnown(former)?.level ?? Number.NaN] : []))
+    const going = shown.flatMap((tracks) => (former(tracks) ? [lastKnown(former(tracks))?.level ?? Number.NaN] : []))
 
     expect(before?.level).toBeGreaterThan(0.05)
     expect(before?.level).toBeLessThan(0.5)
-    expect(going[0]).toBeLessThanOrEqual(before?.level ?? Number.NaN)
+    expect(going[0]).toBeLessThanOrEqual((before?.level ?? Number.NaN) + 1e-9)
     expect(going[0]).toBeCloseTo(before?.level ?? Number.NaN, 1)
     expect(going).toEqual([...going].sort((a, b) => b - a))
     expect(going.length / 60).toBeLessThan(FADE_SECONDS / 2)
@@ -537,20 +689,20 @@ describe('a new intruder while the last known position still shows', () => {
   it('leaves no former one once the last known position has gone out by itself', () => {
     const [raised] = raisedAfter(LAST_KNOWN_SECONDS + FADE_SECONDS + 0.5, 0.2)
 
-    expect(raised).toEqual({ intruder: standing('i2', 0.2), former: null })
+    expect(raised).toEqual([standing('p1', 0.2, 0, 'a2')])
   })
 
   it('leaves none either when another Alert is raised while the first is active: that intruder is still seen', () => {
-    const tracks = tracksAt({ ...NO_TRACKS, intruder: standing('i1', 0.62, 3) }, seen('i2', 0.2), FRAME)
+    const tracks = tracksAt([standing('p1', 0.62, 3)], told('a2', 0.2), FRAME)
 
-    expect(tracks).toEqual({ intruder: standing('i2', 0.2), former: null })
+    expect(tracks).toEqual([standing('p1', 0.2, 0, 'a2')])
   })
 
   it('leaves the new one its own last known position once it is cleared in turn', () => {
-    let tracks = raisedAfter(2, 0.2).at(-1) ?? NO_TRACKS
+    let tracks: readonly Track[] = raisedAfter(2, 0.2).at(-1) ?? []
     for (let frame = 0; frame < 60; frame++) tracks = tracksAt(tracks, null, FRAME)
 
-    expect(lastKnown(tracks.intruder)).toEqual({ x_norm: 0.2, level: 1 })
-    expect(tracks.former).toBeNull()
+    expect(tracks).toHaveLength(1)
+    expect(lastKnown(tracks[0] ?? null)).toEqual({ at: place(0.2), level: 1 })
   })
 })

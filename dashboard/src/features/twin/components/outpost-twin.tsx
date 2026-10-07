@@ -17,6 +17,7 @@ import type { SceneProps, StatusGrade } from '../utils/scene'
 import { SITE } from '../utils/site'
 import { Dust } from './dust'
 import { Enclosure } from './enclosure'
+import { Floodlights } from './floodlights'
 import { Halo } from './halo'
 import { Haze } from './haze'
 import { Intruder } from './intruder'
@@ -126,7 +127,8 @@ export interface OutpostTwinProps {
 // hologram tied to the lens, which walks to where `x_norm` places it, in the brackets of its detection and
 // under the vision model's confidence, and leaves its outline for a few seconds where it was last seen once
 // the Alert is cleared; a predictive drift pulses the Probes it names, its score on a label; a presence blinks the Enclosure's
-// PIR dome and sends an amber sweep round the fence; a clap sends a wave of light from the Enclosure over the socle.
+// PIR dome and sends an amber sweep round the fence; either one, someone near the site or inside it, lights the
+// floodlights on the perimeter in white, each a pool on the ground at its foot; a clap sends a wave of light from the Enclosure over the socle.
 // The camera orbits the site, and turns to an Alert as it is raised: it faces where it happens for a few
 // seconds, then orbits again. Without its
 // signal it all turns grey and says so: what it shows is no longer live. It fills its parent: give that the
@@ -156,11 +158,12 @@ export function OutpostTwin({ scene, frames, wholeStage = false }: OutpostTwinPr
         <Dust />
         <Haze density={scene.haze} />
         <NoiseWaves frames={frames} />
-        <Perimeter sectorLit={scene.sector.lit} presence={scene.presence.active} />
+        <Perimeter sectorLit={scene.sector.lit} pan={scene.camera.pan} presence={scene.presence.active} />
+        <Floodlights {...scene.floodlights} />
         <Intruder intruder={scene.intruder} />
         {/* Where the site plan stands it, turned the way its lens looks. */}
         <group position={[SITE.enclosure.x, 0, SITE.enclosure.z]} rotation={[0, SITE.enclosure.heading, 0]}>
-          <Enclosure {...scene.enclosure} presence={scene.presence.active} />
+          <Enclosure {...scene.enclosure} presence={scene.presence.active} pan={scene.camera.pan} />
         </group>
         <OrbitCamera anchor={scene.anchor} frames={frames} wholeStage={wholeStage} />
         <Halo saturation={scene.signalLost ? 0 : 1} />

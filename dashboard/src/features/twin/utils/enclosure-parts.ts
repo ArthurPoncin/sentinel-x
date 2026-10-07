@@ -19,8 +19,9 @@ export type EnclosurePart = keyof typeof ENCLOSURE_PARTS
 
 // What the site plan needs to know of the Enclosure's shape: the scale it is drawn at, and at that scale 1
 // the radius of its foot on the ground and where its lens is from the mast's axis, `x` across its front, `y`
-// above the ground and `z` out of it.
-export const ENCLOSURE_SHAPE = { scale: 1.25, foot: 0.48, lens: { x: -0.38, y: 1.84, z: 0.55 } } as const
+// above the ground and `z` out of it. The camera stands on the roof, on a servo that turns it: its lens is
+// on the axis it turns about.
+export const ENCLOSURE_SHAPE = { scale: 1.25, foot: 0.48, lens: { x: -0.38, y: 2.66, z: 0.2 } } as const
 
 // What the Enclosure has engraved on its body.
 export const ENGRAVING = { maker: 'AetherCorp', model: 'SENTINEL-X', serial: 'SN SX-01-2026-0001' } as const

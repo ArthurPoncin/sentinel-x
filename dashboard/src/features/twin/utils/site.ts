@@ -65,13 +65,14 @@ export const SITE = {
     },
   },
   // Where the Enclosure's mast stands, the ground kept for its foot, and the bearing it faces: beside the
-  // way in, so that its lens, which is off the mast, looks straight out through the gate.
+  // way in, so that its camera, which is off the mast, looks straight out through the gate when it rests.
   enclosure: { x: -0.5, z: 0.5, radius: 0.6, heading: 0 },
-  // The camera's horizontal field of view, in radians: 60°, to set to the lens once the camera is mounted.
+  // The camera's horizontal field of view, in radians: 60°, to set to the lens once the camera is mounted,
+  // with the vision service's CAMERA_FOV_DEG.
   camera: { fov: Math.PI / 3 },
   // The signage of a sensitive site. A no-entry sign hangs on the fence on each side of the gate, `width`
-  // along the fence, in the middle of a bay: the second from the gate, since whoever the camera sees through
-  // the gate stands in the first. The danger zone is marked on the ground around the gas tank: clear ground
+  // along the fence, in the middle of a bay: the second from the gate, clear of the way in. Whoever the
+  // camera sees stands inside the fence, `STANDING.clear` from its line: never in a plate. The danger zone is marked on the ground around the gas tank: clear ground
   // `margin` wide around its footprint, then a hatched band `band` wide. A gas pictogram is on the tank's
   // barrel, on the side that faces `bearing`: `width` along the tank, `height` round it. The site's name is on
   // the hall's wall that faces `bearing`: its middle `along` from the wall's, toward the right of whoever
@@ -102,6 +103,27 @@ export const SITE = {
   // the gate's bearing, in radians: from one no-entry sign round to the other, the way in and the signs stay
   // in sight.
   rocks: { seed: 101, count: 60, radius: [0.04, 0.145], squat: [0.7, 1.3], off: 0.03, clear: 0.4 },
+  // The floodlights: a mast at each of `bearings`, `radius` from the socle's centre, just inside the fence and
+  // none on the side of the gate, which the camera watches. A mast is `height` tall and keeps the ground
+  // `foot` around its axis. Its head looks into the site and down: the pool it lights on the ground is
+  // `pool.radius` wide around a point `pool.throw` in from its foot.
+  floodlights: {
+    radius: 2.5,
+    bearings: [0.6, 1.7, Math.PI, -2.2, -1.3],
+    height: 0.9,
+    foot: 0.05,
+    pool: { throw: 0.2, radius: 0.5 },
+  },
+} as const
+
+// Where someone the camera sees stands along its sight line.
+export const STANDING = {
+  // How far clear of the fence's line, of the Enclosure's own ground and of what stands on the site: the ring
+  // at their feet, and a little more. More than half a no-entry sign is wide, which hangs on that line.
+  clear: 0.2,
+  // The share of the image's height someone takes at the far end of where they can stand, by the fence, and
+  // at the near end, by the Enclosure: there they fill the image.
+  tall: { far: 0.3, near: 1 },
 } as const
 
 // The point `distance` away from the socle's centre along `bearing`.
@@ -212,6 +234,23 @@ export function hallSign(): SignPoint {
   }
 }
 
+// A floodlight of the site: where its mast stands, the bearing its head looks along, into the site, and the
+// middle of the pool it lights on the ground.
+export interface Floodlight extends SignPoint {
+  pool: GroundPoint
+}
+
+// The floodlights, where the plan stands them: each on its bearing from the socle's centre, looking back at it.
+export function floodlights(): Floodlight[] {
+  const { radius, bearings, pool } = SITE.floodlights
+
+  return bearings.map((bearing) => ({
+    ...toward(bearing, radius),
+    bearing: bearing + Math.PI,
+    pool: toward(bearing, radius - pool.throw),
+  }))
+}
+
 // The point `share` of the way along the gas pipe, over the ground: 0 at the hall's wall, 1 at the tank. The
 // haze of a gas leak seeps from there.
 export function alongPipe(share: number): GroundPoint {
@@ -230,7 +269,8 @@ export function alongPipe(share: number): GroundPoint {
   return rest.at(-1) ?? start
 }
 
-// Where the camera's lens is, over the ground: on the Enclosure's front, off its mast.
+// Where the camera's lens is, over the ground: on the Enclosure's roof, off its mast. The camera turns about
+// that very point: it is the same whichever way it looks.
 export function lensPoint(): GroundPoint {
   const { x, z, heading } = SITE.enclosure
   const { scale, lens } = ENCLOSURE_SHAPE
@@ -247,31 +287,115 @@ export function lensHeight(): number {
   return scale * lens.y
 }
 
-// Where the camera's sight meets the fence, for what stands at `xNorm` across its image: 0 = left edge,
-// 1 = right edge. The intruder of an `intrusion` Alert stands there.
-export function watchedPoint(xNorm: number): GroundPoint {
-  const { enclosure, camera, fence } = SITE
+// The bearing the camera sights along for what stands at `xNorm` across its image, 0 = left edge, 1 = right
+// edge, once turned by `pan` radians from where it rests. A lens spreads its image evenly over a plane, not
+// over an angle. Its right is toward smaller bearings, and so is the way a positive `pan` turns it.
+export function sightBearing(xNorm: number, pan = 0): number {
+  const { enclosure, camera } = SITE
+  return enclosure.heading - pan - Math.atan((2 * xNorm - 1) * Math.tan(camera.fov / 2))
+}
+
+// How far along a line that leaves `from` toward `sight`, a unit vector, the circle of `radius` around
+// `centre` is met, coming in and going out: before `from` where negative. Null when the line misses it.
+function throughCircle(from: GroundPoint, sight: GroundPoint, centre: GroundPoint, radius: number) {
+  const [x, z] = [from.x - centre.x, from.z - centre.z]
+  const along = x * sight.x + z * sight.z
+  const inside = along ** 2 + radius ** 2 - x ** 2 - z ** 2
+  if (inside < 0) return null
+  return { in: -along - Math.sqrt(inside), out: -along + Math.sqrt(inside) }
+}
+
+// The same for a rectangle between `low` and `high`, its sides along x and z.
+function throughRectangle(from: GroundPoint, sight: GroundPoint, low: GroundPoint, high: GroundPoint) {
+  let [entered, left] = [-Infinity, Infinity]
+  for (const axis of ['x', 'z'] as const) {
+    // Along a side, the line is between the two others for good, or never.
+    if (sight[axis] === 0) {
+      if (from[axis] < low[axis] || from[axis] > high[axis]) return null
+      continue
+    }
+    const crossings = [(low[axis] - from[axis]) / sight[axis], (high[axis] - from[axis]) / sight[axis]]
+    entered = Math.max(entered, Math.min(...crossings))
+    left = Math.min(left, Math.max(...crossings))
+  }
+  return entered <= left ? { in: entered, out: left } : null
+}
+
+// How far from the lens, along `sight`, what stands on the site is first met, grown by `clear` all round:
+// the plant's parts, the gas pipe included, and the floodlights' masts. Infinity when the line meets none of them.
+function reachToPlant(lens: GroundPoint, sight: GroundPoint, clear: number): number {
+  const { hall, transformer, tank, chimneys, pipe } = SITE
+  const blocks = [hall, transformer, tank].map(({ x, z, width, depth }) => ({
+    low: { x: x - width / 2, z: z - depth / 2 },
+    high: { x: x + width / 2, z: z + depth / 2 },
+  }))
+  // Each stretch of the pipe is a rectangle as wide as the pipe.
+  const stretches = pipe.path.slice(1).map((to, index) => {
+    const from = pipe.path[index] ?? to
+    return {
+      low: { x: Math.min(from.x, to.x) - pipe.radius, z: Math.min(from.z, to.z) - pipe.radius },
+      high: { x: Math.max(from.x, to.x) + pipe.radius, z: Math.max(from.z, to.z) + pipe.radius },
+    }
+  })
+  const met = [
+    ...[...blocks, ...stretches].map(({ low, high }) =>
+      throughRectangle(lens, sight, { x: low.x - clear, z: low.z - clear }, { x: high.x + clear, z: high.z + clear }),
+    ),
+    ...chimneys.map((chimney) => throughCircle(lens, sight, chimney, chimney.radius + clear)),
+    ...floodlights().map((mast) => throughCircle(lens, sight, mast, SITE.floodlights.foot + clear)),
+  ]
+  // What the line has already left behind the lens is not in the way.
+  return Math.min(...met.flatMap((crossing) => (crossing && crossing.out > 0 ? Math.max(0, crossing.in) : [])), Infinity)
+}
+
+// The point `distance` from the lens along the sight line that goes by `bearing`.
+function along(bearing: number, distance: number): GroundPoint {
   const lens = lensPoint()
-  // A lens spreads its image evenly over a plane, not over an angle. Its right is toward smaller bearings.
-  const sight = toward(enclosure.heading - Math.atan((2 * xNorm - 1) * Math.tan(camera.fov / 2)))
-  // From the lens out to the fence's circle, along the sight line.
-  const along = lens.x * sight.x + lens.z * sight.z
-  const reach = Math.sqrt(along ** 2 + fence.radius ** 2 - lens.x ** 2 - lens.z ** 2) - along
-
-  return { x: lens.x + reach * sight.x, z: lens.z + reach * sight.z }
+  const sight = toward(bearing)
+  return { x: lens.x + distance * sight.x, z: lens.z + distance * sight.z }
 }
 
-// How far round the fence a point of it is, in scene units: 0 toward the entrance, growing toward x. The
-// difference between two points is how far the intruder walks from one to the other.
-export function roundFence(point: GroundPoint): number {
-  return SITE.fence.radius * Math.atan2(point.x, point.z)
+// How far from the lens the fence is, along the sight line that goes by `bearing`.
+function reachToFence(bearing: number): number {
+  return throughCircle(lensPoint(), toward(bearing), { x: 0, z: 0 }, SITE.fence.radius)?.out ?? 0
 }
 
-// The bearing to face, standing on the fence at `point`, to walk along it: toward the right of the camera's
-// image (`way` 1) or toward its left (-1).
-export function bearingAlongFence(point: GroundPoint, way: number): number {
-  // The fence is a circle around the socle's centre, and the camera's right is toward smaller bearings.
-  return Math.atan2(point.x, point.z) - (way < 0 ? -1 : 1) * (Math.PI / 2)
+// Where the camera's sight meets the fence, for what stands at `xNorm` across its image, 0 = left edge,
+// 1 = right edge, once turned by `pan` radians from where it rests: the arc the camera watches goes from one
+// to the other.
+export function watchedPoint(xNorm: number, pan = 0): GroundPoint {
+  const bearing = sightBearing(xNorm, pan)
+  return along(bearing, reachToFence(bearing))
+}
+
+// The stretch of the sight line that goes by `bearing` where someone can stand, in scene units from the lens:
+// from where it is clear of the Enclosure's own ground, which the lens is over, to where it is still clear of
+// the fence's line, a step inside it all round the site, or of what stands on the site before that. Where
+// there is no room between the two there is one place to stand: its near end.
+export function standingSpan(bearing: number): { near: number; far: number } {
+  const lens = lensPoint()
+  const sight = toward(bearing)
+  const { enclosure, fence } = SITE
+  const near = Math.max(0, throughCircle(lens, sight, enclosure, enclosure.radius)?.out ?? 0) + STANDING.clear
+  const inside = throughCircle(lens, sight, { x: 0, z: 0 }, fence.radius - STANDING.clear)?.out ?? 0
+  const far = Math.min(inside, reachToPlant(lens, sight, STANDING.clear))
+
+  return { near, far: Math.max(near, far) }
+}
+
+// Where someone the camera sees stands on the ground: on its sight line for `xNorm` across its image, the
+// camera turned by `pan` radians, and as far along it as they are short in the image, `hNorm` being the share
+// of its height they take. A lens makes what is twice as far half as tall: between someone who fills the
+// image, at the near end of where one can stand, and someone as short as at the fence, at its far end. An
+// `intrusion` Alert that does not say how tall stands its intruder at the far end, just inside the fence.
+export function standingPoint(xNorm: number, pan = 0, hNorm?: number): GroundPoint {
+  const bearing = sightBearing(xNorm, pan)
+  const { near, far } = standingSpan(bearing)
+  const { tall } = STANDING
+  const away =
+    hNorm === undefined ? 1 : (1 / Math.min(tall.near, Math.max(tall.far, hNorm)) - 1 / tall.near) / (1 / tall.far - 1 / tall.near)
+
+  return along(bearing, near + (far - near) * away)
 }
 
 // Where the hall's door is, over the ground: on its front wall, where the track ends.
