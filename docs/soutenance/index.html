@@ -259,21 +259,13 @@
   .where { top: 44px; right: 110px; color: var(--muted); font: 600 20px/1 var(--mono); letter-spacing: 0.2em; text-transform: uppercase; }
   .where b { color: var(--foreground); }
 
-  .timeline {
-    left: 110px;
-    right: 110px;
-    bottom: 40px;
-    display: grid;
-    grid-template-columns: 1fr auto;
-    align-items: end;
-    gap: 34px;
-  }
+  .timeline { left: 110px; right: 110px; bottom: 40px; }
   .parts { position: relative; display: grid; grid-template-columns: 1fr 1fr 3fr 5fr; gap: 6px; }
   .part { color: var(--muted); font: 600 17px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; transition: color 0.4s; }
   .part span { display: block; margin-bottom: 10px; white-space: nowrap; }
   .part i { display: block; height: 4px; border-radius: 2px; background: var(--border); }
   .part.now { color: var(--foreground); }
-  /* Where the plan puts the slide on screen… */
+  /* Where the slide on screen sits in the ten minutes. */
   .window {
     position: absolute;
     bottom: 0;
@@ -284,24 +276,6 @@
     box-shadow: 0 0 12px var(--status);
     transition: left 0.6s var(--ease), width 0.6s var(--ease), background 1.2s;
   }
-  /* …and where the clock really is. */
-  .cursor {
-    position: absolute;
-    bottom: -5px;
-    width: 3px;
-    height: 14px;
-    margin-left: -1px;
-    border-radius: 2px;
-    background: #fff;
-    opacity: 0;
-    transition: left 0.5s linear;
-  }
-  .running .cursor { opacity: 1; }
-
-  .clock { font: 600 22px/1 var(--mono); color: var(--muted); letter-spacing: 0.06em; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .clock b { color: var(--foreground); font-size: 30px; }
-  .clock[data-pace='late'] b { color: var(--elevated); }
-  .clock[data-pace='over'] b { color: var(--critical); }
 
   /* ---------- 1 · title ---------- */
 
@@ -330,8 +304,7 @@
   .kenburns { animation: kenburns 26s ease-in-out infinite alternate; }
   @keyframes kenburns { from { transform: scale(1); } to { transform: scale(1.09) translate(-1.5%, 1%); } }
   .s-title .caption { position: absolute; left: 22px; bottom: 20px; z-index: 2; }
-  .keys { position: absolute; left: 110px; bottom: 122px; color: #4b5866; font: 500 17px/1 var(--mono); letter-spacing: 0.06em; transition: opacity 0.6s; }
-  .running .keys { opacity: 0; }
+  .keys { position: absolute; left: 110px; bottom: 122px; color: #4b5866; font: 500 17px/1 var(--mono); letter-spacing: 0.06em; }
 
   /* ---------- 2 · the three threats ---------- */
 
@@ -402,38 +375,65 @@
   .wire.sec { stroke: var(--nominal); opacity: 0.55; }
   .pulse-dot { filter: drop-shadow(0 0 8px currentColor); }
 
-  /* ---------- 4 · the teaser ---------- */
+  /* ---------- 4 · the teaser: a screening room, the lights go down when it plays ---------- */
 
-  .s-teaser { flex-direction: row; align-items: center; gap: 90px; }
-  .s-teaser .text { flex: 1; }
-  .phone {
-    position: relative;
-    height: 800px;
-    aspect-ratio: 9 / 16;
-    border: 1px solid var(--border);
-    border-radius: 34px;
-    background: #000;
-    overflow: hidden;
-    box-shadow: 0 50px 100px -30px #000, 0 0 90px -30px var(--status);
+  .s-teaser { padding: 0; align-items: center; background: radial-gradient(ellipse 70% 60% at 50% 42%, #10161d, #05070a 78%); }
+  .room { position: absolute; inset: 0; overflow: hidden; }
+  /* The light the screen throws on the wall behind it. */
+  .room .spill {
+    position: absolute; left: 50%; top: 520px; width: 2100px; height: 1250px; translate: -50% -50%;
+    background: radial-gradient(ellipse at center, color-mix(in srgb, var(--status) 26%, transparent), transparent 62%);
+    opacity: 0.55; transition: opacity 1.6s, background 1.2s; animation: flicker 7s ease-in-out infinite;
   }
-  .phone video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; }
-  .phone.has-video video { display: block; }
-  .phone .placeholder { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
-  .phone.has-video.playing .placeholder { display: none; }
-  .phone .bars { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgb(255 255 255 / 3%) 0 2px, transparent 2px 6px); animation: roll 8s linear infinite; }
-  @keyframes roll { to { background-position: 0 240px; } }
-  .countdown { position: relative; width: 300px; height: 300px; }
-  .countdown svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-  .countdown circle { fill: none; stroke-width: 6; }
-  .countdown .track { stroke: var(--border); }
-  .countdown .left { stroke: var(--status); stroke-linecap: round; stroke-dasharray: 879.6; filter: drop-shadow(0 0 10px var(--status)); transition: stroke-dashoffset 1s linear; }
-  .countdown .num { position: absolute; inset: 0; display: grid; place-items: center; font: 700 110px/1 var(--mono); font-variant-numeric: tabular-nums; }
-  .countdown small { position: absolute; left: 0; right: 0; bottom: 62px; text-align: center; color: var(--muted); font: 600 18px var(--mono); letter-spacing: 0.3em; }
-  .beats { margin-top: 44px; display: grid; gap: 14px; max-width: 900px; }
-  .beat-row { display: grid; grid-template-columns: 150px 1fr; gap: 24px; align-items: baseline; padding: 16px 0; border-top: 1px solid var(--border); font-size: 28px; }
-  .beat-row b { font: 700 22px var(--mono); color: var(--status); letter-spacing: 0.05em; }
-  .beat-row span { color: var(--muted); }
-  .beat-row span strong { color: var(--foreground); font-weight: 600; }
+  @keyframes flicker { 0%, 100% { scale: 1; } 40% { scale: 1.035; } 70% { scale: 0.985; } }
+  .room .curtain { position: absolute; top: 0; bottom: 0; width: 170px; opacity: 0.8; background: repeating-linear-gradient(90deg, #06080b 0 22px, #10161d 44px, #06080b 66px); }
+  .room .curtain.l { left: 0; mask-image: linear-gradient(90deg, #000 30%, transparent); }
+  .room .curtain.r { right: 0; mask-image: linear-gradient(270deg, #000 30%, transparent); }
+  /* The floor, and the screen's light on it. */
+  .room .floor {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 92px;
+    background:
+      radial-gradient(ellipse 46% 100% at 50% 0%, color-mix(in srgb, var(--status) 16%, transparent), transparent 70%),
+      linear-gradient(180deg, #0a0e13, #030405);
+    border-top: 1px solid #141c25;
+  }
+  .room .seats { position: absolute; left: -40px; right: -40px; bottom: -86px; height: 120px; display: flex; gap: 22px; justify-content: center; }
+  .room .seats i { flex: 0 0 128px; border-radius: 34px 34px 0 0; background: linear-gradient(180deg, #0c1117, #020304); box-shadow: inset 0 2px 0 rgb(255 255 255 / 5%); }
+  .room .seats i:nth-child(even) { translate: 0 12px; }
+
+  .tv { position: relative; margin-top: 82px; }
+  .tv .panel-glass {
+    position: relative; width: 1560px; aspect-ratio: 16 / 9; padding: 0; overflow: hidden;
+    border: 10px solid #05070a; border-radius: 14px; background: #000;
+    box-shadow: 0 0 0 1.5px #2a3644, 0 60px 120px -30px #000, 0 0 140px -30px color-mix(in srgb, var(--status) 55%, transparent);
+    transition: box-shadow 1.6s;
+  }
+  .tv video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
+  /* A sheen across the glass while the screen waits. */
+  .tv .panel-glass::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(115deg, transparent 38%, rgb(255 255 255 / 5%) 46%, transparent 54%);
+    background-size: 260% 100%; animation: sheen 6s ease-in-out infinite; transition: opacity 1s;
+  }
+  @keyframes sheen { from { background-position: 120% 0; } to { background-position: -60% 0; } }
+  .tv .wait { position: absolute; inset: 0; display: grid; place-items: center; background: rgb(0 0 0 / 38%); transition: opacity 0.8s; }
+  .tv .play {
+    width: 170px; height: 170px; border-radius: 50%; display: grid; place-items: center;
+    border: 2px solid var(--status); background: rgb(11 15 20 / 55%); box-shadow: 0 0 60px -6px var(--status);
+    animation: beat 2.4s ease-in-out infinite;
+  }
+  .tv .play svg { width: 54px; height: 54px; margin-left: 8px; fill: var(--status); }
+  @keyframes beat { 50% { scale: 1.07; box-shadow: 0 0 90px 0 var(--status); } }
+  .tv .neck { width: 150px; height: 26px; margin: 0 auto; background: linear-gradient(180deg, #05070a, #10161d); clip-path: polygon(22% 0, 78% 0, 100% 100%, 0 100%); }
+  .tv .foot { width: 420px; height: 8px; margin: 0 auto; border-radius: 4px; background: #1b2530; box-shadow: 0 10px 30px 4px #000; }
+  .tv .led { position: absolute; right: 26px; bottom: 44px; width: 6px; height: 6px; border-radius: 50%; background: var(--status); box-shadow: 0 0 10px var(--status); }
+
+  /* Playing: the room goes dark, only the screen lights it. */
+  .s-teaser.playing .wait, .s-teaser.playing .panel-glass::after { opacity: 0; }
+  .s-teaser.playing .spill { opacity: 1; }
+  .s-teaser.playing .panel-glass { box-shadow: 0 0 0 1.5px #2a3644, 0 60px 120px -30px #000, 0 0 220px -20px color-mix(in srgb, var(--status) 70%, transparent); }
+  body.screening .chrome, body.screening .backdrop { opacity: 0; }
+  .chrome, .backdrop { transition: opacity 1.2s; }
 
   /* ---------- 5 · the live demo ---------- */
 
@@ -665,7 +665,7 @@
     html, body { height: auto; overflow: visible; background: var(--background); }
     #stage { position: static; transform: none; height: auto; overflow: visible; }
     .slide { position: relative; height: 1080px; opacity: 1; visibility: visible; transform: none; break-after: page; overflow: hidden; }
-    .backdrop, .flash, .chrome, .panel, .overview, .blackout, .keys { display: none !important; }
+    .backdrop, .flash, .chrome, .panel, .overview, .blackout, .keys, .tv .wait { display: none !important; }
     [data-a], [data-step], .mark, .late, .s-title h1 span { opacity: 1 !important; transform: none !important; animation: none !important; }
     .curve, .draw, .check path { stroke-dashoffset: 0 !important; animation: none !important; }
     .s-title .line { width: 240px; }
@@ -709,7 +709,7 @@
       <div class="shot"><div class="zoom kenburns" data-src="../twin/outpost-nominal.png" data-crop="420,195,1010"></div></div>
       <span class="tag live caption">DIGITAL TWIN · LIVE</span>
     </div>
-    <p class="keys">→ avancer · ← reculer · F plein écran · T chrono · O plan · N notes · B écran noir</p>
+    <p class="keys">→ avancer · ← reculer · F plein écran · O plan · N notes · B écran noir</p>
     <aside class="notes">Bonjour, nous sommes le consortium Sentinel-X. Un seul boîtier pour surveiller une micro-centrale isolée, et un jumeau 3D qui montre en direct ce que le boîtier perçoit.</aside>
   </section>
 
@@ -788,29 +788,23 @@
 
   <!-- 4 ───────────────────────────────────────────────────────── the teaser -->
   <section class="slide s-teaser" data-title="Teaser « Sentinel Drop »" data-part="1" data-t="60" data-status="elevated" data-steps="1">
-    <div class="text">
-      <p class="kicker" data-a>Projection · 60 secondes</p>
-      <h2 data-a>Sentinel <em>Drop</em></h2>
-      <p class="lead" data-a>Le produit fini, raconté en une minute, sur fond vert.</p>
-      <div class="beats">
-        <div class="beat-row" data-a><b>00 à 10 s</b><span><strong>La menace</strong> · une centrale isolée, la sirène</span></div>
-        <div class="beat-row" data-a><b>10 à 30 s</b><span><strong>Le boîtier</strong> · impression 3D, gravure laser, sondes</span></div>
-        <div class="beat-row" data-a><b>30 à 50 s</b><span><strong>La stack</strong> · le code réel, la vision, le Twin qui réagit</span></div>
-        <div class="beat-row" data-a><b>50 à 60 s</b><span><strong>L’équipe</strong> · «&nbsp;la sécurité à la bordure&nbsp;»</span></div>
-      </div>
+    <div class="room" aria-hidden="true">
+      <div class="spill"></div>
+      <div class="curtain l"></div>
+      <div class="curtain r"></div>
+      <div class="floor"></div>
+      <div class="seats"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
     </div>
-    <div class="phone" id="phone" data-a="scale" data-d="300">
-      <video id="drop" src="sentinel-drop.mp4" preload="metadata" playsinline></video>
-      <div class="placeholder">
-        <div class="bars"></div>
-        <div class="countdown">
-          <svg viewBox="0 0 300 300"><circle class="track" cx="150" cy="150" r="140" /><circle class="left" id="ring60" cx="150" cy="150" r="140" /></svg>
-          <div class="num" id="num60">60</div>
-          <small>SECONDES</small>
-        </div>
+    <div class="tv" data-a="scale" data-d="200">
+      <div class="panel-glass">
+        <video id="drop" src="../livrables/sentinel-x-teaser.mp4" preload="auto" playsinline></video>
+        <div class="wait"><div class="play"><svg viewBox="0 0 24 24"><path d="M5 3v18l16-9Z" /></svg></div></div>
       </div>
+      <div class="neck"></div>
+      <div class="foot"></div>
+      <span class="led"></span>
     </div>
-    <aside class="notes">→ lance la vidéo (ou le compte à rebours si le fichier sentinel-drop.mp4 n’est pas à côté de la page). Ne rien dire pendant la projection.</aside>
+    <aside class="notes">→ lance le teaser, avec le son. Ne rien dire pendant la projection. → de nouveau pour passer à la démo.</aside>
   </section>
 
   <!-- 5 ───────────────────────────────────────────────────────── the live demo -->
@@ -1192,9 +1186,7 @@
       <div class="part"><span>Démo live</span><i></i></div>
       <div class="part"><span>Pitch + questions</span><i></i></div>
       <div class="window" id="window"></div>
-      <div class="cursor" id="cursor"></div>
     </div>
-    <div class="clock" id="clock"><b>00:00</b> / 10:00</div>
   </div>
 
   <div class="panel notes-panel"><small>NOTES · <span id="notes-budget"></span></small><span id="notes-text"></span></div>
@@ -1297,12 +1289,8 @@
 
   let index = 0
   let step = 0
-  let startedAt = null // performance.now() when the clock was last started
-  let banked = 0 // seconds run before the last pause
   let twinTimer = null
-  let teaserTimer = null
 
-  const elapsed = () => banked + (startedAt === null ? 0 : (performance.now() - startedAt) / 1000)
   const mmss = (seconds) => `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`
   const stepsOf = (slide) => Number(slide.dataset.steps ?? 0)
 
@@ -1348,11 +1336,10 @@
       })
       setStatus(step ? beats[step - 1].dataset.beatStatus : slide.dataset.status, step > 0)
     }
-    if (slide.classList.contains('s-teaser') && step === 1) startTeaser()
+    if (slide.classList.contains('s-teaser')) step === 1 ? startTeaser() : stopTeaser()
   }
 
   function forward() {
-    if (startedAt === null && banked === 0 && index === 0) toggleClock()
     if (step < stepsOf(slides[index])) {
       step++
       applyStep()
@@ -1401,35 +1388,27 @@
     twinTimer = setInterval(turn, TWIN_HOLD)
   }
 
-  // ---- the teaser: the video if it is beside the page, its sixty seconds counted down either way ----
+  // ---- the teaser: → plays it on the room's screen, the lights down; leaving the slide stops it ----
   const video = $('drop')
-  video.addEventListener('loadedmetadata', () => $('phone').classList.add('has-video'))
-  function startTeaser() {
-    stopTeaser()
-    const began = performance.now()
-    if ($('phone').classList.contains('has-video')) {
-      $('phone').classList.add('playing')
-      video.currentTime = 0
-      video.play().catch(() => $('phone').classList.remove('playing'))
-    }
-    const tick = () => {
-      const left = Math.max(0, 60 - (performance.now() - began) / 1000)
-      $('num60').textContent = Math.ceil(left)
-      $('ring60').style.strokeDashoffset = 879.6 * (1 - left / 60)
-      if (left === 0) stopTeaser(true)
-    }
-    tick()
-    teaserTimer = setInterval(tick, 250)
+  const teaser = document.querySelector('.s-teaser')
+  function screening(on) {
+    teaser.classList.toggle('playing', on)
+    body.classList.toggle('screening', on)
   }
-  function stopTeaser(done) {
-    clearInterval(teaserTimer)
-    teaserTimer = null
+  // While it waits, the screen shows a frame of the film, not the black it opens on.
+  const POSTER_AT = 6
+  video.addEventListener('loadedmetadata', () => (video.currentTime = POSTER_AT), { once: true })
+  video.addEventListener('ended', () => body.classList.remove('screening'))
+  function startTeaser() {
+    video.currentTime = 0
+    screening(true)
+    video.play().catch(() => screening(false))
+  }
+  function stopTeaser() {
+    if (!teaser.classList.contains('playing')) return
     video.pause()
-    $('phone').classList.remove('playing')
-    if (!done) {
-      $('num60').textContent = 60
-      $('ring60').style.strokeDashoffset = 0
-    }
+    video.currentTime = POSTER_AT
+    screening(false)
   }
 
   // ---- the intruder in the camera's image: where they are across it is x_norm ----
@@ -1444,30 +1423,6 @@
   }
   requestAnimationFrame(camera)
 
-  // ---- the clock ----
-  function toggleClock() {
-    if (startedAt === null) startedAt = performance.now()
-    else {
-      banked = elapsed()
-      startedAt = null
-    }
-    body.classList.toggle('running', startedAt !== null)
-  }
-  function resetClock() {
-    startedAt = null
-    banked = 0
-    body.classList.remove('running')
-    drawClock()
-  }
-  function drawClock() {
-    const seconds = elapsed()
-    const clock = $('clock')
-    clock.innerHTML = `<b>${mmss(seconds)}</b> / 10:00`
-    // Late: past the end of the slide on screen. Over: past the ten minutes.
-    clock.dataset.pace = seconds > TOTAL ? 'over' : seconds > plan[index].to + 5 ? 'late' : 'ok'
-    $('cursor').style.left = `${Math.min(1, seconds / TOTAL) * 100}%`
-  }
-  setInterval(drawClock, 500)
 
   // ---- the plan of the whole deck ----
   $('overview').innerHTML = slides.map((slide, i) => `<button data-go="${i}"><b>${String(i + 1).padStart(2, '0')}</b><span>${slide.dataset.title}</span><i>${mmss(plan[i].from)}</i></button>`).join('')
@@ -1488,8 +1443,6 @@
     else if (key === 'Home') show(0)
     else if (key === 'End') show(slides.length - 1)
     else if (key === 'f') document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()
-    else if (key === 't') toggleClock()
-    else if (key === 'r') resetClock()
     else if (key === 'n') body.classList.toggle('show-notes')
     else if (key === 'o') body.classList.toggle('show-overview')
     else if (key === 'b' || key === '.') body.classList.toggle('show-black')
@@ -1520,7 +1473,6 @@
   })
 
   show(Math.max(0, (Number(location.hash.slice(1)) || 1) - 1))
-  drawClock()
 </script>
 </body>
 </html>

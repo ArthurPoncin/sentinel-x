@@ -4,14 +4,13 @@ Le support de la soutenance du vendredi (issue #53) : [`index.html`](index.html)
 
 ## L'ouvrir
 
-Double-clic sur `index.html` (Chrome, Chromium ou Firefox), puis **F** pour le plein écran. Le dossier `docs/` doit rester entier : la page lit `../twin/*.png`.
+Double-clic sur `index.html` (Chrome, Chromium ou Firefox), puis **F** pour le plein écran. Le dossier `docs/` doit rester entier : la page lit les captures de `../twin/` et le teaser, `../livrables/sentinel-x-teaser.mp4`.
 
 | Touche | Effet |
 |---|---|
 | → · Espace · Page suivante (télécommande) | avancer |
 | ← · Page précédente | reculer |
 | F | plein écran |
-| T · R | lancer ou mettre en pause le chrono · le remettre à zéro |
 | O | le plan : toutes les diapositives, un clic pour y aller |
 | N | les notes de l'orateur, à l'écran : pour répéter, pas devant le jury |
 | B | écran noir, pendant la démo sur le dashboard |
@@ -20,7 +19,7 @@ Un clic avance, un clic dans le cinquième gauche de l'écran recule. `index.htm
 
 ## Les dix minutes
 
-Le chrono du sujet, à la seconde. Le chrono de la page part au premier « avancer ». En bas, le trait de couleur dit où le plan place la diapositive affichée, le repère blanc où en est le chrono : le repère à droite du trait, on est en retard, et le chrono passe à l'orange.
+Le chrono du sujet, à la seconde. La barre du bas découpe les dix minutes en leurs quatre parties, et son trait de couleur dit où le plan place la diapositive affichée. La page ne chronomètre rien : c'est à l'orateur de tenir sa montre.
 
 | Temps | Diapositives | Contenu |
 |---|---|---|
@@ -29,7 +28,7 @@ Le chrono du sujet, à la seconde. Le chrono de la page part au premier « avanc
 | 2:00 à 5:00 | 5 | la démo live, ses six temps (ceux de [`../SCOPE.md`](../SCOPE.md)) et le plan B |
 | 5:00 à 10:00 | 6 à 13 | les attendus du sujet, l'architecture, le Sentinel, l'IA, la sécurité, le Twin, les chiffres, les questions |
 
-- **Le teaser** : pose le fichier `sentinel-drop.mp4` à côté de `index.html`, → le lance dans le cadre. Sans le fichier, → lance un compte à rebours de 60 s.
+- **Le teaser** : la diapositive 4 est une salle de projection. → lance le film sur son écran, avec le son, et la salle s'éteint ; → de nouveau passe à la démo, ← l'arrête. En attendant, l'écran montre une image du film.
 - **La démo** : → fait passer le repère d'un temps au suivant, et la page prend la couleur du Status attendu. **B** noircit la page si elle reste projetée.
 
 ## Le modifier
