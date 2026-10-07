@@ -1,0 +1,1526 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sentinel-X · Soutenance</title>
+<!--
+  The defense's slides (issue #53). One file, no network: the table Wi-Fi has no Internet.
+  Open it in a browser, F for full screen, → to go on. Keys, timing and how to edit: README.md beside it.
+  The palette is the dashboard's (dashboard/src/app/styles.css, shared/config/status-colors.ts).
+-->
+<style>
+  :root {
+    --background: #0b0f14;
+    --card: #131a22;
+    --raised: #1b2530;
+    --border: #233040;
+    --foreground: #d8e1ea;
+    --muted: #7d8b99;
+    --nominal: #3ecf8e;
+    --elevated: #f5a623;
+    --critical: #ff4d4f;
+    --replay: #b48cff;
+    --lost: #9aa5b1;
+    --status: var(--nominal);
+    --sans: 'Inter', 'Noto Sans', system-ui, 'Segoe UI', Roboto, sans-serif;
+    --mono: ui-monospace, 'JetBrains Mono', 'Cascadia Code', 'DejaVu Sans Mono', Menlo, Consolas, monospace;
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  body[data-status='elevated'] { --status: var(--elevated); }
+  body[data-status='critical'] { --status: var(--critical); }
+  body[data-status='replay'] { --status: var(--replay); }
+  body[data-status='lost'] { --status: var(--lost); }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: #000;
+    color: var(--foreground);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* The slides are drawn on a 1920 × 1080 stage, scaled as one piece to the window. */
+  #stage {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    background: var(--background);
+    transform: translate(-50%, -50%) scale(var(--scale, 1));
+    transform-origin: center;
+    cursor: default;
+  }
+
+  /* ---------- the room behind the slides: the Twin's socle, its ring in the Status' color ---------- */
+
+  .backdrop { position: absolute; inset: 0; pointer-events: none; }
+
+  .backdrop .glow {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(1200px 520px at 50% 108%, color-mix(in srgb, var(--status) 20%, transparent), transparent 70%),
+      radial-gradient(900px 600px at 88% -10%, rgb(35 48 64 / 55%), transparent 70%);
+    transition: background 1.2s;
+  }
+
+  .backdrop svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .backdrop .contour { fill: none; stroke: #233040; stroke-width: 1.5; opacity: 0.55; }
+  .backdrop .ring {
+    fill: none;
+    stroke: var(--status);
+    stroke-width: 5;
+    filter: drop-shadow(0 0 18px var(--status));
+    transition: stroke 1.2s;
+    animation: breathe 5s ease-in-out infinite;
+  }
+  .backdrop .ring-dash {
+    fill: none;
+    stroke: var(--status);
+    stroke-width: 2;
+    stroke-dasharray: 4 26;
+    opacity: 0.5;
+    transition: stroke 1.2s;
+    animation: orbit 60s linear infinite;
+  }
+
+  @keyframes breathe { 50% { opacity: 0.55; } }
+  @keyframes orbit { to { stroke-dashoffset: -600; } }
+
+  .mote {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #9fb0c2;
+    opacity: 0;
+    animation: drift linear infinite;
+  }
+  @keyframes drift {
+    0% { transform: translate(0, 0); opacity: 0; }
+    12% { opacity: 0.45; }
+    88% { opacity: 0.45; }
+    100% { transform: translate(420px, -70px); opacity: 0; }
+  }
+
+  /* When the Status changes, the whole frame is flooded in its color, then the light goes back: as the Twin does. */
+  .flash {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(ellipse at 50% 60%, var(--status), transparent 75%);
+    opacity: 0;
+    mix-blend-mode: screen;
+  }
+  .flash.go { animation: flash 1.6s ease-out; }
+  @keyframes flash { 0% { opacity: 0; } 12% { opacity: 0.34; } 100% { opacity: 0; } }
+
+  /* ---------- slides ---------- */
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    padding: 118px 110px 120px;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    visibility: hidden;
+    transform: scale(1.015);
+    transition: opacity 0.45s, transform 0.6s var(--ease), visibility 0s 0.45s;
+  }
+  .slide.active {
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    transition-delay: 0s;
+  }
+
+  /* What comes in when its slide does, each a little after the one before (--d, in ms, set by the script). */
+  [data-a] { opacity: 0; }
+  .slide.active [data-a] { animation: rise 0.8s var(--ease) both; animation-delay: calc(var(--d, 0) * 1ms); }
+  .slide.active [data-a='fade'] { animation-name: fade; }
+  .slide.active [data-a='left'] { animation-name: from-left; }
+  .slide.active [data-a='scale'] { animation-name: grow; }
+  @keyframes rise { from { opacity: 0; transform: translateY(34px); } to { opacity: 1; transform: none; } }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes from-left { from { opacity: 0; transform: translateX(-40px); } to { opacity: 1; transform: none; } }
+  @keyframes grow { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: none; } }
+
+  /* What waits for the presenter's next key. */
+  [data-step] { opacity: 0; transform: translateY(18px); transition: opacity 0.5s, transform 0.6s var(--ease); }
+  [data-step].on { opacity: 1; transform: none; }
+
+  .kicker {
+    margin: 0 0 18px;
+    color: var(--status);
+    font: 700 24px/1 var(--mono);
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    transition: color 1.2s;
+  }
+
+  h1, h2, h3, p { margin: 0; }
+
+  h2 {
+    font-size: 68px;
+    line-height: 1.08;
+    font-weight: 750;
+    letter-spacing: -0.015em;
+    max-width: 1500px;
+  }
+  h2 em { font-style: normal; color: var(--status); transition: color 1.2s; }
+
+  .lead { margin-top: 22px; color: var(--muted); font-size: 32px; line-height: 1.35; max-width: 1400px; }
+  .lead strong { color: var(--foreground); font-weight: 600; }
+
+  .mono { font-family: var(--mono); }
+  .muted { color: var(--muted); }
+  .st { color: var(--status); transition: color 1.2s; }
+  .c-nominal { color: var(--nominal); }
+  .c-elevated { color: var(--elevated); }
+  .c-critical { color: var(--critical); }
+  .c-replay { color: var(--replay); }
+
+  .card {
+    position: relative;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgb(27 37 48 / 72%), rgb(19 26 34 / 88%));
+    box-shadow: 0 30px 60px -30px rgb(0 0 0 / 80%), inset 0 1px 0 rgb(255 255 255 / 4%);
+  }
+
+  .tag {
+    display: inline-block;
+    padding: 7px 14px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgb(11 15 20 / 70%);
+    color: var(--muted);
+    font: 600 20px/1 var(--mono);
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+  }
+  .tag.live { border-color: var(--status); color: var(--status); }
+
+  .body { flex: 1; min-height: 0; margin-top: 46px; display: flex; gap: 40px; }
+
+  /* A capture of the real Twin, cropped by the script (data-crop: x, y and width, in the picture's pixels). */
+  .shot {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background-color: #000;
+    background-repeat: no-repeat;
+    box-shadow: 0 40px 90px -30px rgb(0 0 0 / 90%), 0 0 0 1px rgb(255 255 255 / 3%) inset;
+  }
+  .shot::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 0 120px rgb(0 0 0 / 55%);
+  }
+
+  /* ---------- the frame around every slide ---------- */
+
+  .chrome { position: absolute; z-index: 5; pointer-events: none; }
+
+  .brand {
+    top: 44px;
+    left: 110px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    color: var(--muted);
+    font: 700 20px/1 var(--mono);
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+  }
+  .brand b { color: var(--foreground); }
+  .brand .dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--status);
+    box-shadow: 0 0 14px var(--status);
+    transition: background 1.2s, box-shadow 1.2s;
+    animation: breathe 2.4s ease-in-out infinite;
+  }
+
+  .where { top: 44px; right: 110px; color: var(--muted); font: 600 20px/1 var(--mono); letter-spacing: 0.2em; text-transform: uppercase; }
+  .where b { color: var(--foreground); }
+
+  .timeline {
+    left: 110px;
+    right: 110px;
+    bottom: 40px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 34px;
+  }
+  .parts { position: relative; display: grid; grid-template-columns: 1fr 1fr 3fr 5fr; gap: 6px; }
+  .part { color: var(--muted); font: 600 17px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; transition: color 0.4s; }
+  .part span { display: block; margin-bottom: 10px; white-space: nowrap; }
+  .part i { display: block; height: 4px; border-radius: 2px; background: var(--border); }
+  .part.now { color: var(--foreground); }
+  /* Where the plan puts the slide on screen… */
+  .window {
+    position: absolute;
+    bottom: 0;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--status);
+    opacity: 0.85;
+    box-shadow: 0 0 12px var(--status);
+    transition: left 0.6s var(--ease), width 0.6s var(--ease), background 1.2s;
+  }
+  /* …and where the clock really is. */
+  .cursor {
+    position: absolute;
+    bottom: -5px;
+    width: 3px;
+    height: 14px;
+    margin-left: -1px;
+    border-radius: 2px;
+    background: #fff;
+    opacity: 0;
+    transition: left 0.5s linear;
+  }
+  .running .cursor { opacity: 1; }
+
+  .clock { font: 600 22px/1 var(--mono); color: var(--muted); letter-spacing: 0.06em; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .clock b { color: var(--foreground); font-size: 30px; }
+  .clock[data-pace='late'] b { color: var(--elevated); }
+  .clock[data-pace='over'] b { color: var(--critical); }
+
+  /* ---------- 1 · title ---------- */
+
+  .s-title { flex-direction: row; align-items: center; gap: 70px; }
+  .s-title .text { flex: 1.05; }
+  .s-title h1 {
+    font-size: 150px;
+    line-height: 0.95;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+  .s-title h1 span { display: inline-block; opacity: 0; }
+  .s-title.active h1 span { animation: letter 0.9s var(--ease) both; animation-delay: calc(var(--i) * 55ms + 250ms); }
+  .s-title h1 .x { color: var(--status); text-shadow: 0 0 60px color-mix(in srgb, var(--status) 60%, transparent); }
+  @keyframes letter { from { opacity: 0; transform: translateY(60px) scaleY(1.3); filter: blur(12px); } to { opacity: 1; transform: none; filter: none; } }
+  .s-title .sub { margin-top: 26px; font-size: 44px; font-weight: 300; color: var(--foreground); }
+  .s-title .line { width: 0; height: 3px; margin: 40px 0; background: var(--status); box-shadow: 0 0 20px var(--status); }
+  .s-title.active .line { animation: draw-line 1.2s var(--ease) 0.9s both; }
+  @keyframes draw-line { to { width: 240px; } }
+  .s-title .pitch { font-size: 34px; line-height: 1.4; color: var(--muted); }
+  .s-title .pitch strong { color: var(--foreground); }
+  .s-title .tags { margin-top: 44px; display: flex; gap: 14px; flex-wrap: wrap; }
+  .s-title .visual { flex: 0.95; position: relative; }
+  .s-title .shot { aspect-ratio: 16 / 10; width: 100%; }
+  .kenburns { animation: kenburns 26s ease-in-out infinite alternate; }
+  @keyframes kenburns { from { transform: scale(1); } to { transform: scale(1.09) translate(-1.5%, 1%); } }
+  .s-title .caption { position: absolute; left: 22px; bottom: 20px; z-index: 2; }
+  .keys { position: absolute; left: 110px; bottom: 122px; color: #4b5866; font: 500 17px/1 var(--mono); letter-spacing: 0.06em; transition: opacity 0.6s; }
+  .running .keys { opacity: 0; }
+
+  /* ---------- 2 · the three threats ---------- */
+
+  .threats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; width: 100%; align-items: stretch; }
+  .threat { padding: 40px 38px 36px; display: flex; flex-direction: column; overflow: hidden; }
+  .threat::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, var(--critical), transparent);
+    animation: sweep 3.2s linear infinite;
+    background-size: 200% 100%;
+  }
+  @keyframes sweep { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+  .threat svg { width: 76px; height: 76px; stroke: var(--critical); fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .threat h3 { margin-top: 26px; font-size: 40px; line-height: 1.12; font-weight: 700; }
+  .threat .what { margin-top: 12px; color: var(--muted); font-size: 26px; line-height: 1.35; flex: 1; }
+  .threat .answer {
+    margin-top: 28px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    font-size: 27px;
+    line-height: 1.35;
+  }
+  .threat .answer small { display: block; margin-bottom: 10px; color: var(--nominal); font: 700 18px/1 var(--mono); letter-spacing: 0.22em; text-transform: uppercase; }
+
+  /* ---------- 3 · team and Option A ---------- */
+
+  .team { flex: 1.15; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-content: start; }
+  .member { padding: 22px 26px; display: grid; grid-template-columns: auto 1fr; gap: 6px 20px; align-items: center; }
+  .member.wide { grid-column: span 2; }
+  .member .avatar {
+    grid-row: span 2;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    border: 1.5px solid var(--status);
+    color: var(--status);
+    font: 700 22px/1 var(--mono);
+    background: rgb(62 207 142 / 8%);
+  }
+  .member .name { font-size: 30px; font-weight: 650; }
+  .member .role { color: var(--muted); font-size: 22px; line-height: 1.3; }
+  .member .role b { color: var(--status); font: 700 18px/1 var(--mono); letter-spacing: 0.14em; margin-right: 8px; }
+
+  .option { flex: 1; padding: 34px 36px; display: flex; flex-direction: column; }
+  .option h3 { font-size: 34px; font-weight: 700; }
+  .option h3 span { color: var(--status); }
+  .option .box-diagram { margin: 22px 0 18px; flex: 1; min-height: 0; }
+  .option svg { width: 100%; height: 100%; }
+  .option ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+  .option .svg-title { font-size: 23px; }
+  .option .svg-sub { font-size: 17px; }
+  .option li { font-size: 23px; line-height: 1.3; color: var(--muted); padding-left: 26px; position: relative; }
+  .option li::before { content: ''; position: absolute; left: 2px; top: 11px; width: 10px; height: 10px; border-radius: 2px; background: var(--elevated); }
+  .option li b { color: var(--foreground); font-weight: 600; }
+
+  .svg-label { font: 600 20px var(--mono); fill: var(--muted); letter-spacing: 0.06em; }
+  .svg-title { font: 700 24px var(--sans); fill: var(--foreground); }
+  .svg-sub { font: 500 18px var(--mono); fill: var(--muted); }
+  .node { fill: #131a22; stroke: #233040; stroke-width: 1.5; }
+  .node.hot { stroke: var(--status); }
+  .zone { fill: rgb(19 26 34 / 45%); stroke: #2f4054; stroke-width: 1.5; stroke-dasharray: 8 8; }
+  .wire { fill: none; stroke: #34475c; stroke-width: 2.5; }
+  .wire.sec { stroke: var(--nominal); opacity: 0.55; }
+  .pulse-dot { filter: drop-shadow(0 0 8px currentColor); }
+
+  /* ---------- 4 · the teaser ---------- */
+
+  .s-teaser { flex-direction: row; align-items: center; gap: 90px; }
+  .s-teaser .text { flex: 1; }
+  .phone {
+    position: relative;
+    height: 800px;
+    aspect-ratio: 9 / 16;
+    border: 1px solid var(--border);
+    border-radius: 34px;
+    background: #000;
+    overflow: hidden;
+    box-shadow: 0 50px 100px -30px #000, 0 0 90px -30px var(--status);
+  }
+  .phone video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; }
+  .phone.has-video video { display: block; }
+  .phone .placeholder { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
+  .phone.has-video.playing .placeholder { display: none; }
+  .phone .bars { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgb(255 255 255 / 3%) 0 2px, transparent 2px 6px); animation: roll 8s linear infinite; }
+  @keyframes roll { to { background-position: 0 240px; } }
+  .countdown { position: relative; width: 300px; height: 300px; }
+  .countdown svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .countdown circle { fill: none; stroke-width: 6; }
+  .countdown .track { stroke: var(--border); }
+  .countdown .left { stroke: var(--status); stroke-linecap: round; stroke-dasharray: 879.6; filter: drop-shadow(0 0 10px var(--status)); transition: stroke-dashoffset 1s linear; }
+  .countdown .num { position: absolute; inset: 0; display: grid; place-items: center; font: 700 110px/1 var(--mono); font-variant-numeric: tabular-nums; }
+  .countdown small { position: absolute; left: 0; right: 0; bottom: 62px; text-align: center; color: var(--muted); font: 600 18px var(--mono); letter-spacing: 0.3em; }
+  .beats { margin-top: 44px; display: grid; gap: 14px; max-width: 900px; }
+  .beat-row { display: grid; grid-template-columns: 150px 1fr; gap: 24px; align-items: baseline; padding: 16px 0; border-top: 1px solid var(--border); font-size: 28px; }
+  .beat-row b { font: 700 22px var(--mono); color: var(--status); letter-spacing: 0.05em; }
+  .beat-row span { color: var(--muted); }
+  .beat-row span strong { color: var(--foreground); font-weight: 600; }
+
+  /* ---------- 5 · the live demo ---------- */
+
+  .demo { width: 100%; display: flex; flex-direction: column; gap: 28px; }
+  .demo-beats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; position: relative; }
+  .demo-beat { padding: 24px 22px 22px; opacity: 0.38; transition: opacity 0.5s, transform 0.6s var(--ease), border-color 0.5s, box-shadow 0.5s; }
+  .demo-beat .t { font: 700 20px var(--mono); color: var(--muted); letter-spacing: 0.08em; }
+  .demo-beat .n {
+    width: 46px; height: 46px; margin: 16px 0 16px; border-radius: 50%; display: grid; place-items: center;
+    border: 1.5px solid var(--border); font: 700 22px var(--mono); color: var(--muted); transition: all 0.5s;
+  }
+  .demo-beat h3 { font-size: 32px; line-height: 1.12; font-weight: 700; }
+  .demo-beat p { margin-top: 10px; color: var(--muted); font-size: 23px; line-height: 1.32; }
+  .demo-beat .proves { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); color: var(--foreground); font-size: 22px; line-height: 1.3; }
+  .demo-beat .proves small { display: block; margin-bottom: 6px; color: var(--muted); font: 700 15px var(--mono); letter-spacing: 0.2em; }
+  .demo-beat.done { opacity: 0.7; }
+  .demo-beat.done .n { border-color: var(--nominal); color: var(--nominal); }
+  .demo-beat.cur { opacity: 1; transform: translateY(-10px); border-color: var(--status); box-shadow: 0 30px 70px -30px #000, 0 0 60px -22px var(--status); }
+  .demo-beat.cur .n { background: var(--status); border-color: var(--status); color: #0b0f14; box-shadow: 0 0 24px var(--status); }
+  .demo-beat.cur .t { color: var(--status); }
+  .planb { display: grid; grid-template-columns: auto 1fr; gap: 26px; align-items: center; padding: 22px 30px; border-color: color-mix(in srgb, var(--replay) 55%, var(--border)); }
+  .planb .label { padding: 10px 20px; border-radius: 6px; background: var(--replay); color: #0b0f14; font: 800 22px var(--mono); letter-spacing: 0.3em; }
+  .planb p { font-size: 26px; line-height: 1.35; color: var(--muted); }
+  .planb p strong { color: var(--foreground); font-weight: 600; }
+
+  /* ---------- 6 · what the brief asks, what we deliver ---------- */
+
+  .pillars { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; width: 100%; align-content: start; }
+  .pillar { padding: 28px 28px 26px; }
+  .pillar header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+  .pillar header b { font: 800 22px var(--mono); letter-spacing: 0.22em; color: var(--status); }
+  .pillar header span { color: var(--muted); font-size: 20px; }
+  .pillar ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 15px; }
+  .pillar li { position: relative; padding-left: 40px; font-size: 24px; line-height: 1.3; }
+  .pillar li small { display: block; color: var(--muted); font-size: 19px; line-height: 1.3; margin-top: 3px; }
+  .pillar li code, .mono-inline { font: 600 0.86em var(--mono); color: var(--foreground); background: rgb(11 15 20 / 80%); border: 1px solid var(--border); border-radius: 5px; padding: 1px 7px; white-space: nowrap; }
+  .check { position: absolute; left: 0; top: 3px; width: 26px; height: 26px; }
+  .check circle { fill: rgb(62 207 142 / 12%); stroke: var(--nominal); stroke-width: 1.5; }
+  .check path { fill: none; stroke: var(--nominal); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 22; stroke-dashoffset: 22; }
+  .slide.active .check path { animation: tick 0.5s var(--ease) both; animation-delay: calc(var(--d, 0) * 1ms + 350ms); }
+  @keyframes tick { to { stroke-dashoffset: 0; } }
+  .check.soon circle { fill: rgb(245 166 35 / 12%); stroke: var(--elevated); }
+  .check.soon path { stroke: var(--elevated); }
+  .verdict { margin-top: 26px; padding: 22px 30px; display: flex; align-items: center; gap: 24px; font-size: 27px; width: 100%; }
+  .verdict b { color: var(--status); }
+
+  /* ---------- 7 · the architecture ---------- */
+
+  .arch { width: 100%; display: flex; flex-direction: column; gap: 22px; }
+  .arch svg { width: 100%; flex: 1; min-height: 0; }
+  .facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+  .fact { padding: 14px 22px; display: flex; align-items: baseline; gap: 16px; }
+  .fact b { font: 750 44px/1 var(--mono); color: var(--status); font-variant-numeric: tabular-nums; }
+  .fact span { color: var(--muted); font-size: 21px; line-height: 1.25; }
+
+  /* ---------- 8 · the Sentinel ---------- */
+
+  .edge-left { flex: 0.82; display: flex; flex-direction: column; gap: 14px; }
+  .probe { padding: 16px 22px; display: grid; grid-template-columns: 140px 1fr auto; gap: 18px; align-items: center; }
+  .probe b { font: 700 23px var(--mono); }
+  .probe span { color: var(--muted); font-size: 22px; line-height: 1.25; }
+  .probe i { font: 600 19px var(--mono); font-style: normal; color: var(--status); white-space: nowrap; }
+  .edge-right { flex: 1.18; padding: 28px 30px 22px; display: flex; flex-direction: column; }
+  .edge-right h3 { font-size: 28px; font-weight: 650; }
+  .edge-right h3 span { color: var(--muted); font-weight: 400; }
+  .edge-right svg { flex: 1; min-height: 0; width: 100%; margin-top: 8px; overflow: visible; }
+  .axis { stroke: #233040; stroke-width: 1.5; }
+  .th { stroke-width: 1.5; stroke-dasharray: 7 7; }
+  .th.clear { stroke-dasharray: 2 8; opacity: 0.7; }
+  .curve { fill: none; stroke: var(--foreground); stroke-width: 3.5; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 1; }
+  .slide.active .curve { animation: draw-once 6.8s linear 0.6s both; }
+  .mark { opacity: 0; transform-box: fill-box; transform-origin: center; }
+  /* --at: how far along the curve the mark sits, 0 to 1, measured by the script. */
+  .slide.active .mark { animation: pop 0.7s var(--ease) both; animation-delay: calc(var(--at) * 6.8s + 0.6s); }
+  @keyframes pop { from { opacity: 0; transform: scale(0.5); } 60% { transform: scale(1.15); } to { opacity: 1; transform: none; } }
+  .mark-text { font: 700 19px var(--mono); }
+  .edge-foot { margin-top: 8px; display: flex; gap: 12px; flex-wrap: wrap; }
+
+  /* ---------- 9 · the AI ---------- */
+
+  .ai-col { flex: 1; padding: 28px 30px 26px; display: flex; flex-direction: column; min-width: 0; }
+  .ai-col header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .ai-col header h3 { font-size: 34px; font-weight: 720; }
+  .ai-viz { margin-top: 20px; flex: 1; min-height: 0; display: flex; gap: 22px; }
+  .cam {
+    position: relative; flex: 1; border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+    background: linear-gradient(180deg, #0d1319 0 58%, #141d27 58% 100%);
+  }
+  .cam::before { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, rgb(255 255 255 / 3%) 0 1px, transparent 1px 54px); }
+  .cam .rec { position: absolute; left: 14px; top: 12px; font: 600 15px var(--mono); color: var(--muted); letter-spacing: 0.08em; }
+  .cam .rec b { color: var(--critical); }
+  .person { position: absolute; bottom: 9%; left: calc(8% + var(--x, 0.5) * 84%); width: 0; height: 62%; }
+  .person svg { position: absolute; left: -60px; bottom: 0; width: 120px; height: 100%; }
+  .person .fig { fill: rgb(216 225 234 / 22%); stroke: rgb(216 225 234 / 55%); stroke-width: 2; }
+  .person .bbox { position: absolute; left: -66px; right: -66px; top: -8px; bottom: -6px; }
+  .bbox i { position: absolute; width: 22px; height: 22px; border: 3px solid var(--critical); filter: drop-shadow(0 0 6px var(--critical)); }
+  .bbox i:nth-child(1) { left: 0; top: 0; border-right: 0; border-bottom: 0; }
+  .bbox i:nth-child(2) { right: 0; top: 0; border-left: 0; border-bottom: 0; }
+  .bbox i:nth-child(3) { left: 0; bottom: 0; border-right: 0; border-top: 0; }
+  .bbox i:nth-child(4) { right: 0; bottom: 0; border-left: 0; border-top: 0; }
+  .bbox span { position: absolute; left: 50%; top: -34px; translate: -50% 0; padding: 4px 10px; border: 1.5px solid var(--critical); border-radius: 999px; background: rgb(11 15 20 / 80%); color: var(--critical); font: 700 15px var(--mono); white-space: nowrap; }
+  .readout { width: 236px; display: grid; gap: 10px; align-content: start; }
+  .readout div { padding: 12px 16px; border: 1px solid var(--border); border-radius: 8px; background: rgb(11 15 20 / 70%); font: 600 19px var(--mono); display: flex; justify-content: space-between; gap: 10px; }
+  .readout div span { color: var(--muted); }
+  .readout div b { font-variant-numeric: tabular-nums; }
+  .nums { margin-top: 20px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .num { padding: 16px 18px; border: 1px solid var(--border); border-radius: 10px; background: rgb(11 15 20 / 55%); }
+  .num b { display: block; font: 750 42px/1 var(--mono); color: var(--status); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .num b small { font-size: 22px; font-weight: 600; margin-left: 4px; }
+  .num span { display: block; margin-top: 9px; color: var(--muted); font-size: 19px; line-height: 1.28; }
+  .ai-note { margin-top: 16px; color: var(--muted); font-size: 21px; line-height: 1.35; }
+  .ai-note strong { color: var(--foreground); font-weight: 600; }
+  .drift { flex: 1; min-height: 0; width: 100%; overflow: visible; }
+  .draw { fill: none; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 1; }
+  .slide.active .draw { animation: draw-once 3.2s ease-in-out both; animation-delay: calc(var(--d, 0) * 1ms + 500ms); }
+  @keyframes draw-once { to { stroke-dashoffset: 0; } }
+  .late { opacity: 0; }
+  .slide.active .late { animation: fade 0.7s both; animation-delay: calc(var(--late, 3) * 1s); }
+
+  /* ---------- 10 · security ---------- */
+
+  .sec-left { flex: 1.05; display: flex; flex-direction: column; gap: 18px; }
+  .ports { padding: 26px 28px; }
+  .ports h3, .sec-right h3 { font-size: 26px; font-weight: 650; display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+  .ports h3 span, .sec-right h3 span { color: var(--muted); font: 500 18px var(--mono); }
+  .scan { margin-top: 18px; display: grid; grid-template-columns: repeat(32, 1fr); gap: 5px; position: relative; }
+  .scan i { aspect-ratio: 1; border-radius: 3px; background: #1b2530; animation: scan-cell 4.8s linear infinite; animation-delay: calc(var(--c) * 46ms); }
+  .scan i.open { background: var(--nominal); box-shadow: 0 0 12px var(--nominal); animation-name: scan-open; }
+  @keyframes scan-cell { 0%, 6%, 100% { background: #1b2530; } 2% { background: #4a5f76; } }
+  @keyframes scan-open { 0%, 100% { transform: none; } 2% { transform: scale(1.5); } }
+  .open-ports { margin-top: 20px; display: grid; gap: 10px; }
+  .port { display: grid; grid-template-columns: 200px 1fr; gap: 20px; align-items: baseline; font-size: 23px; line-height: 1.3; }
+  .port b { font: 700 25px var(--mono); color: var(--nominal); }
+  .port.udp b { color: var(--muted); }
+  .port span { color: var(--muted); }
+  .port span strong { color: var(--foreground); font-weight: 600; }
+  .big3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .big { padding: 22px 24px; }
+  .big b { display: block; font: 800 68px/1 var(--mono); color: var(--status); font-variant-numeric: tabular-nums; }
+  .big span { display: block; margin-top: 10px; color: var(--muted); font-size: 21px; line-height: 1.28; }
+  .sec-right { flex: 0.95; padding: 26px 30px; display: flex; flex-direction: column; }
+  .layers { margin-top: 16px; display: grid; gap: 0; flex: 1; align-content: space-between; }
+  .layer { display: grid; grid-template-columns: 44px 1fr; gap: 18px; padding: 15px 0; border-top: 1px solid var(--border); align-items: start; }
+  .layer svg { width: 36px; height: 36px; stroke: var(--status); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; margin-top: 2px; }
+  .layer b { display: block; font-size: 25px; font-weight: 650; }
+  .layer div > span { display: block; margin-top: 4px; color: var(--muted); font-size: 21px; line-height: 1.32; }
+
+  /* ---------- 11 · the Digital Twin ---------- */
+
+  .twin-list { flex: 0.82; display: grid; gap: 12px; align-content: center; }
+  .twin-item { position: relative; padding: 16px 22px 16px 26px; border: 1px solid transparent; border-radius: 12px; opacity: 0.45; transition: all 0.6s var(--ease); overflow: hidden; }
+  .twin-item small { font: 700 17px var(--mono); letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); transition: color 0.6s; }
+  .twin-item b { display: block; margin-top: 8px; font-size: 28px; line-height: 1.22; font-weight: 600; }
+  .twin-item.on { opacity: 1; border-color: var(--border); background: rgb(27 37 48 / 70%); transform: translateX(12px); }
+  .twin-item.on small { color: var(--status); }
+  .twin-item::after { content: ''; position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: var(--status); }
+  .twin-item.on::after { animation: fill var(--hold, 4.2s) linear forwards; }
+  @keyframes fill { to { width: 100%; } }
+  .twin-view { flex: 1.18; position: relative; align-self: center; aspect-ratio: 16 / 10; }
+  .twin-view .shot { position: absolute; inset: 0; opacity: 0; transition: opacity 0.9s; }
+  .twin-view .shot.on { opacity: 1; }
+  .twin-view .shot.on .zoom { animation: kenburns 9s ease-out both; }
+  .zoom { position: absolute; inset: 0; background: inherit; }
+  .twin-view .frame { position: absolute; inset: -1px; border: 2px solid var(--status); border-radius: 16px; opacity: 0.6; transition: border-color 0.8s; pointer-events: none; box-shadow: 0 0 80px -30px var(--status); }
+
+  /* ---------- 12 · the figures ---------- */
+
+  .figures { width: 100%; display: grid; grid-template-columns: 1.25fr 1fr 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 22px; }
+  .figure { padding: 30px 32px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
+  .figure b { font: 800 84px/0.95 var(--mono); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  .figure span { margin-top: 14px; color: var(--muted); font-size: 24px; line-height: 1.3; }
+  .figure span strong { color: var(--foreground); font-weight: 600; }
+  .figure.hero { grid-row: span 2; justify-content: space-between; border-color: color-mix(in srgb, var(--status) 55%, var(--border)); box-shadow: 0 30px 80px -30px #000, 0 0 90px -40px var(--status); }
+  .figure.hero b { font-size: 128px; color: var(--status); text-shadow: 0 0 70px color-mix(in srgb, var(--status) 45%, transparent); }
+  .figure.hero .label { font-size: 34px; color: var(--foreground); font-weight: 600; margin-top: 10px; }
+  .split { display: grid; gap: 14px; }
+  .bar { display: grid; grid-template-columns: 150px 1fr 80px; gap: 16px; align-items: center; font: 600 21px var(--mono); color: var(--muted); }
+  .bar i { height: 12px; border-radius: 6px; background: var(--border); overflow: hidden; position: relative; }
+  .bar i::after { content: ''; position: absolute; inset: 0; transform-origin: left; transform: scaleX(0); background: var(--status); border-radius: 6px; }
+  .slide.active .bar i::after { animation: bar 1.4s var(--ease) 0.7s forwards; }
+  @keyframes bar { to { transform: scaleX(var(--v)); } }
+  .figure .split .bar b { font: 700 24px var(--mono); color: var(--foreground); text-align: right; letter-spacing: 0; text-shadow: none; }
+
+  /* ---------- 13 · the close ---------- */
+
+  .s-end { align-items: center; justify-content: center; text-align: center; }
+  .s-end h2 { font-size: 104px; max-width: none; letter-spacing: -0.02em; }
+  .s-end .recap { margin-top: 56px; display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; }
+  .s-end .recap .tag { font-size: 23px; padding: 12px 22px; }
+  .s-end .q { margin-top: 70px; font: 700 30px var(--mono); letter-spacing: 0.5em; color: var(--muted); text-transform: uppercase; }
+  .s-end .q::after { content: '_'; color: var(--status); animation: blink 1.1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ---------- the presenter's panels ---------- */
+
+  .notes { display: none; }
+
+  .panel {
+    position: absolute; z-index: 20; left: 110px; right: 110px; bottom: 110px; padding: 24px 30px;
+    border: 1px solid var(--border); border-radius: 12px; background: rgb(11 15 20 / 94%);
+    font-size: 26px; line-height: 1.45; display: none;
+  }
+  .panel small { display: block; margin-bottom: 8px; color: var(--status); font: 700 17px var(--mono); letter-spacing: 0.25em; }
+  .show-notes .panel.notes-panel { display: block; }
+
+  .overview {
+    position: absolute; inset: 0; z-index: 30; padding: 90px 110px; background: rgb(11 15 20 / 96%);
+    display: none; grid-template-columns: repeat(3, 1fr); gap: 16px; align-content: center;
+  }
+  .show-overview .overview { display: grid; }
+  .overview button {
+    all: unset; cursor: pointer; padding: 20px 24px; border: 1px solid var(--border); border-radius: 10px; background: var(--card);
+    display: grid; grid-template-columns: auto 1fr auto; gap: 18px; align-items: baseline; font-size: 25px;
+  }
+  .overview button:hover, .overview button.cur { border-color: var(--status); }
+  .overview button b { font: 700 20px var(--mono); color: var(--status); }
+  .overview button i { font: 500 18px var(--mono); font-style: normal; color: var(--muted); }
+
+  .blackout { position: absolute; inset: 0; z-index: 40; background: #000; opacity: 0; pointer-events: none; transition: opacity 0.5s; }
+  .show-black .blackout { opacity: 1; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: 0.01ms !important; }
+  }
+
+  /* Ctrl+P gives one page a slide, everything shown: the file to hand in beside this one. */
+  @media print {
+    @page { size: 1920px 1080px; margin: 0; }
+    html, body { height: auto; overflow: visible; background: var(--background); }
+    #stage { position: static; transform: none; height: auto; overflow: visible; }
+    .slide { position: relative; height: 1080px; opacity: 1; visibility: visible; transform: none; break-after: page; overflow: hidden; }
+    .backdrop, .flash, .chrome, .panel, .overview, .blackout, .keys { display: none !important; }
+    [data-a], [data-step], .mark, .late, .s-title h1 span { opacity: 1 !important; transform: none !important; animation: none !important; }
+    .curve, .draw, .check path { stroke-dashoffset: 0 !important; animation: none !important; }
+    .s-title .line { width: 240px; }
+    .bar i::after { transform: scaleX(var(--v)); }
+    .twin-view .shot:first-child { opacity: 1; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body data-status="nominal">
+<div id="stage">
+  <div class="backdrop" aria-hidden="true">
+    <div class="glow"></div>
+    <svg viewBox="0 0 1920 1080" preserveAspectRatio="none">
+      <ellipse class="contour" cx="960" cy="1210" rx="640" ry="190" />
+      <ellipse class="contour" cx="960" cy="1210" rx="860" ry="270" />
+      <ellipse class="contour" cx="960" cy="1210" rx="1090" ry="350" />
+      <ellipse class="contour" cx="960" cy="1210" rx="1330" ry="440" />
+      <ellipse class="ring" cx="960" cy="1184" rx="1500" ry="120" />
+      <ellipse class="ring-dash" cx="960" cy="1200" rx="1580" ry="150" />
+    </svg>
+    <div id="motes"></div>
+  </div>
+
+  <!-- 1 ───────────────────────────────────────────────────────── title -->
+  <section class="slide s-title" data-title="Sentinel-X" data-part="0" data-t="15" data-status="nominal">
+    <div class="text">
+      <p class="kicker" data-a>Workshop national EPSI · M1 · Octobre 2026</p>
+      <h1 aria-label="Sentinel-X">
+        <span>S</span><span>E</span><span>N</span><span>T</span><span>I</span><span>N</span><span>E</span><span>L</span><span class="x">-X</span>
+      </h1>
+      <p class="sub" data-a data-d="800">L’avant-poste industriel du futur</p>
+      <div class="line"></div>
+      <p class="pitch" data-a data-d="1200">Un boîtier autonome, <strong>trois menaces neutralisées</strong>.<br />Et un jumeau numérique 3D qui rend tout visible, en direct.</p>
+      <div class="tags" data-a data-d="1500">
+        <span class="tag live">OPTION A · CENTRALISATION EMBARQUÉE</span>
+        <span class="tag">ESP32 + RASPBERRY PI 4</span>
+      </div>
+    </div>
+    <div class="visual" data-a="scale" data-d="500">
+      <div class="shot"><div class="zoom kenburns" data-src="../twin/outpost-nominal.png" data-crop="420,195,1010"></div></div>
+      <span class="tag live caption">DIGITAL TWIN · LIVE</span>
+    </div>
+    <p class="keys">→ avancer · ← reculer · F plein écran · T chrono · O plan · N notes · B écran noir</p>
+    <aside class="notes">Bonjour, nous sommes le consortium Sentinel-X. Un seul boîtier pour surveiller une micro-centrale isolée, et un jumeau 3D qui montre en direct ce que le boîtier perçoit.</aside>
+  </section>
+
+  <!-- 2 ───────────────────────────────────────────────────────── the mission -->
+  <section class="slide" data-title="La mission : trois menaces" data-part="0" data-t="20" data-status="critical">
+    <p class="kicker" data-a>La mission · AetherCorp, 2050</p>
+    <h2 data-a>Des micro-centrales isolées, sans personnel sur place, sous <em>trois menaces simultanées</em>.</h2>
+    <div class="body">
+      <div class="threats">
+        <article class="card threat" data-a>
+          <svg viewBox="0 0 48 48"><path d="M24 5 8 11v11c0 10 6.6 17.6 16 21 9.400-3.400 16-11 16-21V11Z" /><path d="M17 24h14M24 17v14" transform="rotate(45 24 24)" /></svg>
+          <h3>Cyberattaques réseau</h3>
+          <p class="what">Écoute, usurpation, injection de trames, déni de service.</p>
+          <p class="answer"><small>Notre réponse</small>Chaque canal est chiffré <strong>et</strong> authentifié&nbsp;: MQTTS, HTTPS, WSS.</p>
+        </article>
+        <article class="card threat" data-a>
+          <svg viewBox="0 0 48 48"><circle cx="24" cy="12" r="5" /><path d="M14 43V30l-3-8 6-5h14l6 5-3 8v13M20 43V32M28 43V32" /><path d="M4 8v-4h4M44 8v-4h-4M4 40v4h4M44 40v4h-4" /></svg>
+          <h3>Intrusions physiques</h3>
+          <p class="what">Espionnage industriel autour du site.</p>
+          <p class="answer"><small>Notre réponse</small>Une IA de vision isole la personne sur la webcam, la caméra la suit, le PIR confirme.</p>
+        </article>
+        <article class="card threat" data-a>
+          <svg viewBox="0 0 48 48"><path d="M24 4c2 8 12 12 12 24a12 12 0 0 1-24 0c0-5 3-8 5-11 1 3 2 5 4 6 0-7 1-13 3-19Z" /><path d="M24 40a5 5 0 0 0 5-5c0-3-3-5-5-9-2 4-5 6-5 9a5 5 0 0 0 5 5Z" /></svg>
+          <h3>Risques environnementaux</h3>
+          <p class="what">Fuite de gaz combustible, surchauffe thermique.</p>
+          <p class="answer"><small>Notre réponse</small>Des sondes qui déclenchent l’Alarme sur place, et un modèle qui voit la dérive avant le seuil.</p>
+        </article>
+      </div>
+    </div>
+    <aside class="notes">Le contexte du sujet : personne sur place, trois menaces en même temps. À chaque menace, une réponse dans notre boîtier. C’est le fil de toute la soutenance.</aside>
+  </section>
+
+  <!-- 3 ───────────────────────────────────────────────────────── team and Option A -->
+  <section class="slide" data-title="L’équipe et l’Option A" data-part="0" data-t="25" data-status="nominal">
+    <p class="kicker" data-a>Le consortium · la variante retenue</p>
+    <h2 data-a>Cinq ingénieurs, <em>une seule machine serveur</em>, dans le boîtier.</h2>
+    <div class="body">
+      <div class="team" id="team"></div>
+      <div class="card option" data-a>
+        <h3><span>Option A</span> · Centralisation embarquée</h3>
+        <div class="box-diagram">
+          <svg viewBox="0 0 760 262">
+            <rect class="zone" x="6" y="30" width="520" height="226" rx="16" />
+            <text class="svg-label" x="24" y="20">ENCLOSURE · IMPRIMÉE 3D · GRAVÉE LASER</text>
+            <rect class="node" x="30" y="56" width="200" height="184" rx="12" />
+            <text class="svg-title" x="50" y="94">Sentinel</text>
+            <text class="svg-sub" x="50" y="122">ESP32 · C++</text>
+            <text class="svg-sub" x="50" y="166">4 sondes</text>
+            <text class="svg-sub" x="50" y="192">Alarme</text>
+            <text class="svg-sub" x="50" y="218">autonome</text>
+            <rect class="node hot" x="300" y="56" width="200" height="184" rx="12" />
+            <text class="svg-title" x="318" y="94">Command Post</text>
+            <text class="svg-sub" x="318" y="122">Raspberry Pi 4</text>
+            <text class="svg-sub" x="318" y="166">Wi-Fi · Docker</text>
+            <text class="svg-sub" x="318" y="192">IA · webcam USB</text>
+            <text class="svg-sub" x="318" y="218">écran HDMI</text>
+            <path class="wire sec" d="M230 148H300" />
+            <circle class="pulse-dot" r="6" fill="#3ecf8e" color="#3ecf8e"><animateMotion dur="1.4s" repeatCount="indefinite" path="M230 148H300" /></circle>
+            <rect class="node" x="590" y="88" width="160" height="120" rx="12" />
+            <text class="svg-title" x="606" y="130">Opérateur</text>
+            <text class="svg-sub" x="606" y="158">navigateur</text>
+            <text class="svg-sub" x="606" y="184">seulement</text>
+            <path class="wire sec" d="M500 148H590" />
+            <circle class="pulse-dot" r="6" fill="#3ecf8e" color="#3ecf8e"><animateMotion dur="1.8s" repeatCount="indefinite" path="M500 148H590" /></circle>
+          </svg>
+        </div>
+        <ul>
+          <li><b>ESP32</b> au lieu de l’ESP8266&nbsp;: la mémoire pour TLS, plusieurs entrées analogiques.</li>
+          <li><b>Pi 4</b> au lieu du Pi 5&nbsp;: d’où un modèle de vision léger.</li>
+          <li><b>Écran HDMI</b> sur le Pi au lieu de l’OLED&nbsp;: IP, Wi-Fi, mesures, Alertes.</li>
+        </ul>
+      </div>
+    </div>
+    <aside class="notes">Présenter chacun en une phrase. Option A : le Pi est dans le boîtier, il fait point d’accès Wi-Fi, serveur et IA. Le PC n’est qu’un navigateur. Trois écarts au matériel du sujet, assumés et justifiés.</aside>
+  </section>
+
+  <!-- 4 ───────────────────────────────────────────────────────── the teaser -->
+  <section class="slide s-teaser" data-title="Teaser « Sentinel Drop »" data-part="1" data-t="60" data-status="elevated" data-steps="1">
+    <div class="text">
+      <p class="kicker" data-a>Projection · 60 secondes</p>
+      <h2 data-a>Sentinel <em>Drop</em></h2>
+      <p class="lead" data-a>Le produit fini, raconté en une minute, sur fond vert.</p>
+      <div class="beats">
+        <div class="beat-row" data-a><b>00 à 10 s</b><span><strong>La menace</strong> · une centrale isolée, la sirène</span></div>
+        <div class="beat-row" data-a><b>10 à 30 s</b><span><strong>Le boîtier</strong> · impression 3D, gravure laser, sondes</span></div>
+        <div class="beat-row" data-a><b>30 à 50 s</b><span><strong>La stack</strong> · le code réel, la vision, le Twin qui réagit</span></div>
+        <div class="beat-row" data-a><b>50 à 60 s</b><span><strong>L’équipe</strong> · «&nbsp;la sécurité à la bordure&nbsp;»</span></div>
+      </div>
+    </div>
+    <div class="phone" id="phone" data-a="scale" data-d="300">
+      <video id="drop" src="sentinel-drop.mp4" preload="metadata" playsinline></video>
+      <div class="placeholder">
+        <div class="bars"></div>
+        <div class="countdown">
+          <svg viewBox="0 0 300 300"><circle class="track" cx="150" cy="150" r="140" /><circle class="left" id="ring60" cx="150" cy="150" r="140" /></svg>
+          <div class="num" id="num60">60</div>
+          <small>SECONDES</small>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">→ lance la vidéo (ou le compte à rebours si le fichier sentinel-drop.mp4 n’est pas à côté de la page). Ne rien dire pendant la projection.</aside>
+  </section>
+
+  <!-- 5 ───────────────────────────────────────────────────────── the live demo -->
+  <section class="slide" data-title="Démo live" data-part="2" data-t="180" data-status="nominal" data-steps="6">
+    <p class="kicker" data-a>Démo live · 3 minutes · tout est réel</p>
+    <h2 data-a>De la sonde au jumeau 3D, <em>sous vos yeux</em>.</h2>
+    <div class="body">
+      <div class="demo">
+        <div class="demo-beats" id="beats">
+          <article class="card demo-beat" data-a data-beat-status="critical">
+            <div class="t">0:00</div><div class="n">1</div>
+            <h3>Gaz</h3>
+            <p>Un briquet, sans flamme, près de la sonde. La sirène part sur le boîtier, le Twin rougit.</p>
+            <p class="proves"><small>PROUVE</small>Alarme autonome, télémétrie → Twin</p>
+          </article>
+          <article class="card demo-beat" data-a data-beat-status="critical">
+            <div class="t">0:40</div><div class="n">2</div>
+            <h3>Intrusion</h3>
+            <p>Quelqu’un entre dans le champ. Sa figurine apparaît dans le périmètre et le suit.</p>
+            <p class="proves"><small>PROUVE</small>Vision IA en direct sur la webcam</p>
+          </article>
+          <article class="card demo-beat" data-a data-beat-status="elevated">
+            <div class="t">1:20</div><div class="n">3</div>
+            <h3>Bruit</h3>
+            <p>Un claquement de mains. La courbe bondit, une onde part du boîtier.</p>
+            <p class="proves"><small>PROUVE</small>Captation multi-sondes</p>
+          </article>
+          <article class="card demo-beat" data-a data-beat-status="replay">
+            <div class="t">1:50</div><div class="n">4</div>
+            <h3>Dérive prédite</h3>
+            <p>Le time-scrubber rejoue un Incident enregistré, étiqueté REPLAY.</p>
+            <p class="proves"><small>PROUVE</small>Prédictif, sans seuil statique</p>
+          </article>
+          <article class="card demo-beat" data-a data-beat-status="elevated">
+            <div class="t">2:20</div><div class="n">5</div>
+            <h3>Commande</h3>
+            <p>L’Opérateur coupe puis teste l’Alarme depuis le dashboard.</p>
+            <p class="proves"><small>PROUVE</small>Contrôle réactif, aller-retour complet</p>
+          </article>
+          <article class="card demo-beat" data-a data-beat-status="nominal">
+            <div class="t">2:40</div><div class="n">6</div>
+            <h3>Retour au calme</h3>
+            <p>Les Alertes se referment d’elles-mêmes. Le Twin repasse au vert.</p>
+            <p class="proves"><small>PROUVE</small>Une Alerte = une transition</p>
+          </article>
+        </div>
+        <div class="card planb" data-a>
+          <span class="label">PLAN B</span>
+          <p>Si le direct tombe&nbsp;: le <strong>time-scrubber rejoue l’Incident enregistré</strong> par le Command Post, seconde par seconde, cadre violet et étiquette REPLAY. <strong>Aucune mesure n’est inventée.</strong></p>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">Basculer sur le dashboard (B noircit cette page). → fait avancer le repère d’un temps à l’autre si on garde la page sur un second écran. Si le réseau tombe : time-scrubber, on le dit.</aside>
+  </section>
+
+  <!-- 6 ───────────────────────────────────────────────────────── the brief, delivered -->
+  <section class="slide" data-title="Ce que le sujet exige, ce que nous livrons" data-part="3" data-t="40" data-status="nominal">
+    <p class="kicker" data-a>Les attendus du sujet</p>
+    <h2 data-a>Quatre piliers exigés, <em>une seule chaîne</em> livrée.</h2>
+    <div class="body" style="flex-direction: column; gap: 0;">
+      <div class="pillars">
+        <article class="card pillar" data-a>
+          <header><b>DEV</b><span>Edge &amp; applications</span></header>
+          <ul>
+            <li>Firmware en C++<small>PlatformIO, une trame par seconde</small></li>
+            <li>API REST + WebSocket<small><code>POST /api/v1/alerts</code>, l’entrée imposée</small></li>
+            <li>Dashboard temps réel<small>courbes, Status, retour webcam</small></li>
+            <li>Contrôle réactif<small>l’Alarme pilotée depuis le navigateur</small></li>
+          </ul>
+        </article>
+        <article class="card pillar" data-a>
+          <header><b>IA</b><span>Vision &amp; prédictif</span></header>
+          <ul>
+            <li>Personne isolée sur la webcam USB<small>EfficientDet-Lite0, TFLite</small></li>
+            <li>Images bridées en amont<small>640 × 480, puis 320 × 320 pour le modèle</small></li>
+            <li>Aucun seuil statique<small>Isolation Forest, pentes sur 120 s</small></li>
+            <li>La dérive avant le seuil critique<small>corrélation température + gaz</small></li>
+          </ul>
+        </article>
+        <article class="card pillar" data-a>
+          <header><b>INFRA</b><span>Conteneurs &amp; réseau</span></header>
+          <ul>
+            <li>Stack Docker-Compose sur le Pi<small>6 services, une commande</small></li>
+            <li>Point d’accès Wi-Fi dédié<small>WPA2, <code>192.168.X.0/24</code>, ni NAT ni pont</small></li>
+            <li>Installation plug-and-play<small>un script, 10 étapes, firmware flashé</small></li>
+            <li>MCO<small>écran de statut HDMI, journaux bornés</small></li>
+          </ul>
+        </article>
+        <article class="card pillar" data-a>
+          <header><b>CYBER</b><span>Chiffrer, durcir, auditer</span></header>
+          <ul>
+            <li>Chiffrement de bout en bout<small>MQTTS, HTTPS, WSS · TLS ≥ 1.2</small></li>
+            <li>Durcissement du serveur<small>UFW, SSH par clés, Docker sans privilèges</small></li>
+            <li>Aucun secret dans le dépôt<small>vérifié par la CI à chaque PR</small></li>
+            <li data-soon>Pentest croisé<small>plan de test écrit, audit le jeudi</small></li>
+          </ul>
+        </article>
+      </div>
+      <div class="card verdict" data-a>
+        <span class="tag live">ÉLIMINATOIRE</span>
+        <span>«&nbsp;L’interconnexion de chaque bloc&nbsp;»&nbsp;: chez nous, <b>une mesure physique fait bouger le Twin en moins de deux secondes</b>.</span>
+      </div>
+    </div>
+    <aside class="notes">Ne pas tout lire : une ligne par pilier. Insister sur la dernière ligne, l’interconnexion, qui est éliminatoire dans le sujet et que la démo vient de prouver.</aside>
+  </section>
+
+  <!-- 7 ───────────────────────────────────────────────────────── the architecture -->
+  <section class="slide" data-title="Le trajet d’une Alerte" data-part="3" data-t="45" data-status="nominal">
+    <p class="kicker" data-a>Architecture · Option A</p>
+    <h2 data-a>Le trajet d’une Alerte, <em>chiffré à chaque saut</em>.</h2>
+    <div class="body" style="margin-top: 18px;">
+      <div class="arch">
+        <svg viewBox="0 0 1700 560" data-a="fade">
+          <rect class="zone" x="4" y="34" width="1290" height="520" rx="18" />
+          <text class="svg-label" x="24" y="22">ENCLOSURE</text>
+
+          <rect class="node" x="34" y="96" width="290" height="410" rx="14" />
+          <text class="svg-title" x="58" y="140">Sentinel · ESP32</text>
+          <text class="svg-sub" x="58" y="168">C++ · 1 cycle par seconde</text>
+          <g class="svg-sub">
+            <rect class="node" x="58" y="196" width="242" height="44" rx="8" /><text x="74" y="225">DHT22 · température</text>
+            <rect class="node" x="58" y="250" width="242" height="44" rx="8" /><text x="74" y="279">MQ-2 · gaz</text>
+            <rect class="node" x="58" y="304" width="242" height="44" rx="8" /><text x="74" y="333">PIR · présence</text>
+            <rect class="node" x="58" y="358" width="242" height="44" rx="8" /><text x="74" y="387">CZN-15E · bruit</text>
+            <rect class="node hot" x="58" y="424" width="242" height="52" rx="8" /><text x="74" y="457" fill="#d8e1ea">Alarme · sirène</text>
+          </g>
+
+          <rect class="zone" x="430" y="66" width="840" height="470" rx="14" />
+          <text class="svg-label" x="450" y="100">COMMAND POST · RASPBERRY PI 4 · DOCKER-COMPOSE</text>
+
+          <rect class="node" x="460" y="126" width="210" height="84" rx="12" /><text class="svg-title" x="480" y="162">webcam USB</text><text class="svg-sub" x="480" y="190">sur son servo</text>
+          <rect class="node" x="760" y="126" width="210" height="84" rx="12" /><text class="svg-title" x="780" y="162">vision</text><text class="svg-sub" x="780" y="190">TFLite, personne</text>
+          <rect class="node hot" x="460" y="266" width="210" height="84" rx="12" /><text class="svg-title" x="480" y="302">mosquitto</text><text class="svg-sub" x="480" y="330" fill="#3ecf8e">MQTTS :8883</text>
+          <rect class="node" x="760" y="266" width="210" height="84" rx="12" /><text class="svg-title" x="780" y="302">api</text><text class="svg-sub" x="780" y="330">Status, SQLite</text>
+          <rect class="node hot" x="1040" y="266" width="210" height="84" rx="12" /><text class="svg-title" x="1060" y="302">reverse-proxy</text><text class="svg-sub" x="1060" y="330" fill="#3ecf8e">HTTPS / WSS :443</text>
+          <rect class="node" x="760" y="418" width="210" height="84" rx="12" /><text class="svg-title" x="780" y="454">predictive</text><text class="svg-sub" x="780" y="482">Isolation Forest</text>
+          <rect class="node" x="1040" y="418" width="210" height="84" rx="12" /><text class="svg-title" x="1060" y="454">dashboard</text><text class="svg-sub" x="1060" y="482">Digital Twin 3D</text>
+
+          <rect class="node" x="1430" y="236" width="250" height="144" rx="14" /><text class="svg-title" x="1454" y="284">PC Opérateur</text><text class="svg-sub" x="1454" y="314">un navigateur,</text><text class="svg-sub" x="1454" y="340">rien d’autre</text>
+
+          <path class="wire sec" d="M324 296H460" /><path class="wire" d="M670 296H760" /><path class="wire" d="M970 296H1040" /><path class="wire sec" d="M1250 296H1430" />
+          <path class="wire" d="M670 168H760" /><path class="wire" d="M865 210V266" />
+          <path class="wire" d="M565 350V460H760" /><path class="wire" d="M865 418V350" />
+          <path class="wire" d="M1145 350V418" />
+          <path class="wire" stroke-dasharray="5 7" d="M1430 372H324" stroke="#b48cff" opacity="0.45" />
+          <text class="svg-sub" x="1340" y="396" text-anchor="middle" fill="#b48cff">commande</text>
+
+          <text class="svg-label" x="392" y="278" text-anchor="middle" fill="#3ecf8e">TLS</text>
+          <text class="svg-label" x="1340" y="278" text-anchor="middle" fill="#3ecf8e">TLS</text>
+          <text class="svg-sub" x="878" y="244">POST /api/v1/alerts + jeton</text>
+          <text class="svg-sub" x="878" y="406">POST /api/v1/alerts + jeton</text>
+          <text class="svg-sub" x="580" y="446">télémétrie</text>
+
+          <g class="pulse-dot">
+            <circle r="7" fill="#d8e1ea" color="#d8e1ea"><animateMotion dur="2.6s" repeatCount="indefinite" path="M324 296H1430" /></circle>
+            <circle r="7" fill="#d8e1ea" color="#d8e1ea"><animateMotion dur="2.6s" begin="1.3s" repeatCount="indefinite" path="M324 296H1430" /></circle>
+            <circle r="7" fill="#ff4d4f" color="#ff4d4f"><animateMotion dur="2.2s" begin="0.4s" repeatCount="indefinite" path="M670 168H865V296H1430" /></circle>
+            <circle r="7" fill="#f5a623" color="#f5a623"><animateMotion dur="3.4s" begin="0.9s" repeatCount="indefinite" path="M565 350V460H865V296H1430" /></circle>
+            <circle r="6" fill="#b48cff" color="#b48cff"><animateMotion dur="3s" begin="1.6s" repeatCount="indefinite" path="M1430 372H324" /></circle>
+          </g>
+        </svg>
+        <div class="facts">
+          <div class="card fact" data-a><b>1</b><span>schéma d’Alerte unique, émis par l’ESP32 comme par les IA</span></div>
+          <div class="card fact" data-a><b>2</b><span>ports de service publiés, tous deux en TLS</span></div>
+          <div class="card fact" data-a><b>6</b><span>conteneurs, lancés par une commande</span></div>
+          <div class="card fact" data-a><b>1/s</b><span>une trame de télémétrie, l’antenne du Twin bat avec elle</span></div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">Blanc : la télémétrie, une trame par seconde. Rouge : la vision qui poste une Alerte. Orange : le prédictif. Violet : la commande de l’Opérateur qui redescend vers l’ESP32. Le Sentinel décide seul de ses Alertes : il sonne même si le Pi est tombé.</aside>
+  </section>
+
+  <!-- 8 ───────────────────────────────────────────────────────── the Sentinel -->
+  <section class="slide" data-title="Le Sentinel : sondes et Alarme autonome" data-part="3" data-t="40" data-status="elevated">
+    <p class="kicker" data-a>Edge · le Sentinel</p>
+    <h2 data-a>Il décide seul, et <em>sonne sans attendre le serveur</em>.</h2>
+    <div class="body" style="margin-top: 34px;">
+      <div class="edge-left">
+        <div class="card probe" data-a="left"><b>DHT22</b><span>Température, humidité</span><i>40 / 55 °C</i></div>
+        <div class="card probe" data-a="left"><b>MQ-2</b><span>Gaz, fumées · moyenne de 16 lectures</span><i>1500 / 2500</i></div>
+        <div class="card probe" data-a="left"><b>PIR</b><span>Présence · tenue 5 s</span><i>tout ou rien</i></div>
+        <div class="card probe" data-a="left"><b>CZN-15E</b><span>Bruit · part du cycle en fenêtres de 50 ms</span><i>≥ 10 %</i></div>
+        <div class="card probe" data-a="left" style="border-color: color-mix(in srgb, var(--status) 55%, var(--border));"><b class="st">Alarme</b><span>DFPlayer + haut-parleur · sirène tant qu’une Alerte est critique</span><i>locale</i></div>
+        <div class="edge-foot" data-a>
+          <span class="tag">MQTTS · CA VÉRIFIÉE</span>
+          <span class="tag">16 TRANSITIONS EN FILE HORS LIGNE</span>
+        </div>
+      </div>
+      <div class="card edge-right" data-a>
+        <h3>Seuils à hystérésis <span>· une Alerte = une transition, jamais de rafale</span></h3>
+        <svg viewBox="0 0 920 470">
+          <line class="axis" x1="40" y1="430" x2="900" y2="430" /><line class="axis" x1="40" y1="30" x2="40" y2="430" />
+          <line class="th" x1="40" y1="127" x2="900" y2="127" stroke="#ff4d4f" /><text class="mark-text" x="896" y="117" text-anchor="end" fill="#ff4d4f">critique · 2500</text>
+          <line class="th clear" x1="40" y1="152" x2="900" y2="152" stroke="#ff4d4f" />
+          <line class="th" x1="40" y1="252" x2="900" y2="252" stroke="#f5a623" /><text class="mark-text" x="896" y="242" text-anchor="end" fill="#f5a623">avertissement · 1500</text>
+          <line class="th clear" x1="40" y1="277" x2="900" y2="277" stroke="#f5a623" /><text class="mark-text" x="52" y="300" fill="#7d8b99">retour · seuil − 200</text>
+          <path class="curve" pathLength="1" d="M40 392C130 392 180 372 236 252C290 150 340 150 400 127C440 100 460 80 495 80C540 80 570 118 600 152C630 200 640 244 668 248C690 250 700 240 716 250C740 262 760 268 780 277C810 300 830 372 900 380" />
+          <g class="mark"><circle cx="236" cy="252" r="9" fill="#f5a623" /><text class="mark-text" x="220" y="226" text-anchor="end" fill="#f5a623">raised · warning</text></g>
+          <g class="mark"><circle cx="400" cy="127" r="9" fill="#ff4d4f" /><text class="mark-text" x="386" y="112" text-anchor="end" fill="#ff4d4f">critical → SIRÈNE</text></g>
+          <g class="mark"><circle cx="600" cy="152" r="9" fill="#f5a623" /><text class="mark-text" x="616" y="176" fill="#f5a623">warning</text></g>
+          <g class="mark"><circle cx="780" cy="277" r="9" fill="#3ecf8e" /><text class="mark-text" x="796" y="268" fill="#3ecf8e">cleared</text></g>
+          <text class="svg-sub" x="52" y="460">mesure du MQ-2 (brute, 0 à 4095)</text>
+        </svg>
+      </div>
+    </div>
+    <aside class="notes">Quatre sondes lues chaque seconde. Les seuils ont une bande : la mesure peut osciller autour du seuil, il n’y a qu’une Alerte. Critique : la sirène part sur le boîtier, sans passer par le Pi. C’est ce qui rend le Sentinel autonome.</aside>
+  </section>
+
+  <!-- 9 ───────────────────────────────────────────────────────── the AI -->
+  <section class="slide" data-title="L’IA locale : voir et prévoir" data-part="3" data-t="45" data-status="critical">
+    <p class="kicker" data-a>IA locale · sur le Pi, sans cloud</p>
+    <h2 data-a>Voir l’intrus, <em>prévoir la panne</em>.</h2>
+    <div class="body" style="margin-top: 30px; gap: 26px;">
+      <article class="card ai-col" data-a>
+        <header><h3>Vision</h3><span class="tag">EfficientDet-Lite0 · TFLite · classe « person »</span></header>
+        <div class="ai-viz">
+          <div class="cam" id="cam">
+            <div class="rec"><b>●</b> 640 × 480</div>
+            <div class="person">
+              <svg viewBox="0 0 120 300" preserveAspectRatio="xMidYMax meet"><circle class="fig" cx="60" cy="34" r="24" /><path class="fig" d="M30 76h60l12 104H84l-6 112H42l-6-112H18Z" /></svg>
+              <div class="bbox"><i></i><i></i><i></i><i></i><span>PERSONNE · 88&nbsp;%</span></div>
+            </div>
+          </div>
+          <div class="readout">
+            <div><span>x_norm</span><b id="r-x">0.50</b></div>
+            <div><span>h_norm</span><b>0.61</b></div>
+            <div><span>pan</span><b id="r-pan">0°</b></div>
+            <div><span>state</span><b class="c-critical">raised</b></div>
+          </div>
+        </div>
+        <div class="nums">
+          <div class="num"><b>10,6<small>ms</small></b><span>par image, médiane (p95&nbsp;: 13,1) · mesuré sur PC</span></div>
+          <div class="num"><b>−36<small>%</small></b><span>d’inférences grâce au filtre de mouvement</span></div>
+          <div class="num"><b>5</b><span>personnes suivies, la caméra tourne vers la plus proche</span></div>
+        </div>
+        <p class="ai-note">Sujet&nbsp;: <strong>&lt; 100 ms par trame</strong>. Sur le Pi&nbsp;4, le temps d’inférence s’affiche <strong>en direct sur le flux caméra</strong>.</p>
+      </article>
+      <article class="card ai-col" data-a>
+        <header><h3>Maintenance prédictive</h3><span class="tag">Isolation Forest · 200 arbres</span></header>
+        <svg class="drift" viewBox="0 0 800 300">
+          <line class="axis" x1="20" y1="270" x2="790" y2="270" />
+          <line class="th" x1="20" y1="60" x2="790" y2="60" stroke="#f5a623" /><text class="mark-text" x="24" y="48" fill="#f5a623">seuil du firmware</text>
+          <path class="draw" pathLength="1" stroke="#d8e1ea" stroke-width="3.5" d="M20 232C120 230 200 226 300 206C420 180 520 140 640 84C700 58 740 44 790 32" />
+          <path class="draw" pathLength="1" stroke="#7d8b99" stroke-width="2.5" d="M20 250C140 250 220 246 320 240C440 232 560 218 790 196" />
+          <g class="late" style="--late: 2.1">
+            <line x1="330" y1="30" x2="330" y2="270" stroke="#f5a623" stroke-width="2" />
+            <circle cx="330" cy="199" r="9" fill="#f5a623" />
+            <text class="mark-text" x="318" y="150" text-anchor="end" fill="#f5a623">Alerte predictive</text>
+          </g>
+          <g class="late" style="--late: 3.3">
+            <line x1="686" y1="30" x2="686" y2="270" stroke="#7d8b99" stroke-width="2" stroke-dasharray="4 6" />
+            <path d="M338 286H678" stroke="#3ecf8e" stroke-width="3" /><path d="M338 278v16M678 278v16" stroke="#3ecf8e" stroke-width="3" />
+          </g>
+          <text class="svg-sub" x="700" y="110">température</text><text class="svg-sub" x="700" y="226">gaz</text>
+        </svg>
+        <div class="nums">
+          <div class="num"><b>≈&nbsp;43<small>min</small></b><span>d’avance sur le seuil, en simulation de dérive lente</span></div>
+          <div class="num"><b>7</b><span>variables sur 120 s, dont les pentes température et gaz</span></div>
+          <div class="num"><b>0</b><span>seuil écrit à la main&nbsp;: les niveaux sont appris</span></div>
+        </div>
+        <p class="ai-note">Entraîné sur le <strong>nominal seulement</strong>. Le Twin fait pulser en orange la sonde qui dérive.</p>
+      </article>
+    </div>
+    <aside class="notes">Vision : un modèle léger, choisi pour le Pi 4. Chiffre mesuré sur PC, le temps réel du Pi se lit sur le flux pendant la démo. Prédictif : interdit d’écrire if temp > 40, donc un modèle qui apprend le nominal et lève l’Alerte sur la corrélation des pentes, bien avant le seuil.</aside>
+  </section>
+
+  <!-- 10 ───────────────────────────────────────────────────────── security -->
+  <section class="slide" data-title="Sécurité : chiffrer, authentifier, durcir" data-part="3" data-t="45" data-status="nominal">
+    <p class="kicker" data-a>Cybersécurité</p>
+    <h2 data-a>Deux ports publiés, <em>zéro en clair</em>.</h2>
+    <div class="body" style="margin-top: 30px; gap: 26px;">
+      <div class="sec-left">
+        <div class="big3">
+          <div class="card big" data-a><b data-count="2">2</b><span>ports de service publiés&nbsp;: 443 et 8883</span></div>
+          <div class="card big" data-a><b>0</b><span>port en clair&nbsp;: ni MQTT 1883, ni HTTP 80</span></div>
+          <div class="card big" data-a><b data-count="4">4</b><span>comptes MQTT, chacun borné par une ACL</span></div>
+        </div>
+        <div class="card ports" data-a>
+          <h3>Ce qu’un scan Nmap doit trouver sur le Pi <span>-sS -p-</span></h3>
+          <div class="scan" id="scan"></div>
+          <div class="open-ports">
+            <div class="port"><b>443/tcp</b><span><strong>HTTPS / WSS</strong> · dashboard, API, flux caméra derrière la session</span></div>
+            <div class="port"><b>8883/tcp</b><span><strong>MQTTS</strong> · le Sentinel, avec son compte et sa CA</span></div>
+            <div class="port"><b>22/tcp</b><span><strong>SSH</strong> · clé ed25519, depuis le PC Opérateur seulement</span></div>
+            <div class="port udp"><b>67, 123/udp</b><span>DHCP et heure du réseau de table, rien d’autre</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="card sec-right" data-a>
+        <h3>Défense en profondeur <span>du fil au conteneur</span></h3>
+        <div class="layers">
+          <div class="layer"><svg viewBox="0 0 36 36"><rect x="7" y="16" width="22" height="15" rx="3" /><path d="M12 16v-5a6 6 0 0 1 12 0v5" /></svg><div><b>TLS ≥ 1.2, CA d’équipe</b><span>Chaque client vérifie le certificat du broker. Jamais de <span class="mono-inline">setInsecure()</span>.</span></div></div>
+          <div class="layer"><svg viewBox="0 0 36 36"><circle cx="13" cy="18" r="6" /><path d="M19 18h13M27 18v5M31 18v4" /></svg><div><b>Une identité par canal</b><span>Comptes MQTT + ACL, un jeton par IA, une session Opérateur. La source vient du canal, jamais du message.</span></div></div>
+          <div class="layer"><svg viewBox="0 0 36 36"><path d="M18 4 6 9v8c0 8 5 13 12 15 7-2 12-7 12-15V9Z" /><path d="m13 18 4 4 7-8" /></svg><div><b>Pi durci par un script rejouable</b><span>UFW tout refusé en entrée, chaîne <span class="mono-inline">DOCKER-USER</span>, services inutiles coupés.</span></div></div>
+          <div class="layer"><svg viewBox="0 0 36 36"><rect x="5" y="8" width="26" height="20" rx="3" /><path d="M5 15h26M12 8v20M20 8v20" /></svg><div><b>Conteneurs sans privilèges</b><span><span class="mono-inline">cap_drop: ALL</span>, lecture seule, non-root, aucun <span class="mono-inline">privileged</span>.</span></div></div>
+          <div class="layer"><svg viewBox="0 0 36 36"><path d="M4 26c5 0 5-16 10-16s5 16 10 16 4-8 8-8" /><path d="M4 31h28" /></svg><div><b>Tenir sous la charge</b><span>Login 5/min, Alertes 20/s, paquet MQTT ≤ 4 Ko, journaux bornés à 3 × 10 Mo.</span></div></div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">La preuve matérielle demandée par le jury : le scan Nmap et la checklist du script de durcissement, dans le dossier. Sur le Twin, le cadenas WSS est lu depuis la page, pas affirmé. Tout est refusé par défaut, à chaque couche.</aside>
+  </section>
+
+  <!-- 11 ───────────────────────────────────────────────────────── the Digital Twin -->
+  <section class="slide" data-title="Le Digital Twin" data-part="3" data-t="45" data-status="nominal">
+    <p class="kicker" data-a>Notre différence · le Digital Twin</p>
+    <h2 data-a>Le monde réel <em>pilote la scène</em>.</h2>
+    <div class="body" style="margin-top: 26px; gap: 50px;">
+      <div class="twin-list" id="twin-list" data-a="left">
+        <div class="twin-item" data-status="critical"><small>Gaz</small><b>Le boîtier rougit, la brume s’épaissit</b></div>
+        <div class="twin-item" data-status="critical"><small>Intrusion</small><b>La figurine marche avec la personne</b></div>
+        <div class="twin-item" data-status="nominal"><small>Bruit</small><b>Une onde part du boîtier au claquement</b></div>
+        <div class="twin-item" data-status="elevated"><small>Prédictif</small><b>La sonde qui dérive pulse, avec son score</b></div>
+        <div class="twin-item" data-status="replay"><small>Replay</small><b>L’Incident rejoué, seconde par seconde</b></div>
+        <div class="twin-item" data-status="lost"><small>Signal perdu</small><b>L’image décroche, jamais de faux calme</b></div>
+      </div>
+      <div class="twin-view" id="twin-view" data-a="scale">
+        <div class="shot"><div class="zoom" data-src="../twin/gas-peak.png" data-crop="380,195,1128"></div></div>
+        <div class="shot"><div class="zoom" data-src="../twin/intruder-walk.png" data-crop="640,200,960"></div></div>
+        <div class="shot"><div class="zoom" data-src="../twin/noise-wave.png" data-crop="200,130,880"></div></div>
+        <div class="shot"><div class="zoom" data-src="../twin/predictive-label.png" data-crop="260,195,960"></div></div>
+        <div class="shot"><div class="zoom" data-src="../twin/replay-scenario.png" data-crop="244,52,1034"></div></div>
+        <div class="shot"><div class="zoom" data-src="../twin/signal-lost.png" data-crop="340,195,1128"></div></div>
+        <div class="frame"></div>
+      </div>
+    </div>
+    <aside class="notes">Ce sont des captures de notre application, pas des maquettes. Le Twin n’a pas de chemin de données à part : il lit le même flux WebSocket que les courbes. Laisser défiler deux ou trois images, pas plus.</aside>
+  </section>
+
+  <!-- 12 ───────────────────────────────────────────────────────── the figures -->
+  <section class="slide" data-title="La rigueur, en chiffres" data-part="3" data-t="35" data-status="nominal">
+    <p class="kicker" data-a>Rigueur d’ingénierie · trois jours de sprint</p>
+    <h2 data-a>Chaque brique est <em>testée avant d’être branchée</em>.</h2>
+    <div class="body" style="margin-top: 34px;">
+      <div class="figures">
+        <div class="card figure hero" data-a>
+          <div>
+            <b data-count="1284">1 284</b>
+            <p class="label">tests automatisés, tous verts</p>
+          </div>
+          <div class="split">
+            <div class="bar" style="--v: 1"><span>dashboard</span><i></i><b>637</b></div>
+            <div class="bar" style="--v: 0.615"><span>IA</span><i></i><b>392</b></div>
+            <div class="bar" style="--v: 0.4"><span>API</span><i></i><b>255</b></div>
+          </div>
+        </div>
+        <div class="card figure" data-a><b data-count="214">214</b><span><strong>commits</strong> sémantiques sur <span class="mono">main</span></span></div>
+        <div class="card figure" data-a><b data-count="63">63</b><span><strong>pull requests</strong> fusionnées, une branche par issue</span></div>
+        <div class="card figure" data-a><b data-count="66">66</b><span><strong>issues</strong> closes, une par user story</span></div>
+        <div class="card figure" data-a><b data-count="6">6</b><span><strong>contrôles CI</strong> à chaque PR&nbsp;: tests, build du firmware, rendu du Twin, scripts du Pi</span></div>
+        <div class="card figure" data-a><b data-count="34000" data-suffix="">34 000</b><span><strong>lignes</strong> de code&nbsp;: C++, Python, TypeScript, shell</span></div>
+        <div class="card figure" data-a><b class="c-nominal">0</b><span><strong>secret</strong> dans le dépôt, vérifié automatiquement</span></div>
+      </div>
+    </div>
+    <aside class="notes">Les tests tournent sans Pi, sans caméra, sans réseau : chacun a pu avancer sans attendre le matériel, et l’intégration du mercredi a pris des heures, pas des jours. main reste toujours démontrable.</aside>
+  </section>
+
+  <!-- 13 ───────────────────────────────────────────────────────── the close -->
+  <section class="slide s-end" data-title="Questions" data-part="3" data-t="5" data-status="nominal">
+    <p class="kicker" data-a>Sentinel-X</p>
+    <h2 data-a>La sécurité, <em>à la bordure</em>.</h2>
+    <div class="recap" data-a>
+      <span class="tag live">UN BOÎTIER AUTONOME</span>
+      <span class="tag live">UNE IA LOCALE</span>
+      <span class="tag live">DES FLUX CHIFFRÉS</span>
+      <span class="tag live">UN JUMEAU 3D EN DIRECT</span>
+    </div>
+    <p class="q" data-a data-d="900">Vos questions</p>
+    <aside class="notes">Une phrase de clôture, puis les questions. Pour une question technique : revenir à la diapositive avec O.</aside>
+  </section>
+
+  <div class="flash" id="flash"></div>
+
+  <div class="chrome brand"><span class="dot"></span><span><b>Sentinel-X</b> · Soutenance</span></div>
+  <div class="chrome where" id="where"></div>
+  <div class="chrome timeline">
+    <div class="parts" id="parts">
+      <div class="part"><span>Équipe</span><i></i></div>
+      <div class="part"><span>Teaser</span><i></i></div>
+      <div class="part"><span>Démo live</span><i></i></div>
+      <div class="part"><span>Pitch + questions</span><i></i></div>
+      <div class="window" id="window"></div>
+      <div class="cursor" id="cursor"></div>
+    </div>
+    <div class="clock" id="clock"><b>00:00</b> / 10:00</div>
+  </div>
+
+  <div class="panel notes-panel"><small>NOTES · <span id="notes-budget"></span></small><span id="notes-text"></span></div>
+  <div class="overview" id="overview"></div>
+  <div class="blackout"></div>
+</div>
+
+<script>
+  // Who does what. The one place to edit names and roles.
+  const TEAM = [
+    { name: 'Arthur', tag: 'DEV', role: 'API, Digital Twin, services IA' },
+    { name: 'Amen', tag: 'DEV', role: 'Dashboard, vue Opérateur' },
+    { name: 'Nathan', tag: 'DEV', role: 'Firmware ESP32, installation du Pi' },
+    { name: 'Safi', tag: 'INFRA', role: 'Infrastructure, réseau, cybersécurité' },
+    { name: 'Florent', tag: 'INFRA', role: 'Infrastructure, réseau, cybersécurité' },
+  ]
+
+  const TOTAL = 600 // seconds: the defense is 10 minutes, to the second
+  const stage = document.getElementById('stage')
+  const slides = [...document.querySelectorAll('.slide')]
+  const body = document.body
+  const $ = (id) => document.getElementById(id)
+
+  // ---- the stage, scaled to the window ----
+  function fit() {
+    stage.style.setProperty('--scale', Math.min(innerWidth / 1920, innerHeight / 1080))
+  }
+  addEventListener('resize', fit)
+  fit()
+
+  // ---- the team ----
+  $('team').innerHTML = TEAM.map((member, i) => {
+    const initials = member.name.split(/\s+/).map((word) => word[0]).join('').slice(0, 2).toUpperCase()
+    return `<div class="card member${i === 0 ? ' wide' : ''}" data-a>
+      <div class="avatar">${initials}</div>
+      <div class="name">${member.name}</div>
+      <div class="role"><b>${member.tag}</b>${member.role}</div>
+    </div>`
+  }).join('')
+
+  // ---- entrances: each animated element a little after the one before, unless it names its own delay ----
+  for (const slide of slides) {
+    let order = 0
+    for (const el of slide.querySelectorAll('[data-a]')) {
+      el.style.setProperty('--d', el.dataset.d ?? 120 + order++ * 110)
+    }
+    slide.querySelectorAll('.s-title h1 span').forEach((letter, i) => letter.style.setProperty('--i', i))
+  }
+  document.querySelectorAll('.pillar li').forEach((item) => {
+    const soon = 'soon' in item.dataset
+    item.insertAdjacentHTML('afterbegin', `<svg class="check${soon ? ' soon' : ''}" viewBox="0 0 26 26"><circle cx="13" cy="13" r="12"/><path d="${soon ? 'M13 7v7l4 3' : 'm7.500 13.500 3.800 3.800 7.200-8'}"/></svg>`)
+    item.querySelector('.check').style.setProperty('--d', item.closest('[data-a]').style.getPropertyValue('--d'))
+  })
+
+  // ---- the marks on the hysteresis curve come in as the trace reaches them ----
+  const curve = document.querySelector('.curve')
+  const curveLength = curve.getTotalLength()
+  for (const mark of document.querySelectorAll('.mark')) {
+    const dot = mark.querySelector('circle')
+    let nearest = 0
+    let best = Infinity
+    for (let i = 0; i <= 400; i++) {
+      const point = curve.getPointAtLength((curveLength * i) / 400)
+      const distance = Math.hypot(point.x - dot.cx.baseVal.value, point.y - dot.cy.baseVal.value)
+      if (distance < best) [best, nearest] = [distance, i / 400]
+    }
+    mark.style.setProperty('--at', nearest)
+  }
+
+  // ---- the captures of the Twin, cropped to what matters ----
+  for (const el of document.querySelectorAll('[data-src]')) {
+    const [x, y, w] = el.dataset.crop.split(',').map(Number)
+    const image = new Image()
+    image.onload = () => {
+      const box = el.getBoundingClientRect()
+      const h = (w * box.height) / box.width
+      el.style.backgroundImage = `url(${el.dataset.src})`
+      el.style.backgroundSize = `${(image.naturalWidth / w) * 100}% auto`
+      el.style.backgroundPosition = `${(x / (image.naturalWidth - w)) * 100}% ${(y / Math.max(1, image.naturalHeight - h)) * 100}%`
+    }
+    image.src = el.dataset.src
+  }
+
+  // ---- dust over the site ----
+  $('motes').innerHTML = Array.from({ length: 16 }, (_, i) => {
+    const size = 2 + (i % 3)
+    return `<span class="mote" style="left:${(i * 137) % 100}%;top:${20 + ((i * 61) % 70)}%;width:${size}px;height:${size}px;animation-duration:${14 + (i % 5) * 4}s;animation-delay:-${i * 2.3}s"></span>`
+  }).join('')
+
+  // ---- the port scan: every cell swept, three answer ----
+  $('scan').innerHTML = Array.from({ length: 96 }, (_, i) => `<i class="${[7, 44, 81].includes(i) ? 'open' : ''}" style="--c:${i}"></i>`).join('')
+
+  // ---- where each slide sits in the ten minutes ----
+  let cumulated = 0
+  const plan = slides.map((slide) => {
+    const from = cumulated
+    cumulated += Number(slide.dataset.t)
+    return { from, to: cumulated }
+  })
+
+  let index = 0
+  let step = 0
+  let startedAt = null // performance.now() when the clock was last started
+  let banked = 0 // seconds run before the last pause
+  let twinTimer = null
+  let teaserTimer = null
+
+  const elapsed = () => banked + (startedAt === null ? 0 : (performance.now() - startedAt) / 1000)
+  const mmss = (seconds) => `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`
+  const stepsOf = (slide) => Number(slide.dataset.steps ?? 0)
+
+  function setStatus(status, flash) {
+    if (body.dataset.status === status) return
+    body.dataset.status = status
+    if (!flash) return
+    const overlay = $('flash')
+    overlay.classList.remove('go')
+    void overlay.offsetWidth
+    overlay.classList.add('go')
+  }
+
+  function show(next, atStep = 0) {
+    index = Math.max(0, Math.min(slides.length - 1, next))
+    const slide = slides[index]
+    slides.forEach((other, i) => other.classList.toggle('active', i === index))
+    step = Math.min(atStep, stepsOf(slide))
+    setStatus(slide.dataset.status, true)
+    applyStep()
+    $('where').innerHTML = `<b>${String(index + 1).padStart(2, '0')}</b> / ${slides.length}`
+    document.querySelectorAll('.part').forEach((part, i) => part.classList.toggle('now', i === Number(slide.dataset.part)))
+    const bar = $('window')
+    bar.style.left = `${(plan[index].from / TOTAL) * 100}%`
+    bar.style.width = `${((plan[index].to - plan[index].from) / TOTAL) * 100}%`
+    $('notes-text').textContent = slide.querySelector('.notes')?.textContent ?? ''
+    $('notes-budget').textContent = `${mmss(plan[index].from)} → ${mmss(plan[index].to)}`
+    document.querySelectorAll('.overview button').forEach((button, i) => button.classList.toggle('cur', i === index))
+    history.replaceState(null, '', `#${index + 1}`)
+    countUp(slide)
+    twin(slide.querySelector('#twin-view') !== null)
+    if (!slide.classList.contains('s-teaser')) stopTeaser()
+  }
+
+  function applyStep() {
+    const slide = slides[index]
+    slide.querySelectorAll('[data-step]').forEach((el) => el.classList.toggle('on', Number(el.dataset.step) <= step))
+    const beats = [...slide.querySelectorAll('.demo-beat')]
+    if (beats.length) {
+      beats.forEach((beat, i) => {
+        beat.classList.toggle('cur', i === step - 1)
+        beat.classList.toggle('done', i < step - 1)
+      })
+      setStatus(step ? beats[step - 1].dataset.beatStatus : slide.dataset.status, step > 0)
+    }
+    if (slide.classList.contains('s-teaser') && step === 1) startTeaser()
+  }
+
+  function forward() {
+    if (startedAt === null && banked === 0 && index === 0) toggleClock()
+    if (step < stepsOf(slides[index])) {
+      step++
+      applyStep()
+    } else if (index < slides.length - 1) show(index + 1)
+  }
+
+  function back() {
+    if (step > 0) {
+      step--
+      applyStep()
+    } else if (index > 0) show(index - 1, stepsOf(slides[index - 1]))
+  }
+
+  // ---- figures that count up as their slide comes in ----
+  function countUp(slide) {
+    for (const el of slide.querySelectorAll('[data-count]')) {
+      const target = Number(el.dataset.count)
+      const began = performance.now()
+      const run = (now) => {
+        const t = Math.min(1, (now - began - 350) / 1300)
+        const eased = t <= 0 ? 0 : 1 - Math.pow(1 - t, 4)
+        el.textContent = Math.round(target * eased).toLocaleString('fr-FR')
+        if (t < 1 && slide.classList.contains('active')) requestAnimationFrame(run)
+        else el.textContent = target.toLocaleString('fr-FR')
+      }
+      requestAnimationFrame(run)
+    }
+  }
+
+  // ---- the Twin's gallery turns by itself while its slide is up ----
+  const TWIN_HOLD = 4200
+  function twin(on) {
+    clearInterval(twinTimer)
+    if (!on) return
+    const items = [...document.querySelectorAll('#twin-list .twin-item')]
+    const shots = [...document.querySelectorAll('#twin-view .shot')]
+    let current = -1
+    const turn = () => {
+      current = (current + 1) % items.length
+      items.forEach((item, i) => item.classList.toggle('on', i === current))
+      shots.forEach((shot, i) => shot.classList.toggle('on', i === current))
+      setStatus(items[current].dataset.status, false)
+    }
+    document.getElementById('twin-list').style.setProperty('--hold', `${TWIN_HOLD}ms`)
+    turn()
+    twinTimer = setInterval(turn, TWIN_HOLD)
+  }
+
+  // ---- the teaser: the video if it is beside the page, its sixty seconds counted down either way ----
+  const video = $('drop')
+  video.addEventListener('loadedmetadata', () => $('phone').classList.add('has-video'))
+  function startTeaser() {
+    stopTeaser()
+    const began = performance.now()
+    if ($('phone').classList.contains('has-video')) {
+      $('phone').classList.add('playing')
+      video.currentTime = 0
+      video.play().catch(() => $('phone').classList.remove('playing'))
+    }
+    const tick = () => {
+      const left = Math.max(0, 60 - (performance.now() - began) / 1000)
+      $('num60').textContent = Math.ceil(left)
+      $('ring60').style.strokeDashoffset = 879.6 * (1 - left / 60)
+      if (left === 0) stopTeaser(true)
+    }
+    tick()
+    teaserTimer = setInterval(tick, 250)
+  }
+  function stopTeaser(done) {
+    clearInterval(teaserTimer)
+    teaserTimer = null
+    video.pause()
+    $('phone').classList.remove('playing')
+    if (!done) {
+      $('num60').textContent = 60
+      $('ring60').style.strokeDashoffset = 0
+    }
+  }
+
+  // ---- the intruder in the camera's image: where they are across it is x_norm ----
+  function camera(now) {
+    if (slides[index].querySelector('#cam')) {
+      const x = 0.5 + 0.42 * Math.sin(now / 1900)
+      $('cam').style.setProperty('--x', x)
+      $('r-x').textContent = x.toFixed(2)
+      $('r-pan').textContent = `${Math.round((x - 0.5) * 60)}°`
+    }
+    requestAnimationFrame(camera)
+  }
+  requestAnimationFrame(camera)
+
+  // ---- the clock ----
+  function toggleClock() {
+    if (startedAt === null) startedAt = performance.now()
+    else {
+      banked = elapsed()
+      startedAt = null
+    }
+    body.classList.toggle('running', startedAt !== null)
+  }
+  function resetClock() {
+    startedAt = null
+    banked = 0
+    body.classList.remove('running')
+    drawClock()
+  }
+  function drawClock() {
+    const seconds = elapsed()
+    const clock = $('clock')
+    clock.innerHTML = `<b>${mmss(seconds)}</b> / 10:00`
+    // Late: past the end of the slide on screen. Over: past the ten minutes.
+    clock.dataset.pace = seconds > TOTAL ? 'over' : seconds > plan[index].to + 5 ? 'late' : 'ok'
+    $('cursor').style.left = `${Math.min(1, seconds / TOTAL) * 100}%`
+  }
+  setInterval(drawClock, 500)
+
+  // ---- the plan of the whole deck ----
+  $('overview').innerHTML = slides.map((slide, i) => `<button data-go="${i}"><b>${String(i + 1).padStart(2, '0')}</b><span>${slide.dataset.title}</span><i>${mmss(plan[i].from)}</i></button>`).join('')
+  $('overview').addEventListener('click', (event) => {
+    const button = event.target.closest('button')
+    if (!button) return
+    body.classList.remove('show-overview')
+    show(Number(button.dataset.go))
+    event.stopPropagation()
+  })
+
+  // ---- keys, clicks, swipes ----
+  addEventListener('keydown', (event) => {
+    if (event.ctrlKey || event.metaKey || event.altKey) return
+    const key = event.key.length === 1 ? event.key.toLowerCase() : event.key
+    if (['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter'].includes(key)) forward()
+    else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'].includes(key)) back()
+    else if (key === 'Home') show(0)
+    else if (key === 'End') show(slides.length - 1)
+    else if (key === 'f') document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()
+    else if (key === 't') toggleClock()
+    else if (key === 'r') resetClock()
+    else if (key === 'n') body.classList.toggle('show-notes')
+    else if (key === 'o') body.classList.toggle('show-overview')
+    else if (key === 'b' || key === '.') body.classList.toggle('show-black')
+    else if (key === 'Escape') body.classList.remove('show-overview', 'show-black')
+    else return
+    event.preventDefault()
+  })
+
+  stage.addEventListener('click', (event) => {
+    if (body.classList.contains('show-overview')) return
+    const { left, width } = stage.getBoundingClientRect()
+    if ((event.clientX - left) / width < 0.2) back()
+    else forward()
+  })
+
+  let touchX = null
+  addEventListener('touchstart', (event) => (touchX = event.touches[0].clientX), { passive: true })
+  addEventListener('touchend', (event) => {
+    if (touchX === null) return
+    const moved = event.changedTouches[0].clientX - touchX
+    touchX = null
+    if (Math.abs(moved) > 50) moved < 0 ? forward() : back()
+  })
+
+  addEventListener('hashchange', () => {
+    const wanted = Number(location.hash.slice(1)) - 1
+    if (Number.isInteger(wanted) && wanted !== index) show(wanted)
+  })
+
+  show(Math.max(0, (Number(location.hash.slice(1)) || 1) - 1))
+  drawClock()
+</script>
+</body>
+</html>
