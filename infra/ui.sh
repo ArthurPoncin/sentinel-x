@@ -1,8 +1,10 @@
 # The terminal interface of infra/plug-and-play.sh — sourced, not run. Numbered steps with a spinner
 # and their time; the commands' output goes to a log file, whose last line shows under the step while
 # it runs; a step that fails stops everything with its reason framed and the end of the log; a framed
-# summary at the end. Without a terminal (a pipe, a file) the same lines come plain, without the
-# animation; NO_COLOR turns the colours off.
+# summary at the end. Two bars of # say where it is while a step runs: on the step's line, how many of
+# the steps are done; under it, how far the command is when it says so (a percentage, « 3/12 »), and
+# a block that goes back and forth when it does not: at work, how far unknown. Without a terminal (a
+# pipe, a file) the same lines come plain, without the animation; NO_COLOR turns the colours off.
 #
 #   ui_init <steps> <log> [what]   once, before anything else; `what` heads the log
 #   ui_step <title>            starts the next step
@@ -98,7 +100,7 @@ ui_step() {
 }
 
 ui_task() {
-  local label=$1 frame=0 tick=0 detail=""
+  local label=$1 frame=0 tick=0 detail="" percent=""
   shift
   printf -- '--- %s\n' "$label" >>"$UI_LOG"
   $UI_TTY || printf '     %s\n' "$label"
@@ -110,8 +112,12 @@ ui_task() {
     printf '\033[?25l'
     while kill -0 "$UI_PID" 2>/dev/null; do
       # The log is read every 4 frames: a build writes a lot, the Pi has better to do.
-      ((tick++ % 4 == 0)) && detail=$(_ui_last_line)
-      _ui_draw_running "${UI_FRAMES[frame++ % ${#UI_FRAMES[@]}]}" "$label" "$detail"
+      if ((tick % 4 == 0)); then
+        detail=$(_ui_last_line)
+        percent=$(_ui_percent "$detail")
+      fi
+      _ui_draw_running "${UI_FRAMES[frame++ % ${#UI_FRAMES[@]}]}" "$label" "$detail" "$percent" "$tick"
+      tick=$((tick + 1))
       sleep 0.12
     done
   fi
@@ -212,17 +218,62 @@ _ui_step_line() {
     "$UI_TITLE" "$C_DIM" "$(_ui_repeat "$G_DOT" "$fill")" "$C_RESET" "$time"
 }
 
+# How wide the bar under a running step is, and the block that goes back and forth in it.
+UI_BAR=24
+UI_BLOCK=5
+
 _ui_draw_running() {
-  local frame=$1 label=$2 detail=$3 time head fill below
+  local frame=$1 label=$2 detail=$3 percent=$4 tick=$5 time head fill steps bar share below room
   time=$(_ui_duration $((SECONDS - UI_STEP_START)))
   head="$frame $UI_INDEX/$UI_TOTAL $UI_TITLE"
   fill=$((UI_WIDTH - ${#head} - ${#time} - 3))
   ((fill >= 1)) || fill=1
+  # The steps done, out of all of them, on what leads to the time.
+  steps=$((fill * (UI_INDEX - 1) / UI_TOTAL))
+  if [[ -n $percent ]]; then
+    bar=$(_ui_bar "$percent")
+    share="$(printf '%3d' "$percent") %"
+  else
+    bar=$(_ui_bounce "$tick")
+    share=""
+  fi
   below="$label${detail:+ $G_DOT $detail}"
-  ((${#below} > UI_COLS - 6)) && below="${below:0:UI_COLS-7}$G_ELLIPSIS"
-  printf '\r\033[K %s%s%s %s%d/%d%s %s %s%s%s %s\n\033[K     %s%s%s\033[1A\r' \
+  room=$((UI_COLS - 6 - UI_BAR - 3 - ${#share} - (${#share} > 0)))
+  ((room >= 8)) || room=8
+  ((${#below} > room)) && below="${below:0:room-1}$G_ELLIPSIS"
+  printf '\r\033[K %s%s%s %s%d/%d%s %s %s%s%s%s%s%s %s\n\033[K     %s[%s]%s%s %s%s%s\033[1A\r' \
     "$C_CYAN" "$frame" "$C_RESET" "$C_BOLD" "$UI_INDEX" "$UI_TOTAL" "$C_RESET" "$UI_TITLE" \
-    "$C_DIM" "$(_ui_repeat "$G_DOT" "$fill")" "$C_RESET" "$time" "$C_DIM" "$below" "$C_RESET"
+    "$C_CYAN" "$(_ui_repeat "#" "$steps")" "$C_RESET" "$C_DIM" "$(_ui_repeat "$G_DOT" $((fill - steps)))" "$C_RESET" "$time" \
+    "$C_CYAN" "$bar" "$C_RESET" "${share:+ $share}" "$C_DIM" "$below" "$C_RESET"
+}
+
+# How far a command says it is, 0 to 100, from the line it printed last: a percentage (« 45 % », as
+# esptool and pip do), or a count out of a total (« [3/12] », as a docker build does). Nothing when
+# the line says neither: most commands do not.
+_ui_percent() {
+  local line=$1 percent=""
+  if [[ $line =~ ([0-9]{1,3})(\.[0-9]+)?[[:space:]]?% ]]; then
+    percent=$((10#${BASH_REMATCH[1]}))
+  elif [[ $line =~ \[[[:space:]]*([0-9]{1,4})/([0-9]{1,4})\] ]] && ((10#${BASH_REMATCH[2]} > 0)); then
+    percent=$((10#${BASH_REMATCH[1]} * 100 / 10#${BASH_REMATCH[2]}))
+  fi
+  [[ -n $percent ]] && ((percent <= 100)) && printf '%d' "$percent"
+  return 0
+}
+
+# The bar filled to a percentage.
+_ui_bar() {
+  local filled=$((UI_BAR * $1 / 100))
+  printf '%s%s' "$(_ui_repeat "#" "$filled")" "$(_ui_repeat "$G_DOT" $((UI_BAR - filled)))"
+}
+
+# The bar of a command that does not say how far it is: a block of # that goes from one end to the
+# other and back, a place a frame.
+_ui_bounce() {
+  local span=$((UI_BAR - UI_BLOCK)) at
+  at=$(($1 % (2 * span)))
+  ((at > span)) && at=$((2 * span - at))
+  printf '%s%s%s' "$(_ui_repeat "$G_DOT" "$at")" "$(_ui_repeat "#" "$UI_BLOCK")" "$(_ui_repeat "$G_DOT" $((span - at)))"
 }
 
 _ui_indented() {
