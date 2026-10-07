@@ -67,7 +67,7 @@ The smallest end-to-end slice that proves the spine. **If only this works, the "
 | Deliverable | Format | Owner |
 |---|---|---|
 | Engineering report (network + wiring schema, security matrix, AI docs, pentest audit, A3 poster) | `...-Dossier.pdf` | TBD |
-| Presentation | `...-Pres.pptx` | TBD |
+| Presentation: [`soutenance/`](soutenance/README.md), slides in one HTML page, timed on the 10 minutes | `...-Pres.pptx` (the page printed to PDF) | TBD |
 | Teaser | `...-VidDrop.mp4` | TBD |
 | Code archive | zip of this repo (no plaintext secrets) | TBD |
 | Physical prototype | assembled, demo-ready | TBD |
