@@ -157,7 +157,7 @@ docker compose up -d --build     # https://192.168.X.1/ and mqtts://192.168.X.1:
 
 **On a laptop**, without hardware: the API on its mock feed and the dashboard — see [`dashboard/README.md`](dashboard/README.md).
 
-**CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)), on every pull request and on `main`: the backend's and the dashboard's tests, the dashboard's build and its smoke-render on the mock feed, and no secret tracked.
+**CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)), on every pull request and on `main`: the backend's and the dashboard's tests, the dashboard's build and its smoke-render on the mock feed, the AI services' tests on Python 3.11 and 3.13 (the person detector's model fetched for them), the firmware's build, the Pi's scripts through shellcheck and the Compose stack's validity, and no secret tracked.
 
 ---
 
