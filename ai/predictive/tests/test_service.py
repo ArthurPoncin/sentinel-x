@@ -193,14 +193,12 @@ def test_a_message_on_a_foreign_topic_is_ignored_and_counted(topic):
         (b"not json", "not JSON"),
         (b"\xff\xfe", "not JSON"),
         (b"[" * 5000, "too big"),
-        # Within the size limit, nested deep: parsed, or refused by the parser's depth, never a crash.
-        (b"[" * 2000 + b"]" * 2000, "not a telemetry snapshot"),
         (b"[1, 2]", "not a telemetry snapshot"),
         (b'{"ts": "2026-10-06T08:00:00Z"}', "not a telemetry snapshot"),
         (b'{"ts": "2026-10-06T08:00:00", "readings": {"temp": 25, "humidity": 45, "air": 250}}', "not a telemetry snapshot"),
         (b'{"ts": "2026-10-06T08:00:00Z", "readings": {"temp": "hot", "humidity": 45, "air": 250}}', "not a telemetry snapshot"),
     ],
-    ids=["text", "not utf-8", "too big", "deep", "array", "no readings", "ts without offset", "not a number"],
+    ids=["text", "not utf-8", "too big", "array", "no readings", "ts without offset", "not a number"],
 )
 def test_an_invalid_payload_is_ignored_and_counted_never_fatal(payload, reason):
     posted = []
@@ -209,6 +207,18 @@ def test_an_invalid_payload_is_ignored_and_counted_never_fatal(payload, reason):
     handler.on_message("sentinel/sentinel-01/telemetry", payload)
     assert handler.invalid == {reason: 1}
     # The stream goes on as if nothing had happened.
+    feed(handler, "sentinel/sentinel-01/telemetry", [35.0] * 10)
+    assert [a["state"] for a in posted] == ["raised"]
+
+
+def test_a_payload_nested_deep_is_ignored_and_counted_never_fatal():
+    # Within the size limit: parsed (Python 3.12 and later) or refused by the parser's depth (3.11), never
+    # a crash.
+    posted = []
+    handler = TelemetryHandler(posted.append)
+    handler.use(StubModel())
+    handler.on_message("sentinel/sentinel-01/telemetry", b"[" * 2000 + b"]" * 2000)
+    assert handler.invalid in ({"not a telemetry snapshot": 1}, {"not JSON": 1})
     feed(handler, "sentinel/sentinel-01/telemetry", [35.0] * 10)
     assert [a["state"] for a in posted] == ["raised"]
 

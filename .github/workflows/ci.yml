@@ -71,3 +71,72 @@ jobs:
         working-directory: backend
       - run: npx playwright install --with-deps --only-shell chromium
       - run: npm run smoke
+
+  ai:
+    name: ai — tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The two the services run on: 3.11 is the Pi OS's (the vision image), 3.13 the predictive image's.
+        python: ["3.11", "3.13"]
+    defaults:
+      run:
+        working-directory: ai
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: ai/**/requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      # The person detector's model and the tests' reference image, out of git, their sha256 checked:
+      # without the model, the tests that run it are skipped.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/sentinel-x
+          key: sentinel-x-model-${{ hashFiles('ai/vision/fetch_model.py', 'ai/vision/tests/test_tflite_detector.py') }}
+      - run: python vision/fetch_model.py ~/.cache/sentinel-x/efficientdet_lite0.tflite
+      # -rs: a test that is skipped says why.
+      - run: pytest -rs
+
+  firmware:
+    name: firmware — build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      # The ESP32 platform, its toolchain and the libraries: what platformio.ini pins.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: platformio-${{ hashFiles('firmware/platformio.ini') }}
+      - run: pip install platformio
+      # secrets.h is never in git: the example stands in for it, as infra/plug-and-play.sh writes the real one.
+      - run: cp firmware/include/secrets.example.h firmware/include/secrets.h
+      - run: pio run -d firmware
+
+  infra:
+    name: infra — scripts, compose files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # infra/ui.sh is sourced, not run, and has no shebang: --shell says what it is.
+      - name: The Pi's scripts pass shellcheck
+        run: shellcheck --shell=bash --external-sources --severity=warning infra/*.sh cyber/*.sh
+      - name: The status screen compiles
+        run: python3 -m py_compile infra/screen.py
+      # With what infra/setup.sh and infra/plug-and-play.sh put there on the Pi: the secrets' files, the
+      # webcam and its servo.
+      - name: The Compose stack is valid, with the webcam and its servo
+        env:
+          COMPOSE_FILE: docker-compose.yml:docker-compose.camera.yml:docker-compose.pan.yml
+          CAMERA_DEVICE: /dev/video0
+          PAN_PWM_CHANNEL: /sys/class/pwm/pwmchip0/pwm0
+          PAN_GID: "993"
+        run: |
+          mkdir -p infra/secrets && touch infra/secrets/api.env infra/secrets/vision.env infra/secrets/predictive.env
+          docker compose config --quiet
