@@ -47,6 +47,23 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+  leap:
+    name: leap — typecheck, tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: leap
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: leap/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
   dashboard:
     name: dashboard — tests, build, smoke-render
     runs-on: ubuntu-latest
