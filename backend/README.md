@@ -121,7 +121,7 @@ One loop, 40 ticks (40 s by default), every kind of Alert in it:
 | 20–23 | `gas` back to warning, `thermal` cleared | `elevated` |
 | 24–27 | `gas` and `predictive` cleared: the leak's Incident closes (10 Alerts) | `nominal` |
 | 28–29 | A clap: `sound` 0.82, `noise` raised (`info`) then cleared | `nominal` |
-| 32–36 | An `intrusion` crossing the camera's field, `x_norm` 0.15 → 0.75, then gone | `critical` → `nominal` |
+| 32–36 | An `intrusion` coming in by the fence and walking in toward the plant: taller and taller in the image (`h_norm` 0.3 → 0.66), the camera turning to follow it (`pan` 0 → 14° → −20°), someone else behind it for the last two sightings (`others`), then gone | `critical` → `nominal` |
 
 - `alert_id`s are unique to each loop and each run (`mock-<run>-<loop>-<kind>`). The intruder keeps its `alert_id` while it moves: each new position is a `raised` that replaces the last.
 - Every frame validates against the contract, like those of the real producers.

@@ -101,13 +101,38 @@ describe('mock feed script', () => {
     expect(ids(second).filter((id) => firstLoop.includes(id))).toEqual([])
   })
 
-  it('walks the intruder across the field, left to right', () => {
-    const positions = alertsOf(firstTicks(LOOP)).flatMap((alert) =>
-      alert.kind === 'intrusion' && alert.state === 'raised' ? [alert.detail.x_norm] : [],
+  it('walks the intruder in toward the camera, which turns to follow them, someone else behind them at the end', () => {
+    const seen = alertsOf(firstTicks(LOOP)).flatMap((alert) =>
+      alert.kind === 'intrusion' && alert.state === 'raised' ? [alert.detail] : [],
     )
+    const tall = seen.map((detail) => detail.h_norm ?? 0)
+    const turned = seen.map((detail) => detail.pan ?? 0)
 
-    expect(positions.length).toBeGreaterThan(1)
-    expect(positions).toEqual([...positions].sort((a, b) => a - b))
+    expect(seen.length).toBeGreaterThan(1)
+    // Taller and taller in the image: nearer and nearer.
+    expect(tall).toEqual([...tall].sort((a, b) => a - b))
+    expect(tall.at(-1)).toBeGreaterThan(2 * (tall.at(0) ?? 1))
+    // The camera rests, turns to its right where they came in, then follows them to its left.
+    expect(turned.at(0)).toBe(0)
+    expect(Math.max(...turned)).toBeGreaterThan(10)
+    expect(turned.at(-1)).toBeLessThan(-10)
+    // Once it follows them, they stay near the middle of its image.
+    expect(seen.slice(1).every((detail) => Math.abs(detail.x_norm - 0.5) < 0.1)).toBe(true)
+    expect(new Set(seen.map((detail) => detail.id)).size).toBe(1)
+    expect(seen.map((detail) => detail.others?.length ?? 0)).toEqual([0, 0, 1, 1])
+  })
+
+  it('gives the intruder a box that goes with where it is in the image and how tall', () => {
+    for (const alert of alertsOf(firstTicks(LOOP))) {
+      if (alert.kind !== 'intrusion') continue
+      const { x_norm, h_norm, bbox } = alert.detail
+      const [left, top, width, height] = bbox
+
+      expect((left + width / 2) / 640).toBeCloseTo(x_norm, 2)
+      expect(height / 480).toBeCloseTo(h_norm ?? 0, 2)
+      expect(top).toBeGreaterThanOrEqual(0)
+      expect(top + height).toBeLessThanOrEqual(480)
+    }
   })
 
   it('raises the gas reading as the leak worsens, and the sound reading on the clap only', () => {
