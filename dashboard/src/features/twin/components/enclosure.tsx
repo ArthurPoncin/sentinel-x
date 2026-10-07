@@ -1,7 +1,9 @@
 import { useFrame } from '@react-three/fiber'
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  type BufferGeometry,
   Color,
+  CylinderGeometry,
   type Group,
   MathUtils,
   type Mesh,
@@ -9,11 +11,13 @@ import {
   MeshStandardMaterial,
   PlaneGeometry,
   type PointLight,
+  Quaternion,
   ShaderMaterial,
   Vector2,
   Vector3,
 } from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { useColorFade, useFade } from '../hooks/use-fade'
 import { usePan } from '../hooks/use-pan'
 import { useSweep } from '../hooks/use-sweep'
@@ -38,6 +42,53 @@ const TOP = BODY.height / 2
 
 const ANODIZED = { color: '#232a33', metalness: 0.55, roughness: 0.38 } as const
 const TRIM = { color: '#14181d', metalness: 0.4, roughness: 0.5 } as const
+
+// The mast is a lattice pylon, square in plan: four uprights that lean in from `foot` to `top`, half its
+// width at either end, held every bay by a ring of rails and a cross of braces on each face.
+const LATTICE = { foot: 0.15, top: 0.1, bays: 5, upright: 0.016, brace: 0.009, sides: 6 } as const
+const UP = new Vector3(0, 1, 0)
+
+// A bar of the lattice, from one point to another.
+function bar(from: Vector3, to: Vector3, radius: number): BufferGeometry {
+  const along = to.clone().sub(from)
+  const length = along.length()
+
+  return new CylinderGeometry(radius, radius, length, LATTICE.sides)
+    .applyQuaternion(new Quaternion().setFromUnitVectors(UP, along.divideScalar(length)))
+    .translate((from.x + to.x) / 2, (from.y + to.y) / 2, (from.z + to.z) / 2)
+}
+
+// The whole lattice as one shape, from the ground up to the Probe compartment.
+function latticeMast(): BufferGeometry {
+  const { foot, top, bays, upright, brace } = LATTICE
+  // The four corners of the pylon at each level, the ground first.
+  const levels = Array.from({ length: bays + 1 }, (_, level) => {
+    const half = MathUtils.lerp(foot, top, level / bays)
+    const y = (MAST_HEIGHT * level) / bays
+    return [
+      new Vector3(half, y, half),
+      new Vector3(-half, y, half),
+      new Vector3(-half, y, -half),
+      new Vector3(half, y, -half),
+    ]
+  })
+  const corner = (level: number, at: number) => levels[level]?.[at % 4] ?? new Vector3()
+  const faces = [0, 1, 2, 3]
+  const bars = [
+    ...faces.map((at) => bar(corner(0, at), corner(bays, at), upright)),
+    ...levels.flatMap((_, level) => faces.map((at) => bar(corner(level, at), corner(level, at + 1), brace))),
+    ...levels.slice(1).flatMap((_, level) =>
+      faces.flatMap((at) => [
+        bar(corner(level, at), corner(level + 1, at + 1), brace),
+        bar(corner(level, at + 1), corner(level + 1, at), brace),
+      ]),
+    ),
+  ]
+  const all = mergeGeometries(bars)
+  for (const one of bars) one.dispose()
+
+  return all
+}
 
 // The LCD band: the Status in white on black, tinted by an unlit material whose color fades to the
 // Status's, with the light of the scene. The text switches like a real LCD's; its color fades.
@@ -481,6 +532,8 @@ export function Enclosure({ color, glow, lcd, ring, alarm, pulses, drift, presen
   const shown = useRef(glow)
   const shell = useMemo(() => new RoundedBoxGeometry(BODY.width, BODY.height, BODY.depth, 4, 0.09), [])
   useEffect(() => () => shell.dispose(), [shell])
+  const mast = useMemo(latticeMast, [])
+  useEffect(() => () => mast.dispose(), [mast])
 
   useFrame((_, delta) => {
     shown.current = MathUtils.damp(shown.current, glow, EASE, delta)
@@ -493,13 +546,12 @@ export function Enclosure({ color, glow, lcd, ring, alarm, pulses, drift, presen
 
   return (
     <group scale={SCALE}>
-      {/* Foot and mast */}
+      {/* Foot and mast: the lattice stands still, so its shadow is drawn once with the others. */}
       <mesh position={[0, 0.03, 0]} castShadow receiveShadow>
         <cylinderGeometry args={[0.42, ENCLOSURE_SHAPE.foot, 0.06, 48]} />
         <meshStandardMaterial {...TRIM} />
       </mesh>
-      <mesh position={[0, MAST_HEIGHT / 2, 0]} castShadow>
-        <cylinderGeometry args={[0.065, 0.08, MAST_HEIGHT, 24]} />
+      <mesh geometry={mast} castShadow receiveShadow>
         <meshStandardMaterial color="#3a424c" metalness={0.7} roughness={0.35} />
       </mesh>
 
