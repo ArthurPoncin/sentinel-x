@@ -102,9 +102,12 @@ def read_sqlite(path: str | Path, start: datetime, end: datetime) -> History:
     except sqlite3.OperationalError as error:
         if "no such table" in str(error):
             raise HistoryError(f"{path} is not the api's history (no history table)") from None
-        if "unable to open" in str(error) and not path.with_name(f"{path.name}-shm").exists():
+        cannot_make_shm = "unable to open" in str(error) or "readonly database" in str(error)
+        if cannot_make_shm and not path.with_name(f"{path.name}-shm").exists():
             # The api keeps the file in WAL mode: a reader needs the -shm file beside it, which only
-            # a writer creates. On a read-only volume, that is the api, while it runs.
+            # a writer creates. On a read-only volume, that is the api, while it runs. SQLite says
+            # "unable to open database file" or, of a directory its user may not write to, "attempt
+            # to write a readonly database".
             raise HistoryError(
                 f"cannot read {path} read-only: in WAL mode SQLite needs {path.name}-shm beside it, which"
                 " only the api creates. Start the api and train again while it runs, or copy the file"
