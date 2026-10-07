@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { DUST } from './dust'
 import { ENCLOSURE_SHAPE } from './enclosure-parts'
 import {
   alongPipe,
@@ -20,10 +21,12 @@ import {
   lensHeight,
   lensPoint,
   meshCell,
+  panelGround,
   rocks,
   SITE,
   STANDING,
   sightBearing,
+  solarPanels,
   standingPoint,
   standingSpan,
   track,
@@ -46,7 +49,7 @@ function outlines(): Record<string, GroundPoint[]> {
       x: x + radius * Math.sin(bearing),
       z: z + radius * Math.cos(bearing),
     }))
-  const { hall, chimneys, transformer, tank, pipe, enclosure } = SITE
+  const { hall, chimneys, transformer, tank, pipe, enclosure, solar, turbine, batteries } = SITE
 
   return {
     hall: corners(hall),
@@ -55,6 +58,9 @@ function outlines(): Record<string, GroundPoint[]> {
     transformer: corners(transformer),
     tank: corners(tank),
     pipe: pipe.path.flatMap((point) => rim({ ...point, radius: pipe.radius })),
+    'solar field': corners(solar),
+    'wind turbine': rim(turbine),
+    batteries: corners(batteries),
     Enclosure: rim(enclosure),
   }
 }
@@ -537,6 +543,115 @@ describe('the rocks', () => {
   })
 })
 
+describe('the solar field, the wind turbine and the batteries', () => {
+  const { solar, turbine, batteries, transformer, fence, socle } = SITE
+  const { toHall } = track()
+  const masts = floodlights()
+  const blocks = { 'solar field': solar, batteries }
+  // The rim of the ground the turbine's mast keeps.
+  const mastRim = outlines()['wind turbine'] ?? []
+  // Round the lens from straight ahead: the sector is half the field of view either way.
+  const offAxis = (point: GroundPoint) => Math.abs(Math.atan2(toTheLeft(point), inFront(point)))
+
+  it('stand inside the fence, with room to walk along it', () => {
+    const WALKWAY = 0.3
+
+    for (const [name, block] of Object.entries(blocks)) expect(reach(corners(block)), name).toBeLessThan(fence.radius - WALKWAY)
+    expect(reach(mastRim)).toBeLessThan(fence.radius - WALKWAY)
+  })
+
+  it('stand out of the camera sector', () => {
+    for (const [name, block] of Object.entries(blocks)) {
+      for (const corner of corners(block)) expect(offAxis(corner), name).toBeGreaterThan(SITE.camera.fov / 2)
+    }
+    for (const point of mastRim) expect(offAxis(point)).toBeGreaterThan(SITE.camera.fov / 2)
+  })
+
+  it("take no ground from a floodlight's mast", () => {
+    for (const mast of masts) {
+      for (const [name, block] of Object.entries(blocks)) expect(outside(mast, block), name).toBeGreaterThan(SITE.floodlights.foot)
+      expect(between(mast, turbine)).toBeGreaterThan(turbine.radius + SITE.floodlights.foot)
+    }
+  })
+
+  it('leave the track clear, both its sides', () => {
+    const half = SITE.track.width / 2
+    // Along the track, close enough together to miss nothing between two of them.
+    const along = toHall.slice(1).flatMap((to, index) => {
+      const from = toHall[index] ?? to
+      return Array.from({ length: 8 }, (_, step) => ({
+        x: from.x + ((to.x - from.x) * step) / 8,
+        z: from.z + ((to.z - from.z) * step) / 8,
+      }))
+    })
+
+    for (const point of along) {
+      for (const [name, block] of Object.entries(blocks)) expect(outside(point, block), name).toBeGreaterThan(half)
+    }
+    expect(fromPath(turbine, toHall)).toBeGreaterThan(half + turbine.radius)
+  })
+
+  it('lays the panels in rows over the field, each on ground of its own', () => {
+    const panels = solarPanels()
+    const ground = panelGround()
+
+    expect(panels).toHaveLength(solar.rows * solar.columns)
+    for (const [index, panel] of panels.entries()) {
+      // Whole inside the field.
+      for (const corner of corners({ ...panel, ...ground, height: 0 })) expect(outside(corner, solar)).toBeLessThanOrEqual(1e-9)
+      for (const other of panels.slice(index + 1)) {
+        const apart = Math.abs(panel.x - other.x) >= ground.width || Math.abs(panel.z - other.z) >= ground.depth
+        expect(apart, `panels ${index} and ${panels.indexOf(other)}`).toBe(true)
+      }
+    }
+    expect(new Set(panels.map(({ z }) => z.toFixed(6))).size).toBe(solar.rows)
+    expect(new Set(panels.map(({ x }) => x.toFixed(6))).size).toBe(solar.columns)
+  })
+
+  it('leans the panels, their low edge off the ground, and shades none with the row in front', () => {
+    const { length, tilt } = solar.panel
+    const rise = length * Math.sin(tilt)
+
+    expect(tilt).toBeGreaterThan(0)
+    expect(tilt).toBeLessThan(Math.PI / 2)
+    expect(panelGround().depth).toBeCloseTo(length * Math.cos(tilt))
+    expect(solar.height - rise).toBeGreaterThan(0)
+    // From the top of a row to the foot of the next, further than the row is high.
+    expect(solar.depth / solar.rows - panelGround().depth).toBeGreaterThan(0)
+    expect(solar.depth / solar.rows).toBeGreaterThan(rise)
+  })
+
+  it('turns the turbine into the wind that carries the dust', () => {
+    const upwind = DUST.wind + Math.PI
+
+    expect(Math.sin(turbine.bearing)).toBeCloseTo(Math.sin(upwind))
+    expect(Math.cos(turbine.bearing)).toBeCloseTo(Math.cos(upwind))
+  })
+
+  it("sweeps its blades over the site: above the fence, the floodlights and the hall, off the chimneys, over the socle", () => {
+    const { rotor, height } = turbine
+    const lowest = height - rotor.radius
+
+    expect(rotor.blades).toBeGreaterThanOrEqual(2)
+    expect(rotor.period).toBeGreaterThan(3)
+    expect(lowest).toBeGreaterThan(barbedHeight())
+    expect(lowest).toBeGreaterThan(SITE.floodlights.height)
+    expect(lowest).toBeGreaterThan(SITE.hall.height)
+    for (const chimney of SITE.chimneys) expect(between(turbine, chimney)).toBeGreaterThan(rotor.radius + chimney.radius)
+    expect(fromCentre(turbine) + rotor.radius).toBeLessThan(socle.radius - socle.ring)
+  })
+
+  it('stands the batteries by the transformer station: nearer it than anything else, less than their own length away', () => {
+    const away = (outline: GroundPoint[]) => Math.min(...outline.map((point) => fromBlock(point, { ...batteries })))
+    const { batteries: _, transformer: station = [], ...others } = outlines()
+
+    expect(away(station)).toBeGreaterThan(0)
+    expect(away(station)).toBeLessThan(Math.max(batteries.width, batteries.depth))
+    expect(outside({ x: batteries.x, z: batteries.z }, transformer)).toBeGreaterThan(0)
+    for (const [part, outline] of Object.entries(others)) expect(away(outline), part).toBeGreaterThan(away(station))
+  })
+})
+
 describe('the floodlights', () => {
   const { fence, socle, enclosure, pipe } = SITE
   const { foot, height, pool, bearings } = SITE.floodlights
@@ -573,13 +688,14 @@ describe('the floodlights', () => {
   })
 
   it('each have ground of their own: none on a part of the site, the danger zone or another mast', () => {
-    const { hall, chimneys, transformer, tank } = SITE
+    const { hall, chimneys, transformer, tank, solar, turbine, batteries } = SITE
+    const blocks = { hall, transformer, tank, 'danger zone': dangerZone(), 'solar field': solar, batteries }
 
     masts.forEach((mast, index) => {
-      for (const [name, block] of Object.entries({ hall, transformer, tank, 'danger zone': dangerZone() })) {
+      for (const [name, block] of Object.entries(blocks)) {
         expect(outside(mast, block), `mast ${index} and the ${name}`).toBeGreaterThan(foot)
       }
-      for (const chimney of chimneys) expect(between(mast, chimney)).toBeGreaterThan(chimney.radius + foot)
+      for (const column of [...chimneys, turbine]) expect(between(mast, column)).toBeGreaterThan(column.radius + foot)
       pipe.path.slice(1).forEach((to, stretch) => {
         expect(off(mast, pipe.path[stretch] ?? to, to)).toBeGreaterThan(pipe.radius + foot)
       })
@@ -818,13 +934,17 @@ describe('where someone the camera sees stands', () => {
   })
 
   it('is never in what stands on the site, however far the camera turns', () => {
-    const { hall, transformer, tank, chimneys, pipe } = SITE
+    const { hall, transformer, tank, chimneys, pipe, solar, turbine, batteries } = SITE
     for (const { pan, xNorm, hNorm } of places) {
       const at = standingPoint(xNorm, pan, hNorm)
       const where = `pan ${pan}, x_norm ${xNorm}, h_norm ${hNorm}`
 
-      for (const block of [hall, transformer, tank]) expect(fromBlock(at, block), where).toBeGreaterThan(STANDING.clear / 2)
-      for (const chimney of chimneys) expect(between(at, chimney), where).toBeGreaterThan(chimney.radius + STANDING.clear / 2)
+      for (const block of [hall, transformer, tank, solar, batteries]) {
+        expect(fromBlock(at, block), where).toBeGreaterThan(STANDING.clear / 2)
+      }
+      for (const column of [...chimneys, turbine]) {
+        expect(between(at, column), where).toBeGreaterThan(column.radius + STANDING.clear / 2)
+      }
       for (const mast of floodlights()) {
         expect(between(at, mast), where).toBeGreaterThan(SITE.floodlights.foot + STANDING.clear / 2)
       }

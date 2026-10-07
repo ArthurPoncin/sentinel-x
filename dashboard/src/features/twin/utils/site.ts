@@ -46,6 +46,32 @@ export const SITE = {
     radius: 0.045,
     height: 0.3,
   },
+  // What makes the plant an eco-responsible one. The solar field, in the light between the Enclosure and the
+  // transformer station: `rows` of `columns` panels, each `panel.width` along x and `panel.length` up its
+  // slope, leaned by `panel.tilt` from lying flat to face the entrance, its top edge `height` above the ground.
+  solar: {
+    x: -0.65,
+    z: -0.575,
+    width: 1.4,
+    depth: 0.72,
+    height: 0.2,
+    rows: 3,
+    columns: 5,
+    panel: { width: 0.25, length: 0.2, tilt: 0.5 },
+  },
+  // The wind turbine, beside the hall: a mast `radius` wide at its foot with its hub `height` up, and a rotor
+  // of `rotor.blades` blades `rotor.radius` long, which takes `rotor.period` seconds to turn once. It faces
+  // `bearing`: into the wind that carries the dust.
+  turbine: {
+    x: 2.15,
+    z: -1,
+    radius: 0.06,
+    height: 1.4,
+    bearing: 1.9 - Math.PI,
+    rotor: { radius: 0.42, blades: 3, period: 6 },
+  },
+  // The battery container, alongside the transformer station it feeds.
+  batteries: { x: -1.42, z: -1.5, width: 0.26, depth: 0.62, height: 0.28 },
   // The perimeter: a fence of posts around the site, closed at the gate, front left. A chain-link mesh runs
   // between the posts, `height` high and `mesh.rows` diamonds up; a strand of barbed wire runs `barbed.rise`
   // over it, on top of the posts, with a barb every `barbed.every` along it. The gate's `width` runs along
@@ -234,6 +260,23 @@ export function hallSign(): SignPoint {
   }
 }
 
+// The ground a solar panel takes: `panel.width` along x, and along z what its slope leaves of its length.
+export function panelGround(): Pick<Block, 'width' | 'depth'> {
+  const { width, length, tilt } = SITE.solar.panel
+  return { width, depth: length * Math.cos(tilt) }
+}
+
+// Where the solar panels stand, the middle of each: in rows across the field, a row behind the other, evenly
+// spaced over its ground.
+export function solarPanels(): GroundPoint[] {
+  const { x, z, width, depth, rows, columns } = SITE.solar
+
+  return Array.from({ length: rows * columns }, (_, index) => ({
+    x: x + (((index % columns) + 0.5) / columns - 0.5) * width,
+    z: z + ((Math.floor(index / columns) + 0.5) / rows - 0.5) * depth,
+  }))
+}
+
 // A floodlight of the site: where its mast stands, the bearing its head looks along, into the site, and the
 // middle of the pool it lights on the ground.
 export interface Floodlight extends SignPoint {
@@ -322,10 +365,11 @@ function throughRectangle(from: GroundPoint, sight: GroundPoint, low: GroundPoin
 }
 
 // How far from the lens, along `sight`, what stands on the site is first met, grown by `clear` all round:
-// the plant's parts, the gas pipe included, and the floodlights' masts. Infinity when the line meets none of them.
+// the plant's parts, the gas pipe included, the solar field, the wind turbine's mast, the batteries and the
+// floodlights' masts. Infinity when the line meets none of them.
 function reachToPlant(lens: GroundPoint, sight: GroundPoint, clear: number): number {
-  const { hall, transformer, tank, chimneys, pipe } = SITE
-  const blocks = [hall, transformer, tank].map(({ x, z, width, depth }) => ({
+  const { hall, transformer, tank, chimneys, pipe, solar, turbine, batteries } = SITE
+  const blocks = [hall, transformer, tank, solar, batteries].map(({ x, z, width, depth }) => ({
     low: { x: x - width / 2, z: z - depth / 2 },
     high: { x: x + width / 2, z: z + depth / 2 },
   }))
@@ -341,7 +385,7 @@ function reachToPlant(lens: GroundPoint, sight: GroundPoint, clear: number): num
     ...[...blocks, ...stretches].map(({ low, high }) =>
       throughRectangle(lens, sight, { x: low.x - clear, z: low.z - clear }, { x: high.x + clear, z: high.z + clear }),
     ),
-    ...chimneys.map((chimney) => throughCircle(lens, sight, chimney, chimney.radius + clear)),
+    ...[...chimneys, turbine].map((column) => throughCircle(lens, sight, column, column.radius + clear)),
     ...floodlights().map((mast) => throughCircle(lens, sight, mast, SITE.floodlights.foot + clear)),
   ]
   // What the line has already left behind the lens is not in the way.

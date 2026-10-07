@@ -39,6 +39,17 @@ The brief places the micro power plants in « zones géographiques isolées et p
 
 Built in #101: see [`../dashboard/README.md`](../dashboard/README.md#digital-twin--featurestwin).
 
+## What makes the plant eco-responsible
+
+The brief speaks of « micro-centrales énergétiques éco-responsables » and does not name the energy: this is our reading of it. The maquette showed a hall, two chimneys and a gas tank; it now also shows where clean power comes from. None of it reacts to the feed, and its materials are the maquette's neutral ones.
+
+- **A solar field** — fifteen panels in three rows between the Enclosure and the transformer station, leaned toward the entrance.
+- **A wind turbine** — a small one beside the generator hall, turned into the wind that carries the dust. Its blades turn slowly, a turn every 6 s, whatever the `Status`.
+- **Batteries** — a container alongside the transformer station.
+- **The gas stays** — the hall, the tank and the pipe are still there: gas and overheating are the threats the brief names, and what the Twin's reactions are anchored on.
+
+Built in #102: see [`../dashboard/README.md`](../dashboard/README.md#digital-twin--featurestwin).
+
 ## Signature features
 
 - **Time-scrubber** — replay a past Incident second-by-second, labelled REPLAY. Lets us script the live demo precisely and re-run it if the network hiccups. Built in #15: see [`../dashboard/README.md`](../dashboard/README.md#time-scrubber--featuresreplay).
