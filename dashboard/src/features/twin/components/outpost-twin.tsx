@@ -105,8 +105,8 @@ export interface OutpostTwinProps {
   // What the scene shows, from toScene(state).
   scene: SceneProps
   // The feed's frames, oldest first, as they come in: a `noise` Alert raised among them sends a wave over the
-  // socle, and an Alert raised for the first time turns the camera to its anchor. Those already there as the
-  // Twin opens are past: none is replayed.
+  // socle, an Alert raised for the first time turns the camera to its anchor, and telemetry sends an impulse
+  // from the Enclosure's antenna. Those already there as the Twin opens are past: none is replayed.
   frames: readonly Frame[]
   // Keeps the whole stage in frame whatever the shape of the window, a vertical one included: the camera
   // stands back as far as that takes, and no longer zooms.
@@ -132,6 +132,8 @@ export interface OutpostTwinProps {
 // the Alert is cleared; a predictive drift pulses the Probes it names, its score on a label; a presence blinks the Enclosure's
 // PIR dome and sends an amber sweep round the fence; either one, someone near the site or inside it, lights the
 // floodlights on the perimeter in white, each a pool on the ground at its foot; a clap sends a wave of light from the Enclosure over the socle.
+// The antenna on the Enclosure's side sends an impulse of white light for each frame of telemetry received,
+// and a padlock reads « WSS » by it while the live feed is encrypted.
 // The camera orbits the site, and turns to an Alert as it is raised: it faces where it happens for a few
 // seconds, then orbits again. Without its
 // signal it all turns grey and says so: what it shows is no longer live. It fills its parent: give that the
@@ -167,7 +169,12 @@ export function OutpostTwin({ scene, frames, wholeStage = false }: OutpostTwinPr
         <Intruder intruder={scene.intruder} />
         {/* Where the site plan stands it, turned the way its lens looks. */}
         <group position={[SITE.enclosure.x, 0, SITE.enclosure.z]} rotation={[0, SITE.enclosure.heading, 0]}>
-          <Enclosure {...scene.enclosure} presence={scene.presence.active} pan={scene.camera.pan} />
+          <Enclosure
+            {...scene.enclosure}
+            presence={scene.presence.active}
+            pan={scene.camera.pan}
+            link={{ frames, live: !scene.signalLost, encrypted: scene.link.encrypted }}
+          />
         </group>
         <OrbitCamera anchor={scene.anchor} frames={frames} wholeStage={wholeStage} />
         <Halo saturation={scene.signalLost ? 0 : 1} />

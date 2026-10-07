@@ -22,6 +22,7 @@ The face of Sentinel-X and our **"wow" centerpiece**. See [`../docs/DIGITAL-TWIN
 - **Camera field**: a translucent volume from the lens on the Enclosure's roof down to the arc of the fence it watches, faint at rest, lit on an `intrusion`. It turns with the real camera, which a servo turns to whom it follows.
 - **Perimeter**: a chain-link fence under a strand of barbed wire, its gate closed, which opens for as long as an intrusion goes on. The camera's field, the intruder and the presence's sweep read through it.
 - **Component pulse** on a `predictive` anomaly; sound ripples on `noise`.
+- **The link, seen**: an antenna on the Enclosure sends an impulse of white light for each frame of telemetry received, and a padlock reads « WSS » by it when the live feed really is encrypted, never otherwise.
 - **`Status`** floods the twin in its color as it rises, then stays on its ring, its rim light and the Enclosure (`nominal`/`elevated`/`critical`).
 - **Time-scrubber** replays a past Incident second by second, labelled REPLAY — demo insurance (#15).
 - **Scenario mode** plays the scripted reference scenario on demand, network or not (#15).
@@ -37,7 +38,7 @@ cd backend && npm install && OPERATOR_AUTH=off MOCK_FEED=true HISTORY_FILE=:memo
 cd dashboard && npm install && npm run dev
 
 npm test            # store, feed client, config, gas level, heat level, scene mapper, site plan, steam, haze, Alarm,
-                    # fades, escalation flash, pulse, presence sweep, noise wave, automatic orbit, pixel ratio, framing,
+                    # fades, escalation flash, pulse, presence sweep, noise wave, the link's impulses, automatic orbit, pixel ratio, framing,
                     # the camera's field, the intruder's track and last known position, walk cycle and figurine,
                     # its detection's label and frame, the camera's turn to an Alert,
                     # Incidents, replay, scenario, Incidents client, the Twin on a replay
@@ -92,7 +93,7 @@ src/
 │   │   ├── utils/           # incidents(history) · replayOf(history, incident) · framesAt(replay, t)
 │   │   │                    # withStatus(frames) · scenario(start), scenarioFrames(start) · labels
 │   │   └── index.ts
-│   └── twin/                # #20, #12, #30, #31, #32, #33, #40, #13, #36, #34, #35, #37, #23, #38, #91, #92, #93, #94, #96, #95, #97, #98, #99, #101, #102 — the Outpost as a maquette, on its studio stage
+│   └── twin/                # #20, #12, #30, #31, #32, #33, #40, #13, #36, #34, #35, #37, #23, #38, #91, #92, #93, #94, #96, #95, #97, #98, #99, #101, #102, #103 — the Outpost as a maquette, on its studio stage
 │       ├── components/      # OutpostTwin: the scene, drawn from SceneProps · Enclosure · OrbitCamera · Halo
 │       │                    # Socle · PowerPlant · Perimeter · Steam: the site, drawn from SITE
 │       │                    # ChainLinkMaterial: the fence's mesh and the gate's, drawn by their material · inDiamonds
@@ -101,12 +102,14 @@ src/
 │       │                    # Renewables: the solar field, in instances, the wind turbine and the batteries
 │       │                    # Haze: the gas around the pipe · VapourMaterial: what steam and haze are made of
 │       │                    # HeatShimmer: the hot air above the hall · NoiseWaves: a clap's wave over the socle
+│       │                    # Antenna: the Enclosure's antenna, its impulses and the padlock by it
 │       │                    # Intruder: a hologram figurine for each person the camera sees, inside the fence, in its
 │       │                    # detection's brackets, the one it follows tied to its lens, and the outline that one leaves
 │       │                    # LabelCard: a signal's label, a card that faces the camera
 │       │                    # Box · Turned: the bevelled volumes it is built from · boxShape, turnedShape: their shapes · palette
 │       ├── hooks/           # usePixelRatio(element) · useFade(target), useColorFade(color) · useSweep(present)
 │       │                    # useWaves(frames) · useStatusLight(level, neutral) · useFraming(anchor, frames)
+│       │                    # useImpulses(frames, live)
 │       ├── utils/           # toScene(state): the scene's props, pure · gasLevel(air), heatLevel(temp): 0–1
 │       │                    # SITE: the ground plan · lensPoint(), lensHeight() · fencePosts() · bearingTo(from, to)
 │       │                    # sightBearing(xNorm, pan), watchedPoint(xNorm, pan): where the camera looks, turned or not
@@ -133,6 +136,8 @@ src/
 │       │                    # sweepGlow(place, lap) · domeFlash(lap)
 │       │                    # framesSince(seen, frames), clapsIn(frames), wavesAt(waves, claps, now): the waves a
 │       │                    # clap sends · waveShape(elapsed, amplitude): a wave's radius, width and glow
+│       │                    # telemetryIn(frames), impulsesAt(impulses, received, live, now): the impulses the
+│       │                    # telemetry sends from the antenna · impulseShape(elapsed): its height, radius and glow
 │       │                    # trackAt(track, seen, elapsed): a figurine's track, walking to where its person was seen
 │       │                    # lastKnown(track): the last known position · figurineLevel(track), marksLevel(track)
 │       │                    # tracksAt(tracks, intrusion, elapsed): a track for each person, and those going out
@@ -142,7 +147,7 @@ src/
 │       └── index.ts
 └── shared/
     ├── contract/            # re-exports backend/src/contract.ts — never redeclare a schema
-    ├── config/              # feedUrl() · captureMode() · STATUS_COLORS
+    ├── config/              # feedUrl(), feedEncrypted() · captureMode() · STATUS_COLORS
     ├── api/                 # getJson / postJson on the app's own origin · onUnauthorized(listener): a 401
     ├── lib/                 # cn(), French labels, Status/severity colors, fr-FR formats · paginate(), inOrder()
     ├── components/          # LevelBadge: the outline badge with a colored dot · Pager, SortByTime
@@ -225,7 +230,7 @@ const history = useLiveFeed((state) => state.history)
 <OutpostTwin scene={scene} frames={history} />
 ```
 
-- `toScene(state)` turns the live state into what the scene shows, and is all the scene reads: pure, tested without WebGL. It gives the Enclosure's color and glow (gas), what its LCD reads and the color its LED ring breathes in (the Status), its Alarm (active `gas` and `thermal` Alerts), the Probes to pulse and the drift's label (active `predictive` Alerts), how thick the haze around the gas pipe is (gas), the Status's color grade, the heat of the generator hall (how red its roof glows, whether the air ripples above it), whether the camera's field is lit, its sector on the ground with it (an active `intrusion`), where the intruder stands and how sure the vision model is of it (last active `intrusion`'s `alert_id`, `x_norm` and the point of the fence it gives, `confidence` and the label that reads it), whether someone is near the site (an active `presence`), whether the floodlights are lit (an active `presence` or `intrusion`), where the last raised of the active Alerts happens (`anchor`, for [the camera to turn to](#digital-twin--featurestwin)) and whether the signal is lost.
+- `toScene(state)` turns the live state into what the scene shows, and is all the scene reads: pure, tested without WebGL. It gives the Enclosure's color and glow (gas), what its LCD reads and the color its LED ring breathes in (the Status), its Alarm (active `gas` and `thermal` Alerts), the Probes to pulse and the drift's label (active `predictive` Alerts), how thick the haze around the gas pipe is (gas), the Status's color grade, the heat of the generator hall (how red its roof glows, whether the air ripples above it), whether the camera's field is lit, its sector on the ground with it (an active `intrusion`), where the intruder stands and how sure the vision model is of it (last active `intrusion`'s `alert_id`, `x_norm` and the point of the fence it gives, `confidence` and the label that reads it), whether someone is near the site (an active `presence`), whether the floodlights are lit (an active `presence` or `intrusion`), where the last raised of the active Alerts happens (`anchor`, for [the camera to turn to](#digital-twin--featurestwin)), whether the padlock shows by the antenna (`link.encrypted`, from its second argument: what the route says of the feed) and whether the signal is lost.
 - The `Status` grades the scene, and no longer lights the whole of it for good (#91, a change from #12). The key light and the fill are neutral at every Status (`scene.status.light`): the signals are in the Status's hues, and a red intruder is lost on a maquette lit in red. What says the Status at all times is the rim light (`scene.status.rim`, the studio's cold one at `nominal`), the ring around the socle, the LCD and the LED ring: green, amber, red. It follows the Command Post's Status, never the readings. The sky stays black on the stage (#30): the grade's `background` is no longer drawn.
 - **The escalation flash** (#91). When the Status rises (`nominal` → `elevated`, `elevated` → `critical`, `nominal` → `critical`), the whole model is lit in the new Status's color for `FLASH_HOLD` (2 s, the fade that brings the color in included), then the light fades back to neutral over `FADE_SECONDS`, keeping a slight tint of the Status (`REST_SHARE`, 12 % of the light). A Status that goes down does not flash: the light only fades to the tint of the new one, none at `nominal`. `statusShare(from, to, elapsed)` (`utils/escalation.ts`) is that envelope, the share of the Status's color in the light, pure and tested.
 - **From one Status to the next** — `lightTo(light, level, now)` and `lightShares(light, now)` carry the light across the changes: it leaves what is on screen for what the new Status asks over `FADE_SECONDS`, so the flash fades in like every change, and a Status that rises during a flash floods the model in its own color from the one on screen, without a jump. The Status the Twin opens on is shown at rest: nothing flashes for what was already there. `lit(shares, neutral, colors)` is the color that makes; `useStatusLight(level, neutral)` runs it all on every frame, for the key light and the fill. A replay and the scenario flash the same way, a Status reached by a seek included: the light follows the Status on screen, whatever feeds it.
@@ -294,6 +299,20 @@ const history = useLiveFeed((state) => state.history)
 - **Nothing replayed** — the frames already in the history when the Twin opens are past, and so is a history that does not follow on from the last one seen: no wave plays for them. A reconnection only brings the Command Post's snapshot (Status and latest telemetry): it sends no wave either.
 - **Drawn** — one disc over the whole socle, whose shader draws every wave as a band around the Enclosure, sharper at its front than at its back, fading out at the socle's cut edge. In `NOISE_COLOR`, an ice white no Status shares (the Alert is only `info`: something was heard, nothing is wrong), unlit and added over the ground, so the halo takes it for a light and the buildings it passes behind hide it. It is not drawn at all while the site is quiet. Its cost, while a wave is on, is one disc's fragments, twice (the lit frame and the halo's): not measured on the Iris Xe yet, but far below the haze's.
 - **On the real Sentinel** — the firmware raises `noise` once and holds it for `NOISE_HOLD_MS` (3 s) of quiet before clearing it: claps closer than that make one Alert, so one wave. On the mock feed, the clap is raised at 0.82 and cleared on the next tick.
+
+**The link** (#103) — the brief asks for a link « sans fil et ultra-sécurisée », and nothing on the maquette showed it. The Enclosure now carries an antenna, which beats with the feed and says whether it is encrypted:
+
+![The antenna on the Enclosure's right side, its tip just over the roof: the tip lit and a ring of white light rising over it as a frame of telemetry comes in, a card with a padlock and « WSS » under its foot, on a feed served over HTTPS](../docs/twin/link-impulse.png)
+
+- **An antenna** — `<Antenna>` (`components/antenna.tsx`), a part of the Enclosure under its own name (`ENCLOSURE_PARTS.antenna`): an arm out of the body's right side, behind the engraving, a joint and a whip whose tip stands just over the roof. On the side, not on the roof: the camera frames the Enclosure with little room above it, and an impulse has to rise within the frame.
+- **An impulse a frame of telemetry** — each one received lights the tip and sends a ring of white light from it (`LINK_COLOR`), which rises `IMPULSE_RISE`, widens and fades out in `IMPULSE_LIFE` (0.9 s): shorter than the second between two snapshots, so the link is seen to beat. `impulseShape(elapsed)` (`utils/link.ts`) is that envelope, its height over the tip, its radius and how bright it is: pure and tested, in the line of the noise wave's.
+- **Telemetry only** — `telemetryIn(frames)`: an Alert sends none, nor does a Status. Frames that come in at the same instant, as when a replay is sought forward, leave one impulse: several at the same place would only be a brighter one.
+- **An event, not a state** — like a clap: `framesSince(seen, frames)` gives what came in since the last frame, `impulsesAt(impulses, received, live, now)` the impulses still rising plus the new one (`MAX_IMPULSES` at most). The frames already in the history as the Twin opens are past: none is replayed. `useImpulses(frames, live)` runs it on every frame.
+- **None while the signal is lost** — `live` is `!scene.signalLost`: no impulse leaves, the one on its way goes out, and what was received meanwhile leaves none later. The link beats again with the first telemetry of the feed that is back.
+- **REPLAY** — the Twin is given the replayed frames: the impulses follow them second after second, and stop with the replay paused.
+- **The padlock** — a card under the antenna's foot, a closed padlock and « WSS », shown only when it is true. `feedEncrypted(location)` (`shared/config/feed-url.ts`) reads it from the page, as `feedUrl` does: `wss://` on a page served over HTTPS, behind the reverse proxy, and plain `ws://` on a developer's machine. The route says so to `toScene(state, { encrypted })`, never for a replay, which is no link; `scene.link.encrypted` is true only while that feed is open, so there is no padlock before the first connection nor on a signal lost. Without that second argument `toScene` takes the feed for a plain one. All of it is tested without a render. The card is a sprite, like a label's: it faces the camera, is drawn over what stands in front of it, and comes and goes in a fade. On `npm run dev` there is none: that is the Twin saying nothing false.
+- **Shadows** — the antenna stands still: it casts its shadow with the others, drawn once (`StillShadows`). The impulses and the card are unlit light added over the frame and cast none; the halo takes them for lights.
+- **Cost** — four small shapes at rest, and one ring more for the 0.9 s an impulse lasts, in the lit frame and in the halo's; a sprite while the feed is encrypted. Measured on the Iris Xe at 1920 × 1080, production bundle, the orbit turning, frame rate capped by the screen, runs of 15 s with telemetry coming in every second: 60.1 images a second, a median of 16.7 ms a frame and 95 % of them within 16.7 ms on the run the GPU was free for. Three later runs, taken while other sessions used the GPU, gave 42.6 with the impulses against 51.7 and 43.8 without any telemetry, a median of 16.7 ms each: the load, not the link. Not compared uncapped against the build before it.
 
 **The camera turns to the Alert** (#97) — the orbit took no account of what happened: depending on the instant, an Alert was raised at the edge of the frame or behind the Enclosure. Now the camera goes to it:
 
@@ -422,8 +441,8 @@ const history = useLiveFeed((state) => state.history)
 
 ![The Enclosure, nominal](../docs/twin/enclosure-nominal.png)
 
-- **Front:** the LCD band, then the PIR dome and the mic grille. **Under the body:** the ventilated Probe compartment, louvres front and back, the DHT22 and the MQ-2 visible between them. **On top:** the buzzer and the LED ring around it, and beside them the camera, on its servo: a pedestal and a housing with its lens, which turns to whom it follows (`pan`, eased like the field's) and casts no shadow, as the shadows are drawn once. The picture above is from before: the lens was on the front. **Right side:** the engraving, *AetherCorp / SENTINEL-X / serial* (`ENGRAVING`).
-- **Parts to drive:** every Probe and actuator is a named object — `scene.getObjectByName(ENCLOSURE_PARTS.mq2)` — for the later slices. The predictive pulse (#13) drives `dht22` and `mq2` from `scene.enclosure.pulses`, the presence (#36) blinks `pir`, the Alarm (#34) drives `ledRing` and `buzzer` from `scene.enclosure.alarm`.
+- **Front:** the LCD band, then the PIR dome and the mic grille. **Under the body:** the ventilated Probe compartment, louvres front and back, the DHT22 and the MQ-2 visible between them. **On top:** the buzzer and the LED ring around it, and beside them the camera, on its servo: a pedestal and a housing with its lens, which turns to whom it follows (`pan`, eased like the field's) and casts no shadow, as the shadows are drawn once. **Right side, behind the engraving:** the antenna, its tip just over the roof (#103, [the link](#digital-twin--featurestwin)). The picture above is from before: the lens was on the front, and there was no antenna. **Right side:** the engraving, *AetherCorp / SENTINEL-X / serial* (`ENGRAVING`).
+- **Parts to drive:** every Probe and actuator is a named object — `scene.getObjectByName(ENCLOSURE_PARTS.mq2)` — for the later slices. The predictive pulse (#13) drives `dht22` and `mq2` from `scene.enclosure.pulses`, the presence (#36) blinks `pir`, the Alarm (#34) drives `ledRing` and `buzzer` from `scene.enclosure.alarm`, the link (#103) lights the `antenna`.
 - **LCD:** shows `scene.enclosure.lcd.text` (`LCD_TEXT`: `NOMINAL`, `ELEVATED`, `CRITICAL`) in the Status's color. The text switches like a real LCD's, the color fades. Unlit, so it glows.
 - **LED ring:** breathes in the Status's color, one breath every `BREATH_PERIOD` (4 s), never below `BREATH_FLOOR` — `breath(t)` is pure and tested. The kit has no LED any more (`docs/ARCHITECTURE.md`): on the Twin, the ring is the Status light, until the Alarm makes it blink (#34, below).
 - **Gas:** the body carries the glow of #20, and lights the ground from inside it.

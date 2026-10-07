@@ -13,6 +13,8 @@ export const ENCLOSURE_PARTS = {
   // What it shows and sees with
   lcd: 'lcd',
   camera: 'camera-lens',
+  // What it talks to the Command Post through
+  antenna: 'antenna',
 } as const
 
 export type EnclosurePart = keyof typeof ENCLOSURE_PARTS

@@ -118,6 +118,7 @@ describe('toScene', () => {
       presence: { active: false },
       floodlights: { lit: false },
       anchor: null,
+      link: { encrypted: false },
       signalLost: false,
     })
   })
@@ -294,6 +295,22 @@ describe('toScene', () => {
     const lost = toScene({ ...known, connection: 'closed', connectedOnce: true })
 
     expect(lost).toEqual({ ...live, signalLost: true })
+  })
+
+  it('shows the padlock only for an encrypted feed that is open', () => {
+    const open = state({ connection: 'open', connectedOnce: true })
+
+    expect(toScene(open, { encrypted: true }).link).toEqual({ encrypted: true })
+    expect(toScene(open, { encrypted: false }).link).toEqual({ encrypted: false })
+    expect(toScene(open).link).toEqual({ encrypted: false })
+  })
+
+  it('shows no padlock before the first connection, nor while the signal is lost', () => {
+    const encrypted = { encrypted: true }
+
+    expect(toScene(state({ connection: 'connecting' }), encrypted).link.encrypted).toBe(false)
+    expect(toScene(state({ connection: 'closed', connectedOnce: true }), encrypted).link.encrypted).toBe(false)
+    expect(toScene(state({ connection: 'connecting', connectedOnce: true }), encrypted).link.encrypted).toBe(false)
   })
 
   const pulsesFor = (...activeAlerts: Alert[]) => toScene(state({ activeAlerts })).enclosure.pulses
