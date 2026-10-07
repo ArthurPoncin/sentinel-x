@@ -10,7 +10,8 @@ import { captureMode } from '@/shared/config/capture-mode'
 // space under the header. An intrusion lights the camera's sector and stands the intruder on the perimeter, a
 // figurine in hologram walking along the arc, tied to the lens, in the brackets of its detection and labelled
 // with the vision model's confidence; a predictive drift pulses the Probes it names and
-// labels them with its score, a presence blinks the PIR dome and sweeps the fence in amber,
+// labels them with its score, a presence blinks the PIR dome and sweeps the fence in amber, and it or an
+// intrusion lights the floodlights on the perimeter,
 // a clap sends a wave from the Enclosure over the socle. The camera turns to each Alert as it is raised, then
 // orbits again. When the feed drops, it all turns grey: nothing here
 // is live any more. The time-scrubber replays a past Incident or the scripted scenario in it, second by second,

@@ -72,6 +72,9 @@ export interface SceneProps {
   // Someone is near the site: a `presence` Alert is active. The Enclosure's PIR dome blinks and an amber
   // sweep goes round the fence for as long.
   presence: { active: boolean }
+  // The floodlights on the perimeter: lit while a `presence` or an `intrusion` Alert is active, someone near
+  // the site or inside it, dark otherwise.
+  floodlights: { lit: boolean }
   // Where the last raised of the active Alerts happens on the site plan, its anchor: the intruder for an
   // `intrusion`, the gas pipe for a `gas`, the generator hall for a `thermal`, the gate for a `presence`, the
   // Enclosure for a `predictive`. A clap is heard, not seen anywhere: a `noise` Alert has none, and leaves the
@@ -96,6 +99,8 @@ export const NEUTRAL_RIM = '#9dbcff'
 export const INTRUSION_COLOR = STATUS_COLORS.critical
 // What the PIR dome blinks in and the fence is swept in on a presence: the amber of a warning.
 export const PRESENCE_COLOR = STATUS_COLORS.elevated
+// What the floodlights light in: white, which no Status shares. They show the site reacting, not how bad it is.
+export const FLOODLIGHT_COLOR = '#ffffff'
 // What a clap sends over the socle: a pale ice-white, which no Status shares. A `noise` Alert is only `info`, so
 // its wave says something was heard, not that something is wrong.
 export const NOISE_COLOR = '#cfe8ff'
@@ -245,6 +250,7 @@ export function toScene(state: TwinState): SceneProps {
     sector: { lit: intruder !== null },
     intruder,
     presence: { active: present },
+    floodlights: { lit: present || intruder !== null },
     anchor,
     // Not open is not enough: before the first connection, and while that one is still being tried,
     // there is no signal to have lost. After it, a retry in progress is still a signal lost.

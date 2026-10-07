@@ -80,6 +80,17 @@ export const SITE = {
     tank: { bearing: 0, width: 0.34, height: 0.2 },
     hall: { bearing: 0, along: -0.09, width: 0.6, height: 0.24, foot: 0.1 },
   },
+  // The floodlights: a mast at each of `bearings`, `radius` from the socle's centre, just inside the fence and
+  // none on the side of the gate, which the camera watches. A mast is `height` tall and keeps the ground
+  // `foot` around its axis. Its head looks into the site and down: the pool it lights on the ground is
+  // `pool.radius` wide around a point `pool.throw` in from its foot.
+  floodlights: {
+    radius: 2.5,
+    bearings: [0.6, 1.7, Math.PI, -2.2, -1.3],
+    height: 0.9,
+    foot: 0.05,
+    pool: { throw: 0.2, radius: 0.5 },
+  },
 } as const
 
 // The point `distance` away from the socle's centre along `bearing`.
@@ -188,6 +199,23 @@ export function hallSign(): SignPoint {
     z: hall.z + (Math.cos(bearing) * hall.depth) / 2 - along * Math.sin(bearing),
     bearing,
   }
+}
+
+// A floodlight of the site: where its mast stands, the bearing its head looks along, into the site, and the
+// middle of the pool it lights on the ground.
+export interface Floodlight extends SignPoint {
+  pool: GroundPoint
+}
+
+// The floodlights, where the plan stands them: each on its bearing from the socle's centre, looking back at it.
+export function floodlights(): Floodlight[] {
+  const { radius, bearings, pool } = SITE.floodlights
+
+  return bearings.map((bearing) => ({
+    ...toward(bearing, radius),
+    bearing: bearing + Math.PI,
+    pool: toward(bearing, radius - pool.throw),
+  }))
 }
 
 // The point `share` of the way along the gas pipe, over the ground: 0 at the hall's wall, 1 at the tank. The
