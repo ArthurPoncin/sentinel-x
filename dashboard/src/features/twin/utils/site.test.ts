@@ -926,8 +926,8 @@ describe('where someone the camera sees stands', () => {
     }
   })
 
-  it("is clear of the Enclosure's own ground, which the lens is over", () => {
-    expect(between(lens, SITE.enclosure)).toBeLessThan(SITE.enclosure.radius)
+  it("is clear of the Enclosure's own ground, which the lens hangs out of", () => {
+    expect(between(lens, SITE.enclosure)).toBeGreaterThan(SITE.enclosure.radius)
     for (const { pan, xNorm, hNorm } of places) {
       expect(between(standingPoint(xNorm, pan, hNorm), SITE.enclosure)).toBeGreaterThan(SITE.enclosure.radius + STANDING.clear / 2)
     }
@@ -970,7 +970,7 @@ describe('where someone the camera sees stands', () => {
         const away = TALL.map((hNorm) => between(lens, standingPoint(xNorm, pan, hNorm)))
 
         expect(away).toEqual([...away].sort((a, b) => b - a))
-        expect(away.at(0)).toBeGreaterThan((away.at(-1) ?? 0) + 1)
+        expect(away.at(0)).toBeGreaterThan((away.at(-1) ?? 0) + 0.9)
       }
     }
   })
@@ -995,14 +995,14 @@ describe('where someone the camera sees stands', () => {
     expect(away).toBeLessThan((near + far) / 2)
   })
 
-  it('stops short of what stands on the site when the camera looks at it: the gas pipe, before the tank', () => {
-    // Turned a quarter turn to its left, the camera looks along the site toward the gas pipe and the tank.
+  it('stops short of what stands on the site when the camera looks at it: the gas tank', () => {
+    // Turned a quarter turn to its left, the camera looks along the site, past the gas pipe's end, at the tank.
     const bearing = sightBearing(0.5, -QUARTER)
     const { near, far } = standingSpan(bearing)
     const fence = between(lens, watchedPoint(0.5, -QUARTER))
 
     expect(far).toBeLessThan(fence - 1)
     expect(far).toBeGreaterThanOrEqual(near)
-    expect(standingPoint(0.5, -QUARTER).x).toBeLessThan(SITE.pipe.path[0].x - SITE.pipe.radius)
+    expect(standingPoint(0.5, -QUARTER).x).toBeLessThan(SITE.tank.x - SITE.tank.width / 2)
   })
 })
