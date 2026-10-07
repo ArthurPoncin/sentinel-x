@@ -36,20 +36,61 @@ def _is_name(value: object) -> bool:
     return isinstance(value, str) and len(value) > 0
 
 
+def _is_share(value: object) -> bool:
+    return _is_number(value) and 0 <= value <= 1
+
+
+def _is_id(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+# The people the camera sees at once: the one it follows, and at most this many others.
+MAX_OTHERS = 4
+_OTHER = {"id", "x_norm", "h_norm", "confidence"}
+
+
+def _other_errors(where: str, other: object) -> list[str]:
+    if not isinstance(other, dict):
+        return [f"{where}: not an object"]
+    errors = [f"{where}.{key}: unknown field" for key in other.keys() - _OTHER]
+    errors += [f"{where}.{key}: missing" for key in sorted(_OTHER - other.keys())]
+    if "id" in other and not _is_id(other["id"]):
+        errors.append(f"{where}.id: not a whole number, 0 or more")
+    for key in ("x_norm", "h_norm"):
+        if key in other and not _is_share(other[key]):
+            errors.append(f"{where}.{key}: not a number between 0 and 1")
+    if "confidence" in other and not _is_number(other["confidence"]):
+        errors.append(f"{where}.confidence: not a number")
+    return errors
+
+
 def _detail_errors(kind: str, detail: object) -> list[str]:
     if not isinstance(detail, dict):
         return ["detail: not an object"]
     if kind == "intrusion":
         expected = {"x_norm", "confidence", "bbox"}
-        errors = [f"detail.{key}: unknown field" for key in detail.keys() - expected]
+        # What a camera that turns adds, each on its own: the api takes an Alert without them.
+        optional = {"id", "h_norm", "pan", "others"}
+        errors = [f"detail.{key}: unknown field" for key in detail.keys() - expected - optional]
         errors += [f"detail.{key}: missing" for key in expected - detail.keys()]
-        x_norm, bbox = detail.get("x_norm"), detail.get("bbox")
-        if "x_norm" in detail and not (_is_number(x_norm) and 0 <= x_norm <= 1):
-            errors.append("detail.x_norm: not a number between 0 and 1")
+        bbox, pan, others = detail.get("bbox"), detail.get("pan"), detail.get("others")
+        for key in ("x_norm", "h_norm"):
+            if key in detail and not _is_share(detail[key]):
+                errors.append(f"detail.{key}: not a number between 0 and 1")
         if "confidence" in detail and not _is_number(detail["confidence"]):
             errors.append("detail.confidence: not a number")
         if "bbox" in detail and not (isinstance(bbox, list) and len(bbox) == 4 and all(map(_is_number, bbox))):
             errors.append("detail.bbox: not 4 numbers")
+        if "id" in detail and not _is_id(detail["id"]):
+            errors.append("detail.id: not a whole number, 0 or more")
+        if "pan" in detail and not (_is_number(pan) and -180 <= pan <= 180):
+            errors.append("detail.pan: not a number between -180 and 180")
+        if "others" in detail:
+            if not (isinstance(others, list) and len(others) <= MAX_OTHERS):
+                errors.append(f"detail.others: not a list of at most {MAX_OTHERS} people")
+            else:
+                for index, other in enumerate(others):
+                    errors += _other_errors(f"detail.others[{index}]", other)
         return errors
     if kind == "predictive":
         expected = {"anomaly_score", "drivers"}

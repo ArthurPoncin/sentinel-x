@@ -74,6 +74,32 @@ describe('contract', () => {
     expect(AlertSchema.safeParse({ ...alert, kind: 'intrusion', detail }).success).toBe(false)
   })
 
+  it('accepts an intrusion seen by a camera that turns: how near, how far turned, and who else is there', () => {
+    const detail = {
+      ...detailOf.intrusion,
+      id: 3,
+      h_norm: 0.61,
+      pan: -35.5,
+      others: [{ id: 4, x_norm: 0.81, h_norm: 0.33, confidence: 0.71 }],
+    }
+
+    expect(AlertSchema.parse({ ...alert, kind: 'intrusion', detail })).toEqual({ ...alert, kind: 'intrusion', detail })
+  })
+
+  it.each([
+    ['a height that is not a share of the image', { h_norm: 1.4 }],
+    ['a camera turned by more than half a turn', { pan: 200 }],
+    ['an id that is not a whole number', { id: 1.5 }],
+    ['more than 4 other people', { others: Array.from({ length: 5 }, (_, id) => ({ id, x_norm: 0.5, h_norm: 0.4, confidence: 0.9 })) }],
+    ['another person placed outside the frame', { others: [{ id: 1, x_norm: -0.1, h_norm: 0.4, confidence: 0.9 }] }],
+    ['another person with a field the contract does not define', { others: [{ id: 1, x_norm: 0.5, h_norm: 0.4, confidence: 0.9, bbox: [0, 0, 1, 1] }] }],
+    ['another person without its height', { others: [{ id: 1, x_norm: 0.5, confidence: 0.9 }] }],
+  ])('rejects an intrusion with %s', (_what, changes) => {
+    const detail = { ...detailOf.intrusion, ...changes }
+
+    expect(AlertSchema.safeParse({ ...alert, kind: 'intrusion', detail }).success).toBe(false)
+  })
+
   it.each([
     ['kind', 'flood'],
     ['source', 'drone'],
