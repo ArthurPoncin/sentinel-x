@@ -71,7 +71,7 @@ export interface SceneProps {
   sector: { lit: boolean }
   // How far the camera is turned from where it rests, in radians, positive toward the right of its image: the
   // `pan` of the last raised of the active `intrusion` Alerts, 0 without one, or for a camera that does not
-  // turn. Its lens on the Enclosure's roof and its field turn with it.
+  // turn. Its lens on the Enclosure's front and its field turn with it.
   camera: { pan: number }
   // The intruder the last raised of the active `intrusion` Alerts sees, the one its camera follows: where it
   // stands across the camera's image, 0 = left, 1 = right, and where on the ground that is (`at`), on the

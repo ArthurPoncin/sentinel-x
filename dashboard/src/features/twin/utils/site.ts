@@ -92,7 +92,7 @@ export const SITE = {
   },
   // Where the Enclosure's mast stands, the ground kept for its foot, and the bearing it faces: beside the
   // way in, so that its camera, which is off the mast, looks straight out through the gate when it rests.
-  enclosure: { x: -0.5, z: 0.5, radius: 0.6, heading: 0 },
+  enclosure: { x: -0.5, z: 0.39, radius: 0.6, heading: 0 },
   // The camera's horizontal field of view, in radians: 60°, to set to the lens once the camera is mounted,
   // with the vision service's CAMERA_FOV_DEG.
   camera: { fov: Math.PI / 3 },
@@ -312,7 +312,7 @@ export function alongPipe(share: number): GroundPoint {
   return rest.at(-1) ?? start
 }
 
-// Where the camera's lens is, over the ground: on the Enclosure's roof, off its mast. The camera turns about
+// Where the camera's lens is, over the ground: out of the Enclosure's front, off its mast. The camera turns about
 // that very point: it is the same whichever way it looks.
 export function lensPoint(): GroundPoint {
   const { x, z, heading } = SITE.enclosure
@@ -413,14 +413,16 @@ export function watchedPoint(xNorm: number, pan = 0): GroundPoint {
 }
 
 // The stretch of the sight line that goes by `bearing` where someone can stand, in scene units from the lens:
-// from where it is clear of the Enclosure's own ground, which the lens is over, to where it is still clear of
-// the fence's line, a step inside it all round the site, or of what stands on the site before that. Where
-// there is no room between the two there is one place to stand: its near end.
+// from where it is clear of the Enclosure's own ground, which the lens hangs out of and a sight line turned
+// back goes over, to where it is still clear of the fence's line, a step inside it all round the site, or of
+// what stands on the site before that. Where there is no room between the two there is one place to stand:
+// its near end.
 export function standingSpan(bearing: number): { near: number; far: number } {
   const lens = lensPoint()
   const sight = toward(bearing)
   const { enclosure, fence } = SITE
-  const near = Math.max(0, throughCircle(lens, sight, enclosure, enclosure.radius)?.out ?? 0) + STANDING.clear
+  const ground = enclosure.radius + STANDING.clear
+  const near = Math.max(0, throughCircle(lens, sight, enclosure, ground)?.out ?? 0) + STANDING.clear
   const inside = throughCircle(lens, sight, { x: 0, z: 0 }, fence.radius - STANDING.clear)?.out ?? 0
   const far = Math.min(inside, reachToPlant(lens, sight, STANDING.clear))
 

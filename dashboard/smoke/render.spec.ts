@@ -38,7 +38,7 @@ test('the Digital Twin renders on the mock feed, without a runtime error', async
   await page.goto('/twin')
 
   await expect(page.locator('[data-connection]')).toHaveAttribute('data-connection', 'open')
-  await expect(page.locator('.stage-caption')).toContainText(/Outpost Status: (nominal|elevated|critical) · Gas: \d+/)
+  await expect(page.locator('.stage-caption')).toContainText(/Outpost Status: (nominal|elevated|critical) · Gas: \d+ · Temp: -?\d+,\d °C · Humidity: \d+ %/)
 
   // The scene has a WebGL context, alive, with something to draw into.
   const canvas = page.locator('.stage canvas')
