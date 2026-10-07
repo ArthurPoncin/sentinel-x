@@ -22,7 +22,7 @@ _Avoid_: box, edge node, device, module.
 The product name / the system as a whole. Not a single component.
 
 **Command Post**:
-The Local Server ("PC Serveur Local") — a **Raspberry Pi 4** fixed inside the Enclosure (the brief's Option A). It is the Wi-Fi access point, runs the whole containerized stack (broker, DB, API, dashboard, vision and predictive AI) and owns the USB webcam and the HDMI status screen. The single server of the system.
+The Local Server ("PC Serveur Local") — a **Raspberry Pi 4** fixed inside the Enclosure (the brief's Option A). It is the Wi-Fi access point, runs the whole containerized stack (broker, DB, API, dashboard, vision and predictive AI) and owns the USB webcam, the servo that turns it, and the HDMI status screen. The single server of the system.
 _Avoid_: server, PC, base, local server.
 
 **Operator**:

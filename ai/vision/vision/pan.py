@@ -1,0 +1,305 @@
+"""The camera on its servo: it turns to keep the person followed in the middle of its image.
+
+- `PanFollower`, the logic: from where that person stands around the camera to how far it is turned, at
+  each instant. Pure, like the tracker: no servo and no clock in it, the caller passes the monotonic time.
+- `PanDrive`, what turns the camera: `PAN_DRIVE`, `pwm` (`SysfsPwmServo`, a servo on one of the Pi's
+  hardware PWM pins) or `none` (the camera is fixed: nothing here runs). Another one plugs in the same way:
+  a class with `open()`, `turn()` and `close()`, and a line in `DRIVES`.
+
+Angles are in degrees from where the camera rests, positive toward the right of its image: the `pan` of an
+`intrusion` Alert.
+"""
+
+import logging
+import math
+import os
+import time
+from collections import deque
+from typing import Callable, Protocol
+
+from sentinel_common.config import ConfigError, env_bool, env_float, env_str
+
+logger = logging.getLogger(__name__)
+
+
+def _is_number(value: object) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+class PanFollower:
+    """How far the camera is turned, from one instant to the next.
+
+    - while an intrusion goes on (`aim`), it turns toward the person followed, most of the way at each
+      inference (`gain`: an inference is always a little late on where they are), and leaves them be once
+      they are within `deadband` degrees of the middle of its image: it does not hunt for the last degree;
+    - it never turns faster than `speed` degrees a second, so that what it frames does not blur and the
+      servo, which says nothing of where it is, is where it was told to be; nor past `low` and `high`, the
+      servo's travel;
+    - when the last inference did not see that person, it stays where it is: they are found again where
+      they were lost;
+    - with no intrusion (`rest`), it goes back to where it rests, at `home_speed`.
+
+    It remembers where it was for the last `memory` seconds: an image is always a little old, and the
+    angle that goes with it is the one of when it was taken (`angle_at`).
+    """
+
+    def __init__(
+        self,
+        *,
+        low: float = -90.0,
+        high: float = 90.0,
+        speed: float = 60.0,
+        home_speed: float = 30.0,
+        deadband: float = 4.0,
+        gain: float = 0.7,
+        memory: float = 2.0,
+    ) -> None:
+        if not (_is_number(low) and _is_number(high) and low <= 0 <= high and low < high):
+            raise ValueError(f"low and high: a travel that holds 0, where the camera rests, expected, got {low!r} to {high!r}")
+        if not (_is_number(speed) and speed > 0 and _is_number(home_speed) and home_speed > 0):
+            raise ValueError(f"speed and home_speed: numbers > 0 expected, got {speed!r} and {home_speed!r}")
+        if not (_is_number(deadband) and deadband >= 0):
+            raise ValueError(f"deadband: a number >= 0 expected, got {deadband!r}")
+        if not (_is_number(gain) and 0 < gain <= 1):
+            raise ValueError(f"gain: a number in ]0, 1] expected, got {gain!r}")
+        if not (_is_number(memory) and memory > 0):
+            raise ValueError(f"memory: a number > 0 expected, got {memory!r}")
+        self._low, self._high = low, high
+        self._speed, self._home_speed = speed, home_speed
+        self._deadband, self._gain, self._memory = deadband, gain, memory
+        self._angle = 0.0  # how far it is turned
+        self._goal = 0.0  # how far it is turning to
+        self._pace = speed  # and how fast, in degrees a second
+        self._at: float | None = None  # when it was last moved on
+        self._trail: deque[tuple[float, float]] = deque()  # (when, how far turned), oldest first
+
+    @property
+    def angle(self) -> float:
+        """How far the camera is turned, as of the last call."""
+        return self._angle
+
+    def aim(self, bearing: float | None, now: float) -> float:
+        """After an inference of an intrusion in progress: `bearing` is where the person followed stands
+        (the tracker's `target`), None when that inference did not see them. Returns the angle to turn to
+        now."""
+        self.step(now)
+        self._pace = self._speed
+        off = bearing - self._angle if bearing is not None and _is_number(bearing) else 0.0
+        if abs(off) > self._deadband:
+            self._goal = min(max(self._angle + self._gain * off, self._low), self._high)
+        else:
+            self._goal = self._angle
+        return self._angle
+
+    def rest(self, now: float) -> float:
+        """After an inference with no intrusion in progress: back to where it rests."""
+        self.step(now)
+        self._goal, self._pace = 0.0, self._home_speed
+        return self._angle
+
+    def step(self, now: float) -> float:
+        """Turns on toward where it is going, for the time gone by since the last call. Returns the angle
+        to turn to now. A clock that goes back turns nothing."""
+        if self._at is not None:
+            reach = self._pace * max(0.0, now - self._at)
+            self._angle += min(max(self._goal - self._angle, -reach), reach)
+        if self._at is None or now > self._at:
+            self._at = now
+            self._trail.append((now, self._angle))
+            while len(self._trail) > 1 and now - self._trail[1][0] >= self._memory:
+                self._trail.popleft()
+        return self._angle
+
+    def angle_at(self, moment: float) -> float:
+        """How far the camera was turned at `moment`, between the two instants it remembers around it.
+        Further back than it remembers, the oldest it does; later than the last call, where it is now."""
+        before = None
+        for at, angle in self._trail:
+            if at >= moment:
+                if before is None or at == moment:
+                    return angle
+                share = (moment - before[0]) / (at - before[0])
+                return before[1] + (angle - before[1]) * share
+            before = (at, angle)
+        return self._angle
+
+    def way_home(self, every: float) -> list[float]:
+        """The angles to go through, one every `every` seconds, to be back where it rests at `speed`: for
+        the service to park the camera as it stops. Empty when it is there."""
+        stride = self._speed * every
+        steps = math.ceil(abs(self._angle) / stride - 1e-9) if stride > 0 else 0
+        return [self._angle * (1 - step / steps) for step in range(1, steps + 1)]
+
+
+class PanDrive(Protocol):
+    name: str
+
+    def open(self) -> None:
+        """Gets ready to turn the camera, to where it rests. Never raises because the servo is not there."""
+
+    def turn(self, angle: float) -> None:
+        """Turns the camera to `angle` degrees. Called on the loop's thread, many times a second."""
+
+    def close(self) -> None:
+        """Lets the servo go."""
+
+
+class SysfsPwmServo:
+    """A hobby servo on a hardware PWM channel of the Pi, through the kernel's /sys/class/pwm: a pulse
+    every 20 ms, whose width says the angle, `min_us` microseconds at `low` degrees to `max_us` at `high`.
+    The kernel times the pulses: none of the jitter of pulses timed from Python, which a servo shakes
+    with, and the camera on it.
+
+    `directory` is the channel's own directory (`…/pwmchip0/pwm0`), exported by the host and given to the
+    container: docker-compose.pan.yml. `invert` is for a servo mounted the other way up: it turns the
+    other way for the same pulse.
+
+    A servo, a channel or a right that is missing stops nothing: it is logged, tried again every
+    `retry` seconds, and the camera stays fixed meanwhile.
+    """
+
+    name = "pwm"
+
+    def __init__(
+        self,
+        directory: str,
+        *,
+        low: float = -90.0,
+        high: float = 90.0,
+        min_us: float = 500.0,
+        max_us: float = 2500.0,
+        invert: bool = False,
+        period_ms: float = 20.0,
+        retry: float = 5.0,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        if not directory:
+            raise ValueError("directory: the PWM channel's directory expected")
+        if not low < high:
+            raise ValueError(f"low and high: low < high expected, got {low!r} to {high!r}")
+        if not 0 < min_us < max_us < period_ms * 1000:
+            raise ValueError(f"min_us and max_us: 0 < min < max < the period expected, got {min_us!r} to {max_us!r}")
+        self._directory = directory
+        self._low, self._high = low, high
+        self._min_us, self._max_us, self._invert = min_us, max_us, invert
+        self._period_ns = round(period_ms * 1_000_000)
+        self._retry, self._clock = retry, clock
+        self._ready = False
+        self._tried_at: float | None = None
+        self._problem: str | None = None
+        self._duty_ns: int | None = None  # the pulse last written
+
+    @classmethod
+    def from_env(cls) -> "SysfsPwmServo":
+        low, high = _env_travel()
+        min_us = env_float("PAN_MIN_US", 500, min=100, max=5000)
+        max_us = env_float("PAN_MAX_US", 2500, min=100, max=5000)
+        if not min_us < max_us:
+            raise ConfigError(f"PAN_MIN_US and PAN_MAX_US: PAN_MIN_US < PAN_MAX_US expected, got {min_us:g} and {max_us:g}")
+        return cls(
+            env_str("PAN_PWM_DIR", "/sys/class/pwm/pwmchip0/pwm0"),
+            low=low,
+            high=high,
+            min_us=min_us,
+            max_us=max_us,
+            invert=env_bool("PAN_INVERT", False),
+        )
+
+    def pulse_us(self, angle: float) -> float:
+        """The width of the pulse that turns the servo to `angle`, kept within its travel."""
+        share = (min(max(angle, self._low), self._high) - self._low) / (self._high - self._low)
+        if self._invert:
+            share = 1 - share
+        return self._min_us + share * (self._max_us - self._min_us)
+
+    def open(self) -> None:
+        self._start(0.0)
+
+    def turn(self, angle: float) -> None:
+        if not self._ready:
+            if self._tried_at is not None and self._clock() - self._tried_at < self._retry:
+                return
+            self._start(angle)
+            return
+        duty = round(self.pulse_us(angle) * 1000)
+        if duty == self._duty_ns:
+            return
+        try:
+            self._write("duty_cycle", duty)
+            self._duty_ns = duty
+        except OSError as error:
+            self._lost(error)
+
+    def close(self) -> None:
+        if not self._ready:
+            return
+        self._ready = False
+        try:
+            self._write("enable", 0)
+        except OSError as error:
+            logger.warning("Servo on %s could not be let go (%s)", self._directory, error)
+
+    def _start(self, angle: float) -> None:
+        self._tried_at = self._clock()
+        duty = round(self.pulse_us(angle) * 1000)
+        try:
+            # The period first: a channel just exported has none, and refuses everything else until it
+            # has one. One left with a pulse longer than this period refuses the period: without its
+            # pulse, it takes it.
+            try:
+                self._write("period", self._period_ns)
+            except OSError:
+                self._write("duty_cycle", 0)
+                self._write("period", self._period_ns)
+            self._write("duty_cycle", duty)
+            self._write("enable", 1)
+        except OSError as error:
+            self._lost(error)
+            return
+        self._ready, self._duty_ns, self._problem = True, duty, None
+        logger.info("Servo on %s ready", self._directory)
+
+    def _lost(self, error: OSError) -> None:
+        self._ready, self._duty_ns = False, None
+        # Logged when the reason changes, not on every retry of a servo left unplugged.
+        if str(error) != self._problem:
+            self._problem = str(error)
+            logger.warning("Servo on %s unavailable (%s): the camera stays fixed, retrying every %g s", self._directory, error, self._retry)
+
+    def _write(self, name: str, value: int) -> None:
+        with open(os.path.join(self._directory, name), "w") as file:
+            file.write(str(value))
+
+
+def _env_travel() -> tuple[float, float]:
+    """PAN_MIN_DEG and PAN_MAX_DEG: how far the servo turns the camera either way of where it rests."""
+    low = env_float("PAN_MIN_DEG", -90, min=-180, max=0)
+    high = env_float("PAN_MAX_DEG", 90, min=0, max=180)
+    if not low < high:
+        raise ConfigError(f"PAN_MIN_DEG and PAN_MAX_DEG: a travel expected, got {low:g} to {high:g}")
+    return low, high
+
+
+# PAN_DRIVE → a factory that reads its own settings. `none` is not here: a fixed camera has no drive.
+DRIVES: dict[str, Callable[[], PanDrive]] = {
+    "pwm": SysfsPwmServo.from_env,
+}
+NO_DRIVE = "none"
+
+
+def make_pan(name: str) -> tuple[PanFollower, PanDrive] | None:
+    """What turns the camera for PAN_DRIVE, and what says how far: None for `none`, the camera is fixed.
+    A ConfigError when it names no drive, or when one of the PAN_ settings is not one."""
+    if name == NO_DRIVE:
+        return None
+    factory = DRIVES.get(name)
+    if factory is None:
+        raise ConfigError(f"PAN_DRIVE: expected one of {', '.join([NO_DRIVE, *DRIVES])}, got {name!r}")
+    low, high = _env_travel()
+    follower = PanFollower(
+        low=low,
+        high=high,
+        speed=env_float("PAN_SPEED_DEG_S", 60, min=1, max=360),
+        deadband=env_float("PAN_DEADBAND_DEG", 4, min=0, max=45),
+    )
+    return follower, factory()

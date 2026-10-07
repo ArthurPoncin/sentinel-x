@@ -9,6 +9,7 @@ import {
   CylinderGeometry,
   Float32BufferAttribute,
   type InstancedMesh,
+  type Mesh,
   type MeshStandardMaterial,
   Object3D,
   PlaneGeometry,
@@ -18,6 +19,7 @@ import {
 } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { useFade } from '../hooks/use-fade'
+import { usePan } from '../hooks/use-pan'
 import { useSweep } from '../hooks/use-sweep'
 import { cameraField, type Face, fieldBase, fieldWalls, type SpacePoint } from '../utils/camera-field'
 import { sweepGlow } from '../utils/presence'
@@ -352,67 +354,100 @@ function rodsTo(from: SpacePoint, ends: readonly SpacePoint[], radius: number): 
   return all
 }
 
+// What the camera's field is drawn as, turned by `pan`: the sector on the ground, the line around it, the walls
+// of the volume over it and its two edges.
+function fieldShapes(pan: number) {
+  const field = cameraField(ARC_STEPS, pan)
+  const { lens, under, arc } = field
+  const around = [under, ...arc]
+  // Most opaque at the lens and under it, least on the fence.
+  const shaded = (faces: readonly Face[], shade: typeof SHADE): Triangle[] => {
+    const drawn = (corner: SpacePoint): Corner => ({
+      ...corner,
+      shade: corner.x === under.x && corner.z === under.z ? shade.lens : shade.fence,
+    })
+    return faces.map(([a, b, c]) => [drawn(a), drawn(b), drawn(c)])
+  }
+
+  return {
+    sector: onGround(shaded(fieldBase(field), SHADE)),
+    outline: onGround(
+      around.flatMap((from, index) => {
+        const to = around[(index + 1) % around.length] ?? from
+        const length = Math.hypot(to.x - from.x, to.z - from.z)
+        // Half the line's width, across it.
+        const across = { x: ((to.z - from.z) / length) * (LINE / 2), z: (-(to.x - from.x) / length) * (LINE / 2) }
+        const [a, b, c, d] = [
+          { x: from.x + across.x, z: from.z + across.z },
+          { x: from.x - across.x, z: from.z - across.z },
+          { x: to.x - across.x, z: to.z - across.z },
+          { x: to.x + across.x, z: to.z + across.z },
+        ] as const
+        return [[a, b, c] as const, [a, c, d] as const]
+      }),
+    ),
+    walls: shapeOf(shaded(fieldWalls(field), WALL)),
+    edges: rodsTo(lens, [arc.at(0), arc.at(-1)].flatMap((end) => end ?? []), EDGE),
+  }
+}
+
+type FieldShapes = ReturnType<typeof fieldShapes>
+const FIELD_PARTS = ['sector', 'outline', 'walls', 'edges'] as const
+
 // The camera's field of view, drawn as the volume the site plan gives it: it leaves from the Enclosure's lens
-// and opens down to the arc of the fence where `x_norm` places the intruder. Its base is the sector on the
-// ground, from under the lens to that arc; its walls are a veil, its two edges a thin line each. Neutral and
-// faint until an intrusion lights it: it then emits the intrusion's color, so the halo takes it for a light,
-// and goes out when the Alert is cleared. Both in a fade, the volume and its base together. It is drawn
-// before the intruder, which it does not veil, and casts no shadow.
-function CameraField({ lit }: SceneProps['sector']) {
+// and opens down to the arc of the fence the camera watches. Its base is the sector on the ground, from under
+// the lens to that arc; its walls are a veil, its two edges a thin line each. Neutral and faint until an
+// intrusion lights it: it then emits the intrusion's color, so the halo takes it for a light, and goes out
+// when the Alert is cleared. Both in a fade, the volume and its base together. It turns about the lens with
+// the camera, as the `intrusion` Alert says how far it is turned, and back to where it rests once that is
+// cleared: drawn anew while it turns, as the arc it lands on is another one. It is drawn before the intruder,
+// which it does not veil, and casts no shadow.
+function CameraField({ lit, pan }: SceneProps['sector'] & SceneProps['camera']) {
   const sectorMaterial = useRef<MeshStandardMaterial>(null)
   const lineMaterial = useRef<MeshStandardMaterial>(null)
   const wallMaterial = useRef<MeshStandardMaterial>(null)
   const edgeMaterial = useRef<MeshStandardMaterial>(null)
+  const meshes = useRef<Partial<Record<(typeof FIELD_PARTS)[number], Mesh | null>>>({})
   const litNow = useFade([lit ? 1 : 0])
+  const panNow = usePan(pan)
+  // The field as it is drawn, and how far turned.
+  const rested = useMemo(() => fieldShapes(0), [])
+  const drawn = useRef<{ pan: number; shapes: FieldShapes }>({ pan: 0, shapes: rested })
+  useEffect(
+    () => () => {
+      for (const part of FIELD_PARTS) drawn.current.shapes[part].dispose()
+    },
+    [],
+  )
 
-  useFrame(() => {
+  useFrame((_, delta) => {
     const level = litNow()[0] ?? 0
     if (sectorMaterial.current) sectorMaterial.current.emissiveIntensity = level * LIT.field
     if (lineMaterial.current) lineMaterial.current.emissiveIntensity = level * LIT.line
     if (wallMaterial.current) wallMaterial.current.emissiveIntensity = level * LIT.wall
     if (edgeMaterial.current) edgeMaterial.current.emissiveIntensity = level * LIT.edge
+
+    const turned = panNow(delta)
+    if (turned === drawn.current.pan) return
+    const shapes = fieldShapes(turned)
+    for (const part of FIELD_PARTS) {
+      const mesh = meshes.current[part]
+      if (mesh) mesh.geometry = shapes[part]
+      drawn.current.shapes[part].dispose()
+    }
+    drawn.current = { pan: turned, shapes }
   })
 
-  const [sector, outline, walls, edges] = useMemo(() => {
-    const field = cameraField(ARC_STEPS)
-    const { lens, under, arc } = field
-    const around = [under, ...arc]
-    // Most opaque at the lens and under it, least on the fence.
-    const shaded = (faces: readonly Face[], shade: typeof SHADE): Triangle[] => {
-      const drawn = (corner: SpacePoint): Corner => ({
-        ...corner,
-        shade: corner.x === under.x && corner.z === under.z ? shade.lens : shade.fence,
-      })
-      return faces.map(([a, b, c]) => [drawn(a), drawn(b), drawn(c)])
-    }
-
-    return [
-      onGround(shaded(fieldBase(field), SHADE)),
-      onGround(
-        around.flatMap((from, index) => {
-          const to = around[(index + 1) % around.length] ?? from
-          const length = Math.hypot(to.x - from.x, to.z - from.z)
-          // Half the line's width, across it.
-          const across = { x: ((to.z - from.z) / length) * (LINE / 2), z: (-(to.x - from.x) / length) * (LINE / 2) }
-          const [a, b, c, d] = [
-            { x: from.x + across.x, z: from.z + across.z },
-            { x: from.x - across.x, z: from.z - across.z },
-            { x: to.x - across.x, z: to.z - across.z },
-            { x: to.x + across.x, z: to.z + across.z },
-          ] as const
-          return [[a, b, c] as const, [a, c, d] as const]
-        }),
-      ),
-      shapeOf(shaded(fieldWalls(field), WALL)),
-      rodsTo(lens, [arc.at(0), arc.at(-1)].flatMap((end) => end ?? []), EDGE),
-    ]
-  }, [])
+  const { sector, outline, walls, edges } = rested
+  const part = (name: (typeof FIELD_PARTS)[number]) => (mesh: Mesh | null) => {
+    meshes.current[name] = mesh
+  }
 
   return (
     <group>
       {/* Just above the ground, the line just above the sector, so neither flickers into the other. */}
       <group position={[0, 0.004, 0]}>
-        <mesh geometry={sector} renderOrder={1} receiveShadow>
+        <mesh ref={part('sector')} geometry={sector} renderOrder={1} receiveShadow>
           <meshStandardMaterial
             ref={sectorMaterial}
             color={OFF_WHITE}
@@ -424,7 +459,7 @@ function CameraField({ lit }: SceneProps['sector']) {
             depthWrite={false}
           />
         </mesh>
-        <mesh geometry={outline} position={[0, 0.002, 0]} renderOrder={2} receiveShadow>
+        <mesh ref={part('outline')} geometry={outline} position={[0, 0.002, 0]} renderOrder={2} receiveShadow>
           <meshStandardMaterial
             ref={lineMaterial}
             color={OFF_WHITE}
@@ -440,7 +475,7 @@ function CameraField({ lit }: SceneProps['sector']) {
       </group>
       {/* Only the walls that face the eye are drawn: one veil over what stands behind them, whole, whatever
           the side the volume is seen from. */}
-      <mesh geometry={walls} renderOrder={2}>
+      <mesh ref={part('walls')} geometry={walls} renderOrder={2}>
         <meshStandardMaterial
           ref={wallMaterial}
           color={OFF_WHITE}
@@ -452,7 +487,7 @@ function CameraField({ lit }: SceneProps['sector']) {
           depthWrite={false}
         />
       </mesh>
-      <mesh geometry={edges} renderOrder={2}>
+      <mesh ref={part('edges')} geometry={edges} renderOrder={2}>
         <meshStandardMaterial
           ref={edgeMaterial}
           color={OFF_WHITE}
@@ -471,20 +506,22 @@ function CameraField({ lit }: SceneProps['sector']) {
 export interface PerimeterProps {
   // Whether the camera's field is lit, the sector on the ground with it: an intrusion is going on in it.
   sectorLit: boolean
+  // How far the camera is turned from where it rests, in radians: its field turns with it.
+  pan: number
   // Whether someone is near the site: a `presence` Alert is active.
   presence: boolean
 }
 
 // The Outpost's perimeter: the fence around the site, chain-link under barbed wire and closed by its gate,
 // which an amber sweep goes round while someone is near, and what the camera watches of it, a volume from its
-// lens down to the fence, which lights up on an intrusion.
-export const Perimeter = memo(function Perimeter({ sectorLit, presence }: PerimeterProps) {
+// lens down to the fence, which lights up on an intrusion and turns with the camera.
+export const Perimeter = memo(function Perimeter({ sectorLit, pan, presence }: PerimeterProps) {
   return (
     <group>
       <Fence />
       <Gate />
       <FenceSweep presence={presence} />
-      <CameraField lit={sectorLit} />
+      <CameraField lit={sectorLit} pan={pan} />
     </group>
   )
 })

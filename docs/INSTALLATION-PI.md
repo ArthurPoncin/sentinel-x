@@ -10,6 +10,7 @@ Dans cette page, la table est la n° **4**. Remplace `4` par ton numéro de tabl
 - Un **câble Ethernet** branché sur un réseau qui a Internet (box, routeur, prise de l'école). Indispensable seulement la première fois.
 - L'ESP32 câblé selon [`firmware/include/pins.h`](../firmware/include/pins.h), avec un **câble USB qui transmet les données**. Beaucoup de câbles ne font que charger : avec eux, le Pi ne voit pas l'ESP32.
 - Une **webcam USB**, pour la détection d'intrusion.
+- En option, le **servo** qui fait tourner la webcam pour suivre la personne détectée : voir [Le servo de la caméra](#le-servo-de-la-caméra-en-option).
 - L'**écran HDMI** 800×480, branché sur un port micro-HDMI du Pi (le deuxième, côté prise jack, convient) : il affiche le statut du Poste de commande, à la place de l'écran de l'ESP32.
 
 ## 1. Préparer la carte SD (sur ton PC)
@@ -74,7 +75,7 @@ Il déroule 10 étapes numérotées. Chacune affiche un spinner et son temps, av
 1. **Logiciels** : Docker, PlatformIO, dnsmasq (DHCP) et chrony (heure), tant qu'il y a Internet.
 2. **Images Docker** : chaque image construite par GitHub pour ce code exact est téléchargée ; les autres sont construites sur le Pi (code modifié sur le Pi, image pas encore publiée, ou pas d'Internet : alors celles déjà là servent).
 3. **Secrets et certificats** : dans `infra/secrets/`, jamais commités.
-4. **Webcam USB** : elle est donnée au service `vision` si elle est branchée.
+4. **Webcam USB** : elle est donnée au service `vision` si elle est branchée, et son servo aussi s'il est installé.
 5. **Démarrage de la stack** : les conteneurs, sur les images de l'étape 2.
 6. **Firmware du Sentinel** : compilé avec les secrets de ce Pi ; les mots de passe ne quittent jamais le Pi.
 7. **Wi-Fi de la table** : le Wi-Fi du Pi devient le réseau `SentinelX-4`, en 2,4 GHz, WPA2, sans Internet. L'ESP32 a toujours l'adresse `192.168.4.10`, et le Pi lui donne l'heure.
@@ -91,9 +92,34 @@ Le script finit sur un encadré : **vert** « Command Post prêt » si tout s'es
 - **Wi-Fi** et **Passphrase** : note la phrase de passe du Wi-Fi de la table. Elle est aussi gardée dans `infra/secrets/wifi.env`.
 - **Sentinel** `✓ 192.168.4.10` et l'étape 10 qui affiche `première mesure : 23.4 °C · humidité 41 % · gaz 312` : **tout marche**, l'ESP32 envoie ses mesures au Pi.
 - **Webcam** `✓ donnée à vision` : la webcam va au service `vision`.
+- **Servo** `✓ donné à vision` : la caméra tourne pour suivre la personne détectée. `sans` : la caméra est fixe, tout le reste marche pareil.
 - **Écran HDMI** `✓ statut affiché` : l'écran du Pi montre le statut (ci-dessous).
 - Sous **À voir**, chaque remarque `!` dit ce qui manque : voir aussi [Dépannage](#dépannage).
 - Sous **Ensuite**, les commandes à copier telles quelles : récupérer le certificat, puis les journaux.
+
+### Le servo de la caméra (en option)
+
+La webcam peut être posée sur un servo, au-dessus du boîtier : elle tourne alors toute seule pour garder au centre de l'image la personne qu'elle suit, et le jumeau numérique place le bonhomme du bon côté du site.
+
+1. **Câble le servo, Pi éteint** : son fil de signal sur le **GPIO 18** (broche 12), sa masse sur une masse du Pi (broche 14), et son **5 V sur une alimentation à part**, les masses reliées entre elles. Ne l'alimente pas par la broche 5 V du Pi : un servo qui force tire plus de courant qu'elle n'en donne, et le Pi redémarre. Laisse du mou au câble USB de la webcam.
+2. **Sur le Pi, une seule fois** :
+   ```bash
+   infra/servo.sh
+   sudo reboot
+   ```
+3. **Après le redémarrage** : `infra/plug-and-play.sh 4 --no-flash`. L'étape 4 affiche `servo de la caméra sur GPIO 18, donné à vision`.
+
+Au démarrage de `vision`, le servo se met au centre : c'est la position de repos, celle où la caméra regarde droit devant. Elle y revient quand plus personne n'est là.
+
+**Régler le servo** — dans le fichier `.env` à la racine du dépôt, puis `docker compose up -d vision` :
+
+| Réglage | Défaut | À changer si |
+|---|---|---|
+| `PAN_INVERT` | `false` | La caméra tourne du mauvais côté, à l'opposé de la personne : mets `true` |
+| `PAN_MIN_DEG` / `PAN_MAX_DEG` | `-90` / `90` | Le servo bute ou force en bout de course : réduis (par exemple `-80` / `80`) |
+| `PAN_MIN_US` / `PAN_MAX_US` | `500` / `2500` | À `-90` et `90` la caméra ne fait pas un quart de tour de chaque côté : ce sont les impulsions aux deux bouts de la course, en microsecondes |
+| `PAN_SPEED_DEG_S` | `60` | La caméra est trop lente à suivre, ou l'image devient floue quand elle tourne |
+| `CAMERA_FOV_DEG` | `60` | Le bonhomme du jumeau n'est pas du bon côté quand la personne est au bord de l'image : c'est l'angle de champ horizontal de la webcam |
 
 ### L'écran de statut
 
@@ -178,6 +204,9 @@ Le script lui-même :
 | `NetworkManager ne tourne pas` | Le système est trop ancien : réinstalle un Raspberry Pi OS (64-bit) récent |
 | `pas de webcam USB` | Branche la webcam sur un port USB du Pi (elle doit apparaître dans `ls /dev/v4l/by-id`), puis relance avec `--no-flash` |
 | `pas d'écran HDMI détecté` | Branche l'écran : le statut s'y affiche seul. Écran noir : tableau ci-dessus |
+| Le servo ne bouge pas | `docker compose logs vision` : « Servo on /pwm ready » quand il est pris en main. « unavailable » : relance `infra/servo.sh`, redémarre le Pi, puis `infra/plug-and-play.sh <table> --no-flash`. Vérifie aussi son alimentation et le fil de signal sur le GPIO 18 |
+| Le Pi redémarre quand le servo bouge | Le servo est alimenté par le Pi : donne-lui une alimentation 5 V à part, masses reliées |
+| `vision` redémarre en boucle avec le servo | `DETECTOR=motion` dans `.env` : une caméra qui tourne a besoin du détecteur de personnes, enlève cette ligne |
 | `le Sentinel n'est pas encore sur le Wi-Fi` | Vérifie qu'il est alimenté, puis ce que dit son moniteur série (tableau ci-dessus) |
 
 Journaux :

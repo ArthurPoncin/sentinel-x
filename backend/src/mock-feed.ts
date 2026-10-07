@@ -30,14 +30,31 @@ const gas = (severity: 'warning' | 'critical', state: 'raised' | 'cleared', valu
   detail: {},
 })
 
-const intruder = (state: 'raised' | 'cleared', x_norm: number): ScriptedAlert => ({
-  id: 'intruder',
-  source: 'vision',
-  kind: 'intrusion',
-  severity: 'critical',
-  state,
-  detail: { x_norm, confidence: 0.88, bbox: [Math.round(x_norm * 560), 80, 60, 180] },
-})
+// Someone in the camera's image: where across it, and how tall in it.
+type Seen = readonly [x_norm: number, h_norm: number]
+
+// What the vision service sends as its camera, turned by `pan` degrees, follows someone, with someone else
+// in its image or not. The box is that of a 640x480 frame.
+const intruder = (state: 'raised' | 'cleared', [x_norm, h_norm]: Seen, pan: number, other?: Seen): ScriptedAlert => {
+  const height = Math.round(h_norm * 480)
+  const width = Math.round(height / 3)
+  return {
+    id: 'intruder',
+    source: 'vision',
+    kind: 'intrusion',
+    severity: 'critical',
+    state,
+    detail: {
+      x_norm,
+      confidence: 0.88,
+      bbox: [Math.round(x_norm * 640 - width / 2), Math.round((480 - height) / 2), width, height],
+      id: 1,
+      h_norm,
+      pan,
+      others: other ? [{ id: 2, x_norm: other[0], h_norm: other[1], confidence: 0.74 }] : [],
+    },
+  }
+}
 
 const drift = (state: 'raised' | 'cleared'): ScriptedAlert => ({
   id: 'drift',
@@ -61,7 +78,9 @@ const calm = { air: [180, 190], temp: [31.0, 31.2], sound: [0.02, 0.04], pir: fa
 // - a gas leak the predictive model flags first, the gas Alert going warning → critical → warning
 //   → cleared, the heat with it, and someone walking past the PIR on the way;
 // - a clap next to the sound sensor;
-// - an intruder crossing the camera's field, left to right.
+// - an intruder who comes in on the right of the camera's image, by the fence, and walks in toward the
+//   plant: the camera turns to them, then follows them to its left as they come nearer, someone else behind
+//   them for the last two sightings.
 const SCENARIO: Segment[] = [
   { ticks: 6, ...calm },
   { ticks: 4, air: [200, 260], temp: [31.4, 32.4], sound: [0.03, 0.03], pir: false, alerts: { 0: [drift('raised')] } },
@@ -104,11 +123,11 @@ const SCENARIO: Segment[] = [
     ticks: 5,
     ...calm,
     alerts: {
-      0: [intruder('raised', 0.15)],
-      1: [intruder('raised', 0.35)],
-      2: [intruder('raised', 0.55)],
-      3: [intruder('raised', 0.75)],
-      4: [intruder('cleared', 0.75)],
+      0: [intruder('raised', [0.886, 0.3], 0)],
+      1: [intruder('raised', [0.439, 0.36], 14)],
+      2: [intruder('raised', [0.439, 0.46], -2, [0.716, 0.31])],
+      3: [intruder('raised', [0.439, 0.66], -20, [0.886, 0.33])],
+      4: [intruder('cleared', [0.439, 0.66], -20, [0.886, 0.33])],
     },
   },
   { ticks: 3, ...calm },
