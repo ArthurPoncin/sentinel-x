@@ -120,6 +120,7 @@ sentinel-x/
 ├── ai/            # Python: vision + predictive maintenance
 ├── backend/       # REST + WebSocket API (POST /api/v1/alerts)
 ├── dashboard/     # Web UI + 3D Digital Twin
+├── leap/          # Hand bridge: a Leap Motion Controller steers the dashboard (optional, Operator's laptop)
 ├── infra/         # Docker-Compose, MQTT, DB, network topology
 ├── cyber/         # TLS, hardening, pentest reports
 └── docs/          # Architecture, digital twin, team, deliverables

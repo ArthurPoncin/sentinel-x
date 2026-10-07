@@ -504,6 +504,9 @@ if $joined_docker; then
   next+=("Reconnecte-toi en SSH avant de lancer docker toi-même : tu viens d'entrer dans son groupe." "")
 fi
 next+=("Les journaux des services (vision pour la caméra) :" "docker compose logs -f vision")
+# The hand sensor is the Operator's, on their own machine: Ultraleap's software reads no Leap Motion
+# Controller on a Pi, so nothing of it is installed here.
+next+=("En option, le capteur de main (Leap Motion) sur le PC Opérateur, à préparer avec Internet : installe le logiciel Ultraleap, puis double-clique sur leap/start.bat (Windows) ou leap/start.command (macOS). Dans le dashboard : menu, Commande gestuelle." "")
 printf '\n %sEnsuite :%s\n' "$C_BOLD" "$C_RESET"
 for ((i = 0; i < ${#next[@]}; i += 2)); do
   _ui_wrap $((UI_WIDTH - 6)) "${next[i]}"

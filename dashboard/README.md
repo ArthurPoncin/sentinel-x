@@ -511,6 +511,19 @@ const shown = player.frames ? stateAfter(player.frames) : liveState   // replaye
 - **Not in capture mode** — `/twin?capture` shows neither the label nor the scrubber.
 - **Not yet** — the last N minutes of history (`GET /api/v1/history`) as one free timeline, rather than Incident by Incident.
 
+## Hand control — `features/gestures`
+
+An extra for the demo: a Leap Motion Controller on the Operator's desk steers the dashboard. The sensor is read by the hand bridge ([`leap/`](../leap/README.md)), which runs on the Operator's machine and serves the hands on `ws://127.0.0.1:6438`; the gestures, how to set it up and what to look at when it does not work are described there.
+
+- **Off by default** — the side menu's **Commande gestuelle** switches it on, and the choice stays with the browser (`localStorage`). Off, no socket is opened and nothing is drawn: the dashboard is what it was.
+- **One socket, one store** — `HandControlProvider` connects to the bridge and keeps trying while it is on; `createHandStore()` folds each frame of hands through `interpret()` and wakes the interface only when what it shows changes (the bridge, the hand, its pose, a thumb held). What changes with every frame is read on demand: `useLiveHands()` gives the hands and what they steer at the instant asked.
+- **Pure gestures** — `poseOf(hand)` reads a pose (flat, on its edge, fist, thumb up, thumb down), `steerOf(palm)` turns a flat hand into a joystick with a dead zone, `interpret()` settles a pose (0.2 s), holds a thumb (1.2 s, one action per thumb raised) and catches a swipe. Frames that stop coming for half a second let go of everything: a hand never steers from a frozen frame.
+- **What a gesture does** is the app's (`app/hand-control.tsx`): a thumb sends the actuator panel's preset through `firePreset()` (same `POST /api/v1/commands`, same session, same answers in a toast), a swipe goes to the other screen.
+- **In the Twin** — the route hands `OutpostTwin` an `operator`: `OrbitCamera` lets a flat hand turn, tilt and zoom within the bounds a drag has, and the automatic orbit waits for the hand as it does for the mouse; `HandHologram` draws the hands in bones of light in the lower left of the view, riding with the camera, green as a thumb is raised and red as one is turned down. A fist held to one side winds a replay (`useHandWind`).
+- **The top bar** says what the sensor sees and what the hand does (`HandHud`), with a ring that fills while a thumb is held.
+- **Not in capture mode** — `/twin?capture` shows no hologram and takes no hand.
+- **Not yet** — run against a real sensor: the gestures' thresholds were set on the bridge's simulated hand (`npm run simulate` in `leap/`).
+
 ## TODO
 - [x] App shell + live feed (WebSocket client, store, hook) — #10
 - [x] Operator login screen (`POST /api/v1/auth/login`, `GET /api/v1/auth/check`), back when the session ends — #48
