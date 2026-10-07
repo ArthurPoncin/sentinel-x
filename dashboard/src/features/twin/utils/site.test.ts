@@ -3,13 +3,18 @@ import { ENCLOSURE_SHAPE } from './enclosure-parts'
 import {
   alongPipe,
   type Block,
+  barbedHeight,
   bearingAlongFence,
   bearingTo,
+  fenceBarbs,
+  fenceLength,
   fencePosts,
   type GroundPoint,
+  gateLine,
   gatePoint,
   lensHeight,
   lensPoint,
+  meshCell,
   roundFence,
   SITE,
   watchedPoint,
@@ -123,6 +128,72 @@ describe('the fence', () => {
     expect(fromCentre(gate)).toBeCloseTo(fence.radius)
     expect(first && between(gate, first)).toBeCloseTo((last && between(gate, last)) ?? 0)
     expect(first && between(gate, first)).toBeLessThan(fence.gate.width)
+  })
+
+  it('is as long as its bays put end to end, round the site', () => {
+    const halfGate = fence.gate.width / fence.radius / 2
+
+    expect(fenceLength()).toBeCloseTo(fence.radius * (TURN - 2 * halfGate))
+    expect(fenceLength() + fence.gate.width).toBeCloseTo(fence.radius * TURN)
+  })
+
+  it('draws its mesh in whole diamonds from the ground to its top, several to a bay', () => {
+    const [first, second] = fencePosts()
+
+    expect(Number.isInteger(fence.mesh.rows)).toBe(true)
+    expect(meshCell() * fence.mesh.rows).toBeCloseTo(fence.height)
+    expect(first && second && between(first, second) / meshCell()).toBeGreaterThan(4)
+  })
+
+  it("carries its barbed wire over its mesh, on posts that stay under the top of the gate's pillars", () => {
+    expect(barbedHeight()).toBeCloseTo(fence.height + fence.barbed.rise)
+    expect(barbedHeight()).toBeGreaterThan(fence.height)
+    expect(barbedHeight()).toBeLessThan(fence.gate.pillar.height)
+  })
+
+  it('spaces its barbs evenly along the strand, between the pillars and none on them', () => {
+    const turns = fenceBarbs()
+      .map(round)
+      .sort((a, b) => a - b)
+    const halfGate = fence.gate.width / fence.radius / 2
+    const apart = (turns[1] ?? 0) - (turns[0] ?? 0)
+
+    for (const barb of fenceBarbs()) expect(fromCentre(barb)).toBeCloseTo(fence.radius)
+    expect(turns.at(0)).toBeCloseTo(halfGate + apart)
+    expect(turns.at(-1)).toBeCloseTo(TURN - halfGate - apart)
+    turns.slice(1).forEach((turn, i) => {
+      expect(turn - (turns[i] ?? 0)).toBeCloseTo(apart)
+    })
+    // As near the plan's spacing as the strand's length allows.
+    expect(Math.abs(apart * fence.radius - fence.barbed.every)).toBeLessThan(fence.barbed.every / 100)
+  })
+})
+
+describe('the gate', () => {
+  const { fence } = SITE
+  const { pillar, leaf } = fence.gate
+
+  it('stands on the straight line from the post on one side of it to the post on the other', () => {
+    const posts = fencePosts()
+    const { from, to } = gateLine()
+
+    expect(between(from, posts.at(0) ?? to)).toBeCloseTo(0)
+    expect(between(to, posts.at(-1) ?? from)).toBeCloseTo(0)
+  })
+
+  it("fits in the fence's opening: its two leaves between its two pillars, a slit between them at most", () => {
+    const { from, to, opening } = gateLine()
+    const slit = opening - 2 * leaf.width
+
+    expect(opening).toBeCloseTo(between(from, to) - pillar.width)
+    expect(opening).toBeLessThan(fence.gate.width)
+    expect(slit).toBeGreaterThanOrEqual(0)
+    expect(slit).toBeLessThan(pillar.width / 2)
+  })
+
+  it('closes the fence to its height, under the top of its pillars', () => {
+    expect(leaf.height).toBeGreaterThanOrEqual(fence.height)
+    expect(leaf.height).toBeLessThan(pillar.height)
   })
 })
 

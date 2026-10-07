@@ -8,7 +8,7 @@ A **live 3D replica** of the Sentinel-X outpost rendered in the dashboard (Three
 |---|---|---|
 | Temperature (DHT) | Sentinel | The generator hall's roof glows red as `temp` rises; the air above it ripples while a `thermal` Alert is active |
 | Gas (`air`) | Sentinel | Box glows red, a haze around the gas pipe thickens with the reading |
-| Presence (`pir`) | Sentinel | The Enclosure's PIR dome blinks, an amber sweep goes round the fence |
+| Presence (`pir`) | Sentinel | The Enclosure's PIR dome blinks, an amber sweep goes round the fence, over its posts and rails |
 | Noise (`noise`) | Sentinel | A wave of light leaves the box and spreads over the socle on each clap, scaled to the Alert's `value` (share of the cycle that was loud) |
 | Intrusion (vision) | Command Post (`vision`) | The camera's field, a translucent volume from the Enclosure's lens down to its sector on the ground, lights up and the **intruder**, a human figurine in hologram, stands on the perimeter arc where `x_norm` places it, facing the lens that sees it. As `x_norm` changes it walks there, arms and legs in opposition, turned the way it goes, and faces the lens again once it has stopped. Four detection brackets frame it, facing the Twin's camera, and a label reads what the model sees and its `confidence`: « PERSONNE · 88 % ». Once the Alert is cleared the figurine goes out and leaves its hollow outline where it last stood, still, with no bracket, label or line to the lens, for about 5 s: the **last known position** |
 | Predictive drift | Command Post (`predictive`) | The drifting **component pulses orange** *before* the critical threshold |
@@ -33,3 +33,4 @@ A **live 3D replica** of the Sentinel-X outpost rendered in the dashboard (Three
 - Keep the 3D scene decoupled from data: a small state store (sensor/event feed via WebSocket) → scene subscribes and reacts. Mock the feed so the twin can be built before hardware is ready.
 - Low-poly stylized box model (exportable from the Fusion360 CAD used for the physical box) keeps it performant and on-brand.
 - Everything reacts to the **same event stream** the real box emits — no fake data path in the final demo.
+- The site reads as the critical infrastructure the brief describes: a chain-link fence under a strand of barbed wire, its gate closed between two pillars. All of it is openwork, so the camera's field, the intruder and the presence's sweep read through it, and its materials stay neutral: color is kept for the `Status` and the signals. Built in #98: see [`../dashboard/README.md`](../dashboard/README.md#digital-twin--featurestwin).
