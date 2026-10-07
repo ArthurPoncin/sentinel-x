@@ -135,9 +135,9 @@ export interface OutpostTwinProps {
 // The antenna on the Enclosure's side sends an impulse of white light for each frame of telemetry received,
 // and a padlock reads « WSS » by it while the live feed is encrypted.
 // The camera orbits the site, and turns to an Alert as it is raised: it faces where it happens for a few
-// seconds, then orbits again. Without its
-// signal it all turns grey and says so: what it shows is no longer live. It fills its parent: give that the
-// size the Twin should have on screen.
+// seconds, then orbits again. Without its signal it all turns grey, the picture drops out like a screen's
+// (snow, tears, a rolling bar) and it says so: what it shows is no longer live. It fills its parent: give that
+// the size the Twin should have on screen.
 export function OutpostTwin({ scene, frames, wholeStage = false }: OutpostTwinProps) {
   const frame = useRef<HTMLDivElement>(null)
   const dpr = usePixelRatio(frame)
@@ -177,7 +177,7 @@ export function OutpostTwin({ scene, frames, wholeStage = false }: OutpostTwinPr
           />
         </group>
         <OrbitCamera anchor={scene.anchor} frames={frames} wholeStage={wholeStage} />
-        <Halo saturation={scene.signalLost ? 0 : 1} />
+        <Halo signal={scene.signalLost ? 0 : 1} />
       </Canvas>
       {/* Next to the image, not in it: a screen reader skips what an image holds. */}
       <p className="twin-signal" role="status" data-lost={scene.signalLost}>

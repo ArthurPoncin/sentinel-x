@@ -29,9 +29,16 @@ const SUM_VERTEX = /* glsl */ `
   }
 `
 const SUM_FRAGMENT = /* glsl */ `
+  // The signal lost: how far a torn strip is thrown, as a share of the frame's width, how tall the rolling bar
+  // is, as a share of its height, and how much light the snow and the bar add, in linear light.
+  const float TEAR = 0.02;
+  const float BAR_HEIGHT = 0.12;
+  const float SNOW = 0.06;
+  const float BAR_LIGHT = 0.08;
+
   uniform sampler2D tLit;
   uniform sampler2D tHalo;
-  uniform float saturation;
+  uniform float signal;
   uniform float time;
   uniform float aspect;
   uniform float unit;
@@ -51,15 +58,43 @@ const SUM_FRAGMENT = /* glsl */ `
     return max(2.275 * pow(color, vec3(0.583)), vec3(1.0 / 12.92)) / 255.0;
   }
 
+  // A number from 0 to 1 that looks drawn at random, the same for the same point.
+  float draw(vec2 at) {
+    vec3 p = fract(at.xyx * 0.1031);
+    p += dot(p, p.yzx + 33.33);
+    return fract((p.x + p.y) * p.z);
+  }
+
   void main() {
     // The lit frame's alpha is what hot air leaves of it: 1 or more where there is none (HeatShimmer writes it).
     float hotAir = 1.0 - texture2D(tLit, vUv).a;
     vec2 frame = vec2(aspect, 1.0);
     vec2 seen = vUv;
     if (hotAir > 0.0) seen += hotAir * unit * ripple(vUv * frame / unit) / frame;
+
+    // A picture that has lost its signal drops out, like a screen: all of it is done here, on the frame
+    // already drawn, and none of it while the signal is whole.
+    float lost = 1.0 - signal;
+    float bar = 0.0;
+    if (lost > 0.0) {
+      // A bar rolls down the whole frame in 7 s: sharp at its lower edge, trailing off above it.
+      bar = lost * (1.0 - smoothstep(0.0, BAR_HEIGHT, fract(vUv.y + time / 7.0)));
+      // Tears: now and then a strip of rows is thrown sideways for a twelfth of a second. The bar drags its
+      // rows along too.
+      float tick = floor(time * 12.0);
+      float strip = floor(vUv.y * 70.0);
+      float torn = step(0.93, draw(vec2(strip, tick)));
+      seen.x += lost * TEAR * torn * (draw(vec2(tick, strip)) - 0.5) + TEAR * 0.5 * bar;
+    }
+
     vec3 color = max(texture2D(tLit, seen).rgb + texture2D(tHalo, seen).rgb, 0.0);
     // Toward the grey that is as bright as the color: the frame keeps its light and loses its hues.
-    color = mix(vec3(dot(color, vec3(0.2126, 0.7152, 0.0722))), color, saturation);
+    color = mix(vec3(dot(color, vec3(0.2126, 0.7152, 0.0722))), color, signal);
+    if (lost > 0.0) {
+      // Snow: grains two pixels wide, drawn again on every frame, over a veil the bar thickens.
+      float grain = draw(floor(gl_FragCoord.xy / 2.0) + 289.0 * fract(time * vec2(7.13, 3.71)));
+      color += lost * (SNOW * (grain - 0.4) + BAR_LIGHT * bar);
+    }
     // A halo fading to black shows the screen's steps as bands: half a step of noise either way hides them.
     float noise = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) - 0.5;
     gl_FragColor = vec4(max(color + noise * screenStep(color), 0.0), 1.0);
@@ -67,8 +102,8 @@ const SUM_FRAGMENT = /* glsl */ `
 `
 
 interface HaloEffect extends Effect {
-  // How much of its hues the frame keeps, 0–1.
-  saturation: { value: number }
+  // How much of its signal the frame has, 0–1.
+  signal: { value: number }
   // The seconds hot air ripples by, and the share of the frame's height a scene unit takes at the heart of
   // the scene: the ripples keep their size on the model, however far the camera stands.
   time: { value: number }
@@ -90,12 +125,12 @@ function createHalo(): HaloEffect {
   if (!blurred) throw new Error('UnrealBloomPass has no blurred target')
 
   const lit: { value: Texture | null } = { value: null }
-  const saturation = { value: 1 }
+  const signal = { value: 1 }
   const time = { value: 0 }
   const aspect = { value: 1 }
   const unit = { value: 1 }
   const sum = new ShaderMaterial({
-    uniforms: { tLit: lit, tHalo: { value: blurred.texture }, saturation, time, aspect, unit },
+    uniforms: { tLit: lit, tHalo: { value: blurred.texture }, signal, time, aspect, unit },
     vertexShader: SUM_VERTEX,
     fragmentShader: SUM_FRAGMENT,
     depthTest: false,
@@ -106,7 +141,7 @@ function createHalo(): HaloEffect {
   const intensities: number[] = []
 
   return {
-    saturation,
+    signal,
     time,
     unit,
 
@@ -155,17 +190,18 @@ function createHalo(): HaloEffect {
 }
 
 export interface HaloProps {
-  // How much of its hues the frame keeps, from 0 (all grey) to 1 (as lit). A change fades in.
-  saturation?: number
+  // How much of its signal the frame has, from 0 (lost: all grey, and the picture drops out in snow, tears and
+  // a rolling bar) to 1 (as lit). A change fades in.
+  signal?: number
 }
 
 // Takes over the rendering of the Canvas, whose renderer must draw to an HDR buffer (`outputBufferType`):
 // three.js only runs effects there. Its pass is the last to touch the frame, halo included: that is where
-// the whole frame can lose its hues, and where hot air ripples what is seen through it.
-export function Halo({ saturation = 1 }: HaloProps) {
+// the whole frame can lose its hues and drop out, and where hot air ripples what is seen through it.
+export function Halo({ signal = 1 }: HaloProps) {
   const gl = useThree((state) => state.gl)
   const halo = useRef<HaloEffect | null>(null)
-  const saturationNow = useFade([saturation])
+  const signalNow = useFade([signal])
 
   useEffect(() => {
     const created = createHalo()
@@ -182,7 +218,7 @@ export function Halo({ saturation = 1 }: HaloProps) {
   // After every other frame callback, so that the halo and the lit frame show the same instant.
   useFrame(({ scene, camera, clock }) => {
     if (halo.current) {
-      halo.current.saturation.value = saturationNow()[0] ?? 1
+      halo.current.signal.value = signalNow()[0] ?? 1
       halo.current.time.value = clock.elapsedTime
       // A perspective's projection holds 1 / tan(half its field of view): what a unit takes of the frame's
       // height, one unit away.
