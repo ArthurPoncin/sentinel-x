@@ -16,7 +16,7 @@ const GLOW = { roof: 0.55, skylight: 1.4 }
 // The generator hall: off-white walls on a plinth, a graphite roof with its skylight, the door and a band
 // of windows on its front, where the gas pipe comes in under the windows. Its roof glows red with `heat`,
 // 0–1: it eases toward it, as everything that follows the Readings does.
-function Hall({ x, z, width, depth, height, heat }: Block & { heat: number }) {
+function Hall({ x, z, width, depth, height, door, heat }: (typeof SITE)['hall'] & { heat: number }) {
   const PLINTH = 0.03
   const ROOF = 0.05
   const eaves = height - 2 * ROOF
@@ -47,7 +47,7 @@ function Hall({ x, z, width, depth, height, heat }: Block & { heat: number }) {
         color={GRAPHITE}
         glow={{ color: HEAT_COLOR, material: skylight }}
       />
-      <Box size={[0.36, 0.34, 0.02]} at={[width * 0.3, PLINTH, front]} color={GRAPHITE} bevel={0.006} />
+      <Box size={[door.width, door.height, 0.02]} at={[door.along, PLINTH, front]} color={GRAPHITE} bevel={0.006} />
       <Box size={[width * 0.46, 0.07, 0.02]} at={[-width * 0.16, eaves - 0.17, front]} color={GRAPHITE} bevel={0.006} />
     </group>
   )

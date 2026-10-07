@@ -25,6 +25,17 @@ Not everything on the maquette is driven by the feed. The site carries the signa
 
 Built in #99: see [`../dashboard/README.md`](../dashboard/README.md#digital-twin--featurestwin).
 
+## Where the site stands
+
+The brief places the micro power plants in « zones géographiques isolées et particulièrement hostiles », where staff cannot be kept on site. The maquette says so without a word, and without a signal: none of this reacts to the feed either.
+
+- **Rocks** — faceted rocks lie between the fence and the socle's rim, all round the site but in front of the gate. Nobody clears them.
+- **A track that leads nowhere** — it comes in through the gate and goes to the generator hall's door, round the gas tank and the pipe. Outside the gate it stops dead at the socle's rim. It is drawn in the ground, flat: the contour lines run on across it and the camera's sector reads over it.
+- **Dust** — a few motes drift slowly over the site, all the one way. They are lit, never glow, and are a few pixels wide: no signal is hidden or imitated.
+- **No one** — no vehicle, no figure. The only human the Twin shows is the intruder.
+
+Built in #101: see [`../dashboard/README.md`](../dashboard/README.md#digital-twin--featurestwin).
+
 ## Signature features
 
 - **Time-scrubber** — replay a past Incident second-by-second, labelled REPLAY. Lets us script the live demo precisely and re-run it if the network hiccups. Built in #15: see [`../dashboard/README.md`](../dashboard/README.md#time-scrubber--featuresreplay).

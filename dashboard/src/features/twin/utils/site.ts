@@ -22,11 +22,13 @@ export interface Column extends GroundPoint {
 
 // The Outpost's ground plan, defined once: what the Twin draws and what its reactions are anchored on.
 export const SITE = {
-  // The disc of terrain everything stands on. Its top is the ground, at height 0.
-  socle: { radius: 3.2, thickness: 0.32 },
+  // The disc of terrain everything stands on. Its top is the ground, at height 0. The Status's ring runs
+  // around its rim, `ring` wide.
+  socle: { radius: 3.2, thickness: 0.32, ring: 0.06 },
   // The micro power plant, on the right of the site, where the Enclosure's shadow does not reach: the
-  // generator hall, its two chimneys behind it, the transformer station behind the Enclosure.
-  hall: { x: 1, z: -1.2, width: 1.6, depth: 0.95, height: 0.7 },
+  // generator hall, its two chimneys behind it, the transformer station behind the Enclosure. The hall's door
+  // is on its front wall, its middle `along` from the wall's, toward x.
+  hall: { x: 1, z: -1.2, width: 1.6, depth: 0.95, height: 0.7, door: { along: 0.48, width: 0.36, height: 0.34 } },
   chimneys: [
     { x: 0.55, z: -2.05, radius: 0.12, height: 1.6 },
     { x: 1.1, z: -2.05, radius: 0.12, height: 1.6 },
@@ -80,6 +82,26 @@ export const SITE = {
     tank: { bearing: 0, width: 0.34, height: 0.2 },
     hall: { bearing: 0, along: -0.09, width: 0.6, height: 0.24, foot: 0.1 },
   },
+  // The track, `width` wide. It comes in through the gate and goes to the hall's door by the points of `via`,
+  // its turns rounded: round the front of the gas tank and its far end, since the pipe bars the short way.
+  // Outside the gate it runs straight on to the socle's rim, where it stops: it leads nowhere.
+  track: {
+    width: 0.24,
+    via: [
+      { x: -0.78, z: 2.11 },
+      { x: 0.25, z: 1.72 },
+      { x: 1.7, z: 1.75 },
+      { x: 2.25, z: 1.15 },
+      { x: 2.25, z: 0.15 },
+      { x: 1.48, z: -0.2 },
+    ],
+  },
+  // The rocks around the site, between the fence and the Status's ring: `count` of them at most, drawn from
+  // `seed`, so the same on every load. `radius` is the least and the most of a rock's footprint, `squat` of
+  // its height for that footprint; each keeps `off` clear of the fence's line. None lies within `clear` of
+  // the gate's bearing, in radians: from one no-entry sign round to the other, the way in and the signs stay
+  // in sight.
+  rocks: { seed: 101, count: 60, radius: [0.04, 0.145], squat: [0.7, 1.3], off: 0.03, clear: 0.4 },
 } as const
 
 // The point `distance` away from the socle's centre along `bearing`.
@@ -250,4 +272,102 @@ export function roundFence(point: GroundPoint): number {
 export function bearingAlongFence(point: GroundPoint, way: number): number {
   // The fence is a circle around the socle's centre, and the camera's right is toward smaller bearings.
   return Math.atan2(point.x, point.z) - (way < 0 ? -1 : 1) * (Math.PI / 2)
+}
+
+// Where the hall's door is, over the ground: on its front wall, where the track ends.
+export function hallDoor(): GroundPoint {
+  const { x, z, depth, door } = SITE.hall
+  return { x: x + door.along, z: z + depth / 2 }
+}
+
+// A path with its turns rounded: each corner is cut, `times` over, and both its ends stay where they are.
+function rounded(path: readonly GroundPoint[], times: number): GroundPoint[] {
+  let points = [...path]
+  for (let time = 0; time < times; time++) {
+    const cut = points.slice(1).flatMap((to, index) => {
+      const from = points[index] ?? to
+      return [0.25, 0.75].map((share) => ({ x: from.x + (to.x - from.x) * share, z: from.z + (to.z - from.z) * share }))
+    })
+    points = [...points.slice(0, 1), ...cut, ...points.slice(-1)]
+  }
+  return points
+}
+
+// The track's two stretches, each the line its middle follows, from the gate: `toHall` in to the hall's
+// door, `toEdge` out to the socle's rim.
+export function track(): { toHall: GroundPoint[]; toEdge: GroundPoint[] } {
+  const gate = gatePoint()
+
+  return {
+    toHall: rounded([gate, ...SITE.track.via, hallDoor()], 3),
+    toEdge: [gate, toward(SITE.fence.gate.bearing, SITE.socle.radius)],
+  }
+}
+
+// How far `point` is from a path, the nearest point of it.
+export function fromPath(point: GroundPoint, path: readonly GroundPoint[]): number {
+  let nearest = Number.POSITIVE_INFINITY
+  for (let index = 1; index < path.length; index++) {
+    const [from, to] = [path[index - 1], path[index]]
+    if (!from || !to) continue
+    const [alongX, alongZ] = [to.x - from.x, to.z - from.z]
+    const length = alongX ** 2 + alongZ ** 2
+    const share =
+      length === 0 ? 0 : Math.min(1, Math.max(0, ((point.x - from.x) * alongX + (point.z - from.z) * alongZ) / length))
+    nearest = Math.min(nearest, Math.hypot(point.x - from.x - share * alongX, point.z - from.z - share * alongZ))
+  }
+  return nearest
+}
+
+// A rock: its footprint is `radius` around its point, it stands `height` high, turned to `turn`.
+export interface Rock extends GroundPoint {
+  radius: number
+  height: number
+  turn: number
+}
+
+// Numbers from 0 to 1 drawn from `seed`: the same ones, in the same order, every time (mulberry32).
+function drawnFrom(seed: number): () => number {
+  let state = seed >>> 0
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0
+    let mixed = Math.imul(state ^ (state >>> 15), state | 1)
+    mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), mixed | 61)
+    return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+// How much of each other two rocks may take, as a share of their radii put end to end: they lie in heaps.
+const HEAPED = 0.75
+// Draws for a rock before giving up on the count the plan asks for.
+const DRAWS = 40
+
+// The rocks around the site: outside the fence and inside the Status's ring, none in front of the gate nor
+// on the track, many small ones and a few large. Drawn from the plan's seed: the same on every call.
+export function rocks(): Rock[] {
+  const { socle, fence } = SITE
+  const { seed, count, radius, squat, off, clear } = SITE.rocks
+  const next = drawnFrom(seed)
+  const between = (least: number, most: number, share: number) => least + (most - least) * share
+  const paths = Object.values(track())
+  const placed: Rock[] = []
+
+  for (let draw = 0; placed.length < count && draw < count * DRAWS; draw++) {
+    // Every draw takes the same numbers, kept or not.
+    const [size, bearing, out, tall, turn] = [next(), next(), next(), next(), next()]
+    const wide = between(radius[0], radius[1], size ** 1.7)
+    const [inner, outer] = [fence.radius + off + wide, socle.radius - socle.ring - wide]
+    const fromGate = bearing * 2 * Math.PI - Math.PI
+    const rock: Rock = {
+      ...toward(fence.gate.bearing + fromGate, between(inner, outer, out)),
+      radius: wide,
+      height: wide * between(squat[0], squat[1], tall),
+      turn: turn * 2 * Math.PI,
+    }
+    if (outer < inner || Math.abs(fromGate) < clear) continue
+    if (paths.some((path) => fromPath(rock, path) < wide + SITE.track.width / 2)) continue
+    if (placed.some((other) => Math.hypot(other.x - rock.x, other.z - rock.z) < (other.radius + wide) * HEAPED)) continue
+    placed.push(rock)
+  }
+  return placed
 }
