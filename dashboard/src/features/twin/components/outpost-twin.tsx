@@ -172,7 +172,7 @@ export function OutpostTwin({ scene, frames, wholeStage = false }: OutpostTwinPr
           <Enclosure
             {...scene.enclosure}
             presence={scene.presence.active}
-            pan={scene.camera.pan}
+            aim={scene.camera.aim}
             link={{ frames, live: !scene.signalLost, encrypted: scene.link.encrypted }}
           />
         </group>

@@ -20,7 +20,7 @@ import {
   type TwinState,
   toScene,
 } from './scene'
-import { alongPipe, gatePoint, SITE, STANDING, standingPoint, watchedPoint } from './site'
+import { alongPipe, gatePoint, SITE, STANDING, sightBearing, standingPoint, watchedPoint } from './site'
 
 const ts = '2026-10-05T14:23:00.000Z'
 
@@ -113,7 +113,7 @@ describe('toScene', () => {
       status: STATUS_GRADES.nominal,
       thermal: { intensity: 0, shimmer: false },
       sector: { lit: false },
-      camera: { pan: 0 },
+      camera: { pan: 0, aim: 0 },
       intruder: null,
       presence: { active: false },
       floodlights: { lit: false },
@@ -506,8 +506,22 @@ describe('toScene', () => {
     expect(fromLens.at(-1)).toBe(0)
   })
 
+  it('aims the lens at the intruder it follows, wherever they stand across its image, and rests it with the field', () => {
+    const half = SITE.camera.fov / 2
+
+    // In the middle of the image the lens looks where the field does.
+    expect(sceneOf(0.5).camera.aim).toBeCloseTo(0)
+    expect(sceneOf(0.5, { pan: 45 }).camera.aim).toBeCloseTo(Math.PI / 4)
+    // At an edge of the image, half the field of view further: to its right for the right edge.
+    expect(sceneOf(1).camera.aim).toBeCloseTo(half)
+    expect(sceneOf(0).camera.aim).toBeCloseTo(-half)
+    expect(sceneOf(1, { pan: -30 }).camera.aim).toBeCloseTo(half - Math.PI / 6)
+    // Along the sight line the intruder stands on.
+    expect(SITE.enclosure.heading - sceneOf(0.2, { pan: 20 }).camera.aim).toBeCloseTo(sightBearing(0.2, Math.PI / 9))
+  })
+
   it('places the intruder from where the camera is turned to: the Alert tells it in degrees', () => {
-    expect(sceneOf(0.5).camera).toEqual({ pan: 0 })
+    expect(sceneOf(0.5).camera).toEqual({ pan: 0, aim: 0 })
     expect(sceneOf(0.5, { pan: 45 }).camera.pan).toBeCloseTo(Math.PI / 4)
     expect(sceneOf(0.5, { pan: -90 }).camera.pan).toBeCloseTo(-Math.PI / 2)
     expect(intruderAt(0.4, { pan: 45, h_norm: 0.5 })).toEqual(standingPoint(0.4, Math.PI / 4, 0.5))
@@ -517,7 +531,7 @@ describe('toScene', () => {
   })
 
   it('rests the camera again once the intrusion is cleared', () => {
-    expect(toScene(state({ activeAlerts: [gas] })).camera).toEqual({ pan: 0 })
+    expect(toScene(state({ activeAlerts: [gas] })).camera).toEqual({ pan: 0, aim: 0 })
   })
 
   it('tells the intruder from the others by the id its Alert gives it, and stands each of them', () => {
