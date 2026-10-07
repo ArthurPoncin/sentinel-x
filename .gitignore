@@ -67,3 +67,5 @@ Thumbs.db
 *.mp4
 *.mov
 *.raw
+# The delivered teaser is the exception: one cut, compressed under GitHub's 50 MB warning.
+!docs/livrables/sentinel-x-teaser.mp4
