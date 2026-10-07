@@ -235,10 +235,12 @@ function createShapes() {
   }
 }
 
-// What the figurine's joints are posed by, and what the frame around it is turned by: found as it is drawn.
+// What the figurine's joints are posed by, what the frame around it is turned by, and the line from the lens
+// to its head: found as it is drawn.
 interface Posed {
   standing: Group | null
   frame: Group | null
+  line: Mesh | null
   skeleton: Skeleton
 }
 
@@ -263,7 +265,7 @@ function createFigurine() {
     blending: AdditiveBlending,
     depthWrite: false,
   })
-  // Its outline, which the one the camera followed leaves where it last stood. Its shade, which by then
+  // Its outline, which it leaves where it last stood. Its shade, which by then
   // shades nothing, still leaves its depth: that is what keeps the outline hollow.
   const outline = { color: { value: new Color(INTRUSION_COLOR) }, level: { value: 0 }, swept: uniforms.swept }
   const line = new ShaderMaterial({
@@ -292,12 +294,20 @@ function createFigurine() {
     depthTest: false,
     depthWrite: false,
   })
+  // The line that ties its head to the lens.
+  const rod = new MeshBasicMaterial({
+    color: new Color(INTRUSION_COLOR).multiplyScalar(LINE.glow),
+    transparent: true,
+    opacity: 0,
+    blending: AdditiveBlending,
+    depthWrite: false,
+  })
   const passes: readonly Pass[] = [
     { material: shade, order: DRAWN.shade },
     { material: light, order: DRAWN.light },
     { material: line, order: DRAWN.outline },
   ]
-  const posed: Posed = { standing: null, frame: null, skeleton: createSkeleton() }
+  const posed: Posed = { standing: null, frame: null, line: null, skeleton: createSkeleton() }
 
   return {
     uniforms,
@@ -306,10 +316,11 @@ function createFigurine() {
     line,
     ring,
     frame,
+    rod,
     passes,
     posed,
     dispose() {
-      for (const material of [shade, light, line, ring, frame]) material.dispose()
+      for (const material of [shade, light, line, ring, frame, rod]) material.dispose()
     },
   }
 }
@@ -506,24 +517,23 @@ export interface IntruderProps {
 // The people the camera sees: a human figurine in hologram for each, in the intrusion's red, standing inside
 // the fence where the Alert places them, on the camera's sight line and as far along it as they are short in
 // its image, and facing the Enclosure's lens. A ring marks the feet of each, and four brackets frame each
-// like a detection in an image, always facing the Twin's camera. The one the camera follows is told from the
-// others: a pin of light over its head, a thin line that ties its head to the lens — what the vision service
-// sees, it sees through there — and a label over the pin that reads what the model sees and how sure it is
-// of it, « PERSONNE · 88 % ». The brackets and the label are drawn over whatever stands in front of them. As
+// like a detection in an image, always facing the Twin's camera, and a thin line ties the head of each to the
+// lens: what the vision service sees, it sees through there. The one the camera follows is told from the
+// others: a pin of light over its head, and a label over the pin that reads what the model sees and how sure
+// it is of it, « PERSONNE · 88 % ». The brackets and the label are drawn over whatever stands in front of them. As
 // someone is seen elsewhere their figurine walks there over the ground, arms and legs in opposition, turned
 // the way it goes, toward the Enclosure as they come nearer the camera; once there it comes back to rest and
 // turns to the lens again. Someone newly seen appears where they stand, at rest, in a sweep from feet to
-// head. Someone the camera no longer sees fades out where they last stood. Once the last `intrusion` Alert is
-// cleared they all do, and the one the camera followed leaves its outline there, hollow, still and at rest,
-// with no pin, no ring, no line, no brackets and no label: the last known position, which stays for about
-// five seconds and goes out. An intruder raised meanwhile appears at its own place, and the outline of the
-// one before it goes out where it is. Unlit and brighter than white, so the halo takes it all for lights.
+// head. Someone the camera no longer sees fades out where they last stood, and so do they all once the last
+// `intrusion` Alert is cleared. Each leaves its outline there, hollow, still and at rest, with no pin, no
+// ring, no line, no brackets and no label: the last known position, which stays for about five seconds and
+// goes out. An intruder raised meanwhile appears at its own place, and the outlines of those before it go out
+// where they are. Unlit and brighter than white, so the halo takes it all for lights.
 // Nothing casts a shadow: the shadows are drawn once, and they move.
 export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
   const pin = useRef<Group>(null)
   const sighted = useRef<Group>(null)
   const label = useRef<Group>(null)
-  const line = useRef<Mesh>(null)
   const tracks = useRef(NO_TRACKS)
   // How much of what tells the one the camera follows shows: the label asks on every frame.
   const marked = useRef(0)
@@ -540,16 +550,9 @@ export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
     const additive = { transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false } as const
     return {
       pin: new MeshBasicMaterial({ ...additive, color: new Color(INTRUSION_COLOR).multiplyScalar(MARKER.glow) }),
-      line: new MeshBasicMaterial({ ...additive, color: new Color(INTRUSION_COLOR).multiplyScalar(LINE.glow) }),
     }
   }, [])
-  useEffect(
-    () => () => {
-      marks.pin.dispose()
-      marks.line.dispose()
-    },
-    [marks],
-  )
+  useEffect(() => () => marks.pin.dispose(), [marks])
   const lens = useMemo(() => {
     const { x, z } = lensPoint()
     return new Vector3(x, lensHeight(), z)
@@ -574,17 +577,17 @@ export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
     tracks.current = tracksAt(tracks.current, people, delta)
     // The one the camera follows, or followed last, while what tells it still shows.
     let followed: Track | null = null
-    let dropped = 0
 
     figurines.forEach((figurine, slot) => {
       const track = tracks.current[slot]
-      const { standing, frame } = figurine.posed
+      const { standing, frame, line } = figurine.posed
       if (standing) standing.visible = track !== undefined
+      if (line) line.visible = track !== undefined
       if (!track) return
 
       const walk = stand(figurine.posed, track, lens)
-      // While it is seen the figurine is whole, its sweep brings it in: it only fades out, and the outline of
-      // the one the camera followed comes as it goes.
+      // While it is seen the figurine is whole, its sweep brings it in: it only fades out, and its outline
+      // comes as it goes.
       const level = figurineLevel(track)
       const outline = lastKnown(track)?.level ?? 0
       figurine.uniforms.level.value = level
@@ -594,16 +597,20 @@ export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
       figurine.outline.level.value = outline
       figurine.line.visible = outline > 0
 
-      // What tells someone the camera sees: the ring at their feet, and the brackets around their middle,
-      // which face the Twin's camera wherever it orbits.
+      // What tells someone the camera sees: the ring at their feet, the brackets around their middle, which
+      // face the Twin's camera wherever it orbits, and the line from the lens to their head.
       const told = marksLevel(track)
       figurine.ring.opacity = told
       figurine.frame.opacity = told
+      figurine.rod.opacity = told
       frame?.quaternion.copy(camera.quaternion)
-      if (track.followed && told > 0 && followed === null) {
-        followed = track
-        dropped = walk.drop
+      if (line) {
+        line.visible = told > 0
+        toHead.set(track.at.x, headHeight() - walk.drop, track.at.z).sub(lens)
+        line.scale.set(1, toHead.length(), 1)
+        line.quaternion.setFromUnitVectors(UP, toHead.normalize())
       }
+      if (track.followed && told > 0 && followed === null) followed = track
     })
 
     // What tells the one the camera follows from the others: all of it fades with its figurine.
@@ -615,26 +622,30 @@ export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
 
     const { at } = one
     marks.pin.opacity = marked.current
-    marks.line.opacity = marked.current
     pin.current?.position.set(at.x, 0, at.z)
     // The label stands over the marker's gem as the camera sees it, and never lower than the top of the
     // frame: from above, the marker looks short.
     const upright = cameraUp.set(0, 1, 0).applyQuaternion(camera.quaternion).y
     const over = Math.max(framed.height / 2, (MARKER.top - framed.middle) * upright) + LABEL.clear
     label.current?.position.copy(cameraUp).multiplyScalar(over).add(toHead.set(at.x, framed.middle, at.z))
-
-    const rod = line.current
-    if (!rod) return
-    toHead.set(at.x, headHeight() - dropped, at.z).sub(lens)
-    rod.scale.set(1, toHead.length(), 1)
-    rod.quaternion.setFromUnitVectors(UP, toHead.normalize())
   })
 
   return (
     <group>
       {figurines.map((figurine, slot) => (
         // A fixed set, told apart by their place in it.
-        <Standing key={slot} figurine={figurine} shapes={shapes} />
+        <Fragment key={slot}>
+          <Standing figurine={figurine} shapes={shapes} />
+          <mesh
+            ref={(line) => {
+              figurine.posed.line = line
+            }}
+            geometry={shapes.rod}
+            material={figurine.rod}
+            position={lens}
+            visible={false}
+          />
+        </Fragment>
       ))}
       <group ref={pin} visible={false}>
         <mesh geometry={shapes.stem} material={marks.pin} />
@@ -650,7 +661,6 @@ export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
             shown={() => marked.current}
           />
         </group>
-        <mesh ref={line} geometry={shapes.rod} material={marks.line} position={lens} />
       </group>
     </group>
   )

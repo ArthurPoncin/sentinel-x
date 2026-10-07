@@ -14,8 +14,8 @@ export const SIGHTING = { shortest: 0.25, longest: 1.5 } as const
 export const SET_OFF = 8
 // Close enough to full stride, or to rest, to be there for good.
 const SETTLED = 1e-4
-// The seconds the last known position stays shown once the Alert is cleared: the outline of the figurine the
-// camera followed, where it last stood. It then goes out, in a fade.
+// The seconds a last known position stays shown once someone is no longer seen: the outline of their figurine,
+// where it last stood. It then goes out, in a fade.
 export const LAST_KNOWN_SECONDS = 5
 // The most figurines the Twin draws at once: the people an Alert tells of, and those still going out.
 export const MOST_FIGURINES = 12
@@ -43,7 +43,7 @@ export interface Track {
   alertId: string
   key: string
   // Whether the camera still sees them. Once it does not, they are gone or their Alert is cleared: the
-  // figurine fades out where it last stood, and the one the camera followed leaves its outline there.
+  // figurine fades out where it last stood, and leaves its outline there.
   seen: boolean
   followed: boolean
   // Where it stands on the ground.
@@ -96,16 +96,16 @@ function easedTo(walking: number, stride: 0 | 1, elapsed: number): number {
 const FADE_IN: Fade = { from: [0], to: [1], startedAt: 0 }
 const faded = (elapsed: number) => fadeValue(FADE_IN, elapsed)[0] ?? 0
 
-// For how many seconds a figurine that is no longer seen still shows something: the time it fades out in, and
-// for the one the camera followed the time its last known position stays.
-const shownFor = (track: Track) => FADE_SECONDS + (track.followed ? LAST_KNOWN_SECONDS : 0)
+// For how many seconds a figurine that is no longer seen still shows something: the time its last known
+// position stays, and the time that fades out in.
+const SHOWN_FOR = FADE_SECONDS + LAST_KNOWN_SECONDS
 
 // The figurine that is no longer seen `elapsed` seconds on: it stays where it last stood and comes out of its
 // stride, and is nothing once all it shows has gone out.
 function lostFor(track: Track, elapsed: number): Track | null {
   // The frame it is first missed on starts the count.
   const lost = track.seen ? 0 : track.lost + elapsed
-  if (lost >= shownFor(track)) return null
+  if (lost >= SHOWN_FOR) return null
   return { ...track, seen: false, walking: easedTo(track.walking, 0, elapsed), lost }
 }
 
@@ -114,8 +114,7 @@ function lostFor(track: Track, elapsed: number): Track | null {
 // a steady pace, straight there and never past: two frames of half a step land where one whole step does.
 // Someone newly seen stands their figurine where they are, at rest: it takes no step from where another
 // stood, and starts its sweep over. Once they are no longer seen the figurine stays where it last stood, at
-// rest, for as long as it shows: a fade, and for the one the camera followed LAST_KNOWN_SECONDS more. Then
-// there is none.
+// rest, for as long as it shows: LAST_KNOWN_SECONDS and a fade. Then there is none.
 export function trackAt(
   track: Track | null,
   seen: (Sighting & { alertId: string }) | null,
@@ -163,25 +162,24 @@ export function figurineLevel(track: Track): number {
 }
 
 // How much of what tells someone the camera sees shows, 0–1: the ring at their feet, the frame of their
-// detection, and for the one it follows the pin, the line to the lens and the label. It comes as the figurine
+// detection, the line to the lens, and for the one it follows the pin and the label. It comes as the figurine
 // is swept in and goes as it fades out.
 export function marksLevel(track: Track): number {
   return track.seen ? faded(track.age) : 1 - faded(track.lost)
 }
 
-// The last known position `track` gives: none while it is seen, and none for someone the camera did not
-// follow. Then where the figurine last stood: its outline comes as the figurine goes, stays until
-// LAST_KNOWN_SECONDS and goes out, each in a fade.
+// The last known position `track` gives: none while it is seen. Then where the figurine last stood, whether
+// the camera followed them or not: its outline comes as the figurine goes, stays until LAST_KNOWN_SECONDS and
+// goes out, each in a fade.
 export function lastKnown(track: Track | null): LastKnown | null {
-  if (track === null || track.seen || !track.followed) return null
+  if (track === null || track.seen) return null
   return { at: track.at, level: Math.min(faded(track.lost), 1 - faded(track.lost - LAST_KNOWN_SECONDS)) }
 }
 
 // What is left of `track` as the intruder of another Alert appears: a last known position goes out at once, in
 // a fade, from what shows of its outline, and nothing is left of an intruder that was still seen — the camera
-// still sees one, over there. Someone it did not follow goes on fading out.
+// still sees one, over there.
 function putOut(track: Track): Track | null {
-  if (!track.followed) return track
   if (track.lost === 0) return null
   return { ...track, lost: Math.max(track.lost, LAST_KNOWN_SECONDS + Math.max(0, FADE_SECONDS - track.lost)) }
 }

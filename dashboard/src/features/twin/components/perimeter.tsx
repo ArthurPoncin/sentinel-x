@@ -8,6 +8,7 @@ import {
   Color,
   CylinderGeometry,
   Float32BufferAttribute,
+  type Group,
   type InstancedMesh,
   type Mesh,
   type MeshStandardMaterial,
@@ -153,45 +154,70 @@ function Fence() {
 // it hangs.
 const LEAF = { bar: 0.012, brace: 0.008, clear: 0.012 } as const
 
-// The gate's two leaves, in the gate's own frame: x along it from its middle, z out of the site. Each hangs
-// from its pillar and reaches the middle: a frame of bars, braced from the foot of its hinge up to its latch,
-// and the pane of mesh it holds. `frames` is all the bars, `panes` the two panes.
-function leafShapes(opening: number): { frames: BufferGeometry; panes: BufferGeometry } {
+// How far a leaf of the gate swings into the site once it is open, in radians.
+const SWING = 1.4
+
+// The gate's two leaves, each about its own hinge, which stands at `hinge` in the gate's own frame: x along it
+// from its middle, z out of the site. Each hangs from its pillar and reaches the middle: a frame of bars,
+// braced from the foot of its hinge up to its latch, and the pane of mesh it holds.
+function leafShapes(opening: number) {
   const { width, height } = SITE.fence.gate.leaf
   const { bar, brace, clear } = LEAF
   // Between the middles of its bars.
   const [across, up] = [width - bar, height - clear - bar]
   const middle = clear + (height - clear) / 2
 
-  const bars: BufferGeometry[] = []
-  const panes: BufferGeometry[] = []
-  for (const side of [-1, 1]) {
-    const hinge = side * (opening / 2 - bar / 2)
-    const centre = hinge - (side * across) / 2
-    bars.push(
-      new BoxGeometry(bar, up + bar, bar).translate(hinge, middle, 0),
-      new BoxGeometry(bar, up + bar, bar).translate(hinge - side * across, middle, 0),
+  return ([-1, 1] as const).map((side) => {
+    const centre = (-side * across) / 2
+    const bars = [
+      new BoxGeometry(bar, up + bar, bar).translate(0, middle, 0),
+      new BoxGeometry(bar, up + bar, bar).translate(-side * across, middle, 0),
       new BoxGeometry(across, bar, bar).translate(centre, middle - up / 2, 0),
       new BoxGeometry(across, bar, bar).translate(centre, middle + up / 2, 0),
       new BoxGeometry(Math.hypot(across, up), brace, brace)
         .rotateZ(-side * Math.atan2(up, across))
         .translate(centre, middle, 0),
-    )
+    ]
+    const frame = mergeGeometries(bars)
+    for (const part of bars) part.dispose()
     const pane = inDiamonds(new PlaneGeometry(across, up), across / meshCell(), up / meshCell())
-    panes.push(pane.translate(centre, middle, 0))
-  }
-  const shapes = { frames: mergeGeometries(bars), panes: mergeGeometries(panes) }
-  for (const part of [...bars, ...panes]) part.dispose()
-  return shapes
+    return { side, hinge: side * (opening / 2 - bar / 2), frame, pane: pane.translate(centre, middle, 0) }
+  })
 }
 
-// The gate, closed: a pillar on the post each side of it, taller than the fence, and a leaf hung from each,
-// which meet in the middle. A leaf is openwork like the fence: the camera's sector and whoever stands in it
-// are seen through its mesh.
-function Gate() {
+// The gate: a pillar on the post each side of it, taller than the fence, and a leaf hung from each, which
+// meet in the middle while it is closed. A leaf is openwork like the fence: the camera's sector and whoever
+// stands in it are seen through its mesh. It opens while an intrusion is going on, each leaf swung into the
+// site about its hinge, and closes once the Alert is cleared: both in a fade. The shadows are drawn once: it
+// asks for them again while its leaves move.
+function Gate({ open }: { open: boolean }) {
   const { bearing, pillar } = SITE.fence.gate
   const { from, to, opening } = useMemo(gateLine, [])
-  const { frames, panes } = useMemo(() => leafShapes(opening), [opening])
+  const leaves = useMemo(() => leafShapes(opening), [opening])
+  useEffect(
+    () => () => {
+      for (const { frame, pane } of leaves) {
+        frame.dispose()
+        pane.dispose()
+      }
+    },
+    [leaves],
+  )
+  const hung = useRef<(Group | null)[]>([])
+  const openNow = useFade([open ? 1 : 0])
+
+  const swungTo = useRef(0)
+
+  useFrame(({ gl }) => {
+    const swung = (openNow()[0] ?? 0) * SWING
+    if (swung === swungTo.current) return
+    swungTo.current = swung
+    gl.shadowMap.needsUpdate = true
+    leaves.forEach(({ side }, index) => {
+      const leaf = hung.current[index]
+      if (leaf) leaf.rotation.y = -side * swung
+    })
+  })
 
   return (
     <group position={[(from.x + to.x) / 2, 0, (from.z + to.z) / 2]} rotation={[0, bearing, 0]}>
@@ -204,12 +230,22 @@ function Gate() {
           bevel={0.006}
         />
       ))}
-      <mesh geometry={frames} castShadow receiveShadow>
-        <meshStandardMaterial color={STEEL} roughness={0.6} />
-      </mesh>
-      <mesh geometry={panes} renderOrder={MESH_DRAWN}>
-        <ChainLinkMaterial />
-      </mesh>
+      {leaves.map(({ side, hinge, frame, pane }, index) => (
+        <group
+          key={side}
+          ref={(leaf) => {
+            hung.current[index] = leaf
+          }}
+          position={[hinge, 0, 0]}
+        >
+          <mesh geometry={frame} castShadow receiveShadow>
+            <meshStandardMaterial color={STEEL} roughness={0.6} />
+          </mesh>
+          <mesh geometry={pane} renderOrder={MESH_DRAWN}>
+            <ChainLinkMaterial />
+          </mesh>
+        </group>
+      ))}
     </group>
   )
 }
@@ -504,7 +540,8 @@ function CameraField({ lit, pan }: SceneProps['sector'] & SceneProps['camera']) 
 }
 
 export interface PerimeterProps {
-  // Whether the camera's field is lit, the sector on the ground with it: an intrusion is going on in it.
+  // Whether the camera's field is lit, the sector on the ground with it: an intrusion is going on in it. The
+  // gate is open for as long.
   sectorLit: boolean
   // How far the camera is turned from where it rests, in radians: its field turns with it.
   pan: number
@@ -514,12 +551,13 @@ export interface PerimeterProps {
 
 // The Outpost's perimeter: the fence around the site, chain-link under barbed wire and closed by its gate,
 // which an amber sweep goes round while someone is near, and what the camera watches of it, a volume from its
-// lens down to the fence, which lights up on an intrusion and turns with the camera.
+// lens down to the fence, which lights up on an intrusion and turns with the camera. The gate opens for as
+// long as the intrusion goes on.
 export const Perimeter = memo(function Perimeter({ sectorLit, pan, presence }: PerimeterProps) {
   return (
     <group>
       <Fence />
-      <Gate />
+      <Gate open={sectorLit} />
       <FenceSweep presence={presence} />
       <CameraField lit={sectorLit} pan={pan} />
     </group>

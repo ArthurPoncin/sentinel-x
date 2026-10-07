@@ -451,13 +451,13 @@ describe('the last known position', () => {
     expect(trackAt(left, null, -1)?.lost).toBe(left?.lost)
   })
 
-  it('is left by the one the camera followed only: anyone else fades out and that is all', () => {
+  it('is left by anyone the camera saw, followed or not', () => {
     const other = { ...standing('p2', 0.4, 3), followed: false }
-    const left = lose(other, 1)
+    const left = lose(other, LAST_KNOWN_SECONDS + FADE_SECONDS + 0.5)
 
-    expect(left.every((track) => lastKnown(track) === null)).toBe(true)
     expect(figurineLevel(left[0] as Track)).toBe(1)
-    expect(left.filter((track) => track !== null).length / 60).toBeCloseTo(FADE_SECONDS, 1)
+    expect(lastKnown(left[60] ?? null)).toEqual({ at: other.at, level: 1 })
+    expect(left.filter((track) => track !== null).length / 60).toBeCloseTo(LAST_KNOWN_SECONDS + FADE_SECONDS, 1)
     expect(left.at(-1)).toBeNull()
   })
 })
@@ -585,13 +585,16 @@ describe('the figurines of an intrusion', () => {
     ])
   })
 
-  it('fade out the figurine of someone the Alert no longer tells of, where they stood, the others as they were', () => {
+  it('leave the outline of someone the Alert no longer tells of, where they stood, the others as they were', () => {
     const before = after(NO_TRACKS, told('a1', person('p1', 0.5, true), person('p2', 0.8)), 1)
     const [stays, leaves] = tracksAt(before, told('a1', person('p1', 0.5, true)), FRAME)
 
     expect(stays).toMatchObject({ key: 'p1', seen: true })
     expect(leaves).toMatchObject({ key: 'p2', seen: false, at: place(0.8), lost: 0 })
-    expect(after(before, told('a1', person('p1', 0.5, true)), FADE_SECONDS + 0.1).map(({ key }) => key)).toEqual(['p1'])
+    const gone = after(before, told('a1', person('p1', 0.5, true)), 1)
+    expect(lastKnown(gone[1] ?? null)).toEqual({ at: place(0.8), level: 1 })
+    const later = after(before, told('a1', person('p1', 0.5, true)), LAST_KNOWN_SECONDS + FADE_SECONDS + 0.1)
+    expect(later.map(({ key }) => key)).toEqual(['p1'])
   })
 
   it('hand the camera over to another person without moving anyone: the one it followed leaves its outline', () => {
@@ -606,12 +609,15 @@ describe('the figurines of an intrusion', () => {
     expect(lastKnown(handed[1] ?? null)).toEqual({ at: place(0.5), level: 1 })
   })
 
-  it('leave the last known position of the one the camera followed once the Alert is cleared, the others gone', () => {
+  it('leave the last known position of everyone the camera saw once the Alert is cleared', () => {
     const before = after(NO_TRACKS, told('a1', person('p1', 0.5, true), person('p2', 0.8)), 1)
     const cleared = after(before, null, 1)
 
-    expect(cleared.map(({ key }) => key)).toEqual(['p1'])
-    expect(lastKnown(cleared[0] ?? null)).toEqual({ at: place(0.5), level: 1 })
+    expect(cleared.map(({ key }) => key)).toEqual(['p1', 'p2'])
+    expect(cleared.map(lastKnown)).toEqual([
+      { at: place(0.5), level: 1 },
+      { at: place(0.8), level: 1 },
+    ])
     expect(after(before, null, LAST_KNOWN_SECONDS + FADE_SECONDS + 0.1)).toEqual([])
   })
 
