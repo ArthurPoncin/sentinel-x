@@ -1,8 +1,9 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useLocation } from 'react-router'
+import { useHandWind, useLiveHands } from '@/features/gestures'
 import { stateAfter, useLiveFeed } from '@/features/live-feed'
 import { TimeScrubber, usePlayer } from '@/features/replay'
-import { OutpostTwin, toScene } from '@/features/twin'
+import { type OperatorHands, OutpostTwin, toScene } from '@/features/twin'
 import { captureMode } from '@/shared/config/capture-mode'
 import { feedEncrypted } from '@/shared/config/feed-url'
 import { decimal } from '@/shared/lib/format'
@@ -19,6 +20,8 @@ import { decimal } from '@/shared/lib/format'
 // « WSS » by it while the live feed is encrypted: not on a plain one, not in a replay. When the feed drops, it all turns grey: nothing here
 // is live any more. The time-scrubber replays a past Incident or the scripted scenario in it, second by second,
 // labelled REPLAY: the Twin is then rebuilt from the replayed frames, not the live ones.
+// With the hand control on, a flat hand over the sensor steers the camera and the hands float in hologram in a
+// corner of the view, green as a thumb is raised and red as one is turned down; a fist held to one side winds a replay.
 // With `?capture` it is the Twin alone, on the same feed: no top bar, no sidebar, no caption, no scrubber, the whole stage
 // held in frame, to be filmed in a vertical window for the teaser.
 export function TwinRoute() {
@@ -30,6 +33,26 @@ export function TwinRoute() {
   const activeAlerts = useLiveFeed((state) => state.activeAlerts)
   const history = useLiveFeed((state) => state.history)
   const player = usePlayer()
+  const live = useLiveHands()
+  const operator = useMemo<OperatorHands | undefined>(
+    () =>
+      live
+        ? {
+            steer: live.steer,
+            hands() {
+              const { confirming } = live.reading()
+              const tint = confirming ? (confirming.pose === 'thumb-up' ? 'ok' : 'alarm') : 'idle'
+              return live.hands().map(({ fingers }) => ({ fingers, tint, charge: confirming?.progress ?? 0 }))
+            },
+          }
+        : undefined,
+    [live],
+  )
+  const { seek, second } = player
+  useHandWind(
+    player.replay !== null,
+    useCallback((by: number) => seek(second + by), [seek, second]),
+  )
   const shown = useMemo(
     () =>
       player.frames ? stateAfter(player.frames) : { connection, connectedOnce, status, latestTelemetry, activeAlerts },
@@ -42,7 +65,7 @@ export function TwinRoute() {
 
   return (
     <section className="stage" data-capture={capture || undefined} data-replay={player.replay ? true : undefined}>
-      <OutpostTwin scene={scene} frames={player.frames ?? history} wholeStage={capture} />
+      <OutpostTwin scene={scene} frames={player.frames ?? history} wholeStage={capture} operator={capture ? undefined : operator} />
       {!capture && (
         <>
           <div className="stage-caption" data-stale={scene.signalLost}>

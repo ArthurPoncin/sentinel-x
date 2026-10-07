@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { RouterProvider } from 'react-router/dom'
 import { AuthGate, useSessionCheck } from '@/features/auth'
 import { LiveFeedProvider } from '@/features/live-feed'
+import { HandControl } from './hand-control'
 import { feedUrl } from '@/shared/config/feed-url'
 import { Toaster } from '@/shared/ui/sonner'
 import { router } from './router'
@@ -23,7 +24,9 @@ export function App() {
     <>
       <AuthGate>
         <SessionFeed>
-          <RouterProvider router={router} />
+          <HandControl navigate={(to) => void router.navigate(to)} pathname={() => router.state.location.pathname}>
+            <RouterProvider router={router} />
+          </HandControl>
         </SessionFeed>
       </AuthGate>
       <Toaster position="bottom-right" />

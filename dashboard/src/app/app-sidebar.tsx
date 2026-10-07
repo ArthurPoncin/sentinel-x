@@ -1,5 +1,6 @@
 import { NavLink, useLocation } from 'react-router'
 import { useSignOut } from '@/features/auth'
+import { useHandSwitch } from '@/features/gestures'
 import { cn } from '@/shared/lib/utils'
 import {
   Sidebar,
@@ -20,10 +21,12 @@ export const NAV = [
 ] as const
 
 // The side navigation, under the top bar: the two surfaces, and the way out. Words, no icons. The top bar's
-// ☰ (or Ctrl+B) folds it away on a wide screen; on a phone it is a drawer that a choice closes.
+// ☰ (or Ctrl+B) folds it away on a wide screen; on a phone it is a drawer that a choice closes. At its foot,
+// the hand control's switch: off until the Operator has a hand sensor on their desk.
 export function AppSidebar() {
   const { pathname } = useLocation()
   const signOut = useSignOut()
+  const hands = useHandSwitch()
   const { isMobile, open, setOpenMobile } = useSidebar()
   const close = () => setOpenMobile(false)
 
@@ -49,6 +52,11 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton aria-pressed={hands.enabled} onClick={() => hands.setEnabled(!hands.enabled)}>
+              Commande gestuelle : {hands.enabled ? 'activée' : 'désactivée'}
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton onClick={signOut}>Se déconnecter</SidebarMenuButton>
           </SidebarMenuItem>

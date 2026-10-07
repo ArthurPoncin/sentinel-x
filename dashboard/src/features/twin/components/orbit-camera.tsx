@@ -1,12 +1,13 @@
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
-import { MathUtils, Vector3 } from 'three'
+import { MathUtils, Spherical, Vector3 } from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import type { Frame } from '@/shared/contract'
 import { useFraming } from '../hooks/use-framing'
 import { cameraTurn } from '../utils/alert-framing'
 import type { CameraTouch } from '../utils/auto-orbit'
 import { TARGET, wholeStageDistance } from '../utils/framing'
+import { type OperatorHands, steered } from '../utils/operator-hands'
 import type { SceneProps } from '../utils/scene'
 
 // Seconds the automatic orbit takes to go once around the Outpost.
@@ -34,13 +35,20 @@ export interface OrbitCameraProps {
   // Stands back just far enough to hold the whole stage, whatever the shape of the frame. The Operator can
   // still turn the camera, no longer zoom.
   wholeStage?: boolean
+  // The Operator's hands over a sensor, when they have one: a flat hand steers the camera as a drag does, and
+  // the orbit waits for it the same way.
+  operator?: OperatorHands
 }
 
-export function OrbitCamera({ anchor, frames, wholeStage = false }: OrbitCameraProps) {
+export function OrbitCamera({ anchor, frames, wholeStage = false, operator }: OrbitCameraProps) {
   const camera = useThree((state) => state.camera)
   const canvas = useThree((state) => state.gl.domElement)
   const controls = useRef<OrbitControls | null>(null)
   const touch = useRef<CameraTouch>({ kind: 'never' })
+  // Whether a hand over the sensor holds the camera, and whether the mouse does: either one is the Operator's.
+  const hand = useRef(false)
+  const mouse = useRef(false)
+  const stand = useRef(new Spherical())
   const framingNow = useFraming(anchor, frames)
 
   useEffect(() => {
@@ -58,10 +66,12 @@ export function OrbitCamera({ anchor, frames, wholeStage = false }: OrbitCameraP
     orbit.maxPolarAngle = MAX_POLAR
     // A wheel notch is a start and an end at once: it restarts the idle delay like a drag does.
     orbit.addEventListener('start', () => {
+      mouse.current = true
       touch.current = { kind: 'holding' }
     })
     orbit.addEventListener('end', () => {
-      touch.current = { kind: 'released', at: seconds() }
+      mouse.current = false
+      if (!hand.current) touch.current = { kind: 'released', at: seconds() }
     })
     controls.current = orbit
 
@@ -76,6 +86,24 @@ export function OrbitCamera({ anchor, frames, wholeStage = false }: OrbitCameraP
     if (!orbit) return
     // Both bounds at once: the controls bring the camera there, and follow the frame when it changes shape.
     if (wholeStage) orbit.minDistance = orbit.maxDistance = wholeStageDistance(size.width / size.height)
+    // The hand first: it moves the camera round its target, and the controls then read where it is.
+    const steer = operator?.steer() ?? null
+    if (steer) {
+      hand.current = true
+      touch.current = { kind: 'holding' }
+      const from = stand.current.setFromVector3(camera.position.sub(orbit.target))
+      const to = steered({ azimuth: from.theta, polar: from.phi, distance: from.radius }, steer, Math.min(delta, LONGEST_FRAME), {
+        minPolar: MIN_POLAR,
+        maxPolar: MAX_POLAR,
+        minDistance: orbit.minDistance,
+        maxDistance: orbit.maxDistance,
+      })
+      camera.position.setFromSphericalCoords(to.distance, to.polar, to.azimuth).add(orbit.target)
+    } else if (hand.current) {
+      // The hand let go: the orbit waits its usual delay, unless the mouse holds the camera still.
+      hand.current = false
+      if (!mouse.current) touch.current = { kind: 'released', at: seconds() }
+    }
     const turn = cameraTurn(framingNow(), orbit.getAzimuthalAngle(), touch.current, seconds())
     // Round the target's vertical, at the distance and the height the camera stands at: the controls then read
     // where it is, as they do after a drag.

@@ -1,0 +1,43 @@
+import type { Vec3 } from '../api/hand-frame'
+
+// A flat hand over the sensor is a joystick: still at the middle, it moves the camera the faster the further
+// from it. Millimetres, in the sensor's axes.
+
+// Where the hand rests: over the sensor's centre, a hand's width above it.
+export const NEUTRAL: Vec3 = [0, 200, 0]
+// Around the rest, on each axis, the hand moves nothing: nobody holds a hand perfectly still.
+export const DEAD_ZONE = 35
+// From the rest, where an axis is at its full speed.
+export const FULL = { x: 130, y: 100, z: 110 } as const
+
+// How the hand steers, each from -1 to 1 and 0 when it does not.
+export interface Steer {
+  // Positive with the hand to the Operator's right.
+  turn: number
+  // Positive with the hand pulled toward the Operator.
+  tilt: number
+  // Positive with the hand lowered toward the sensor.
+  zoom: number
+}
+
+// An axis of the joystick: 0 inside the dead zone, then eased up to 1 at `full`, so the first millimetres out
+// of the dead zone are slow ones.
+export function axis(offset: number, full: number): number {
+  const out = Math.abs(offset) - DEAD_ZONE
+  if (out <= 0) return 0
+  const share = Math.min(1, out / (full - DEAD_ZONE))
+  return Math.sign(offset) * share * share
+}
+
+export function steerOf(palm: Vec3): Steer {
+  return {
+    turn: axis(palm[0] - NEUTRAL[0], FULL.x),
+    tilt: axis(palm[2] - NEUTRAL[2], FULL.z),
+    zoom: axis(NEUTRAL[1] - palm[1], FULL.y),
+  }
+}
+
+// A fist winds a replay: to the right forward, to the left back, -1 to 1.
+export function windOf(palm: Vec3): number {
+  return axis(palm[0] - NEUTRAL[0], FULL.x)
+}

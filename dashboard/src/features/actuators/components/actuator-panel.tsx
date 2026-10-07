@@ -4,8 +4,8 @@ import type { Command } from '@/shared/contract'
 import { clock } from '@/shared/lib/format'
 import { Button } from '@/shared/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/shared/ui/card'
-import { sendCommand } from '../api/commands-client'
-import { buildCommand, type Preset, type PresetId, PRESETS } from '../utils/commands'
+import { firePreset } from '../api/commands-client'
+import { type Preset, type PresetId, PRESETS } from '../utils/commands'
 
 const byId = (id: PresetId) => PRESETS.find((preset) => preset.id === id) as Preset
 
@@ -16,15 +16,12 @@ export function ActuatorPanel({ sentinel, className }: { sentinel: string | null
   const [last, setLast] = useState<{ label: string; command: Command } | null>(null)
 
   const press = async (preset: Preset) => {
-    const built = buildCommand(sentinel, preset)
-    if (!built.success) return toast.error('Commande non envoyée', { description: built.reason })
-
     setPending(preset.id)
-    const sent = await sendCommand(built.request)
+    const fired = await firePreset(sentinel, preset.id)
     setPending(null)
-    if (!sent.success) return toast.error('Commande non transmise', { description: sent.message })
-    setLast({ label: preset.label, command: sent.command })
-    toast.success(preset.label, { description: `Commande transmise à ${sent.command.sentinel}` })
+    if (!fired.success) return toast.error(fired.title, { description: fired.description })
+    setLast({ label: fired.label, command: fired.command })
+    toast.success(fired.label, { description: `Commande transmise à ${fired.command.sentinel}` })
   }
 
   const button = (id: PresetId, variant: 'outline' | 'destructive' = 'outline', className?: string) => {
