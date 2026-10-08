@@ -31,8 +31,8 @@ down along the index. It fires where the sight is: an intruder that is hit comes
 a few seconds later. It is a wink for the demo and changes nothing: no Alert is cleared, no command is sent.
 
 While the hand control is on, the menu has a third screen, **Tutoriel des gestes**: the hands as the sensor
-sees them, from above and from the front, what they do at that instant, and every gesture with the hand to
-make. A gesture made is marked. Nothing is sent from there: neither the Alarm nor the screen changes.
+sees them, in a hologram over the desk, what they do at that instant, and every gesture played by a hand of
+light. A gesture made is marked. Nothing is sent from there: neither the Alarm nor the screen changes.
 
 ## Set it up (Windows or macOS)
 

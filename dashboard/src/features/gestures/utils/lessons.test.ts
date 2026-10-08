@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { Reading } from './interpret'
 import { completed, doing, LESSONS, lessonOf } from './lessons'
 import { modelHand } from './model-hand'
-import { hammerOf, HAMMER_BACK, isOpen, poseOf } from './pose'
-import { flat, handLines } from './skeleton'
+import { hammerOf, HAMMER_BACK, HAMMER_DOWN, isOpen, poseOf } from './pose'
+import { handLines } from './skeleton'
 
 const NOTHING: Reading = { steer: null, wind: null, confirming: null, stretch: null, aim: null, shot: null }
 
@@ -21,6 +21,11 @@ describe('modelHand', () => {
     expect(hammerOf(modelHand('point'))).toBeLessThanOrEqual(HAMMER_BACK)
   })
 
+  it('has fired with the thumb down along the index, still aiming', () => {
+    expect(poseOf(modelHand('fire'))).toBe('aim')
+    expect(hammerOf(modelHand('fire'))).toBeGreaterThanOrEqual(HAMMER_DOWN)
+  })
+
   it('has a left hand that is the right one in a mirror, where it is asked', () => {
     const right = modelHand('flat', { palm: [80, 200, 0] })
     const left = modelHand('flat', { palm: [-80, 200, 0], side: 'left', id: 2 })
@@ -36,18 +41,12 @@ describe('handLines', () => {
   it('draws every bone of a hand, and its palm', () => {
     expect(handLines(modelHand('flat'))).toHaveLength(5 * 3 + 3 + 4)
   })
-
-  it('lays a point flat from above, from the front and from the side', () => {
-    expect(flat([10, 200, -30], 'top')).toEqual([10, -30])
-    expect(flat([10, 200, -30], 'front')).toEqual([10, -200])
-    expect(flat([10, 200, -30], 'side')).toEqual([30, -200])
-  })
 })
 
 describe('the lessons', () => {
   it('have a hand to show each, but for the one that is not told', () => {
-    for (const lesson of LESSONS) expect(lesson.hands.length > 0).toBe(lesson.secret === undefined)
-    expect(LESSONS.find(({ id }) => id === 'spread')?.hands).toHaveLength(2)
+    for (const lesson of LESSONS) expect(lesson.demo(0).hands.length > 0).toBe(lesson.secret === undefined)
+    expect(LESSONS.find(({ id }) => id === 'spread')?.demo(0).hands).toHaveLength(2)
   })
 
   it('do not tell the secret before it is found', () => {
