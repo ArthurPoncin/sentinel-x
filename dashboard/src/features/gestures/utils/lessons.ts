@@ -1,11 +1,10 @@
-import type { Hand } from '../api/hand-frame'
+import { type Demo, DEMOS } from './demo'
+import type { Viewpoint } from './hologram'
 import type { Action, Reading } from './interpret'
-import { modelHand } from './model-hand'
 import type { Pose } from './pose'
-import type { View } from './skeleton'
 
 // The gestures the tutorial teaches, in the order it shows them: what to do with the hand, what the dashboard
-// does about it, and the hand it draws beside the words.
+// does about it, and the hand it plays beside the words.
 export type LessonId = 'flat' | 'spread' | 'fist' | 'edge' | 'thumb-up' | 'thumb-down' | 'aim' | 'secret'
 
 export interface Lesson {
@@ -14,12 +13,18 @@ export interface Lesson {
   // How to hold the hand, then what it does.
   how: string
   does: string
-  // The hands drawn for it, and from where they are looked at.
-  hands: readonly Hand[]
-  view: View
+  // The gesture as hands play it, and from where they are looked at.
+  demo: Demo
+  from: Viewpoint
   // Not told until the Operator has found it by themselves.
-  secret?: { title: string; how: string; does: string; hands: readonly Hand[] }
+  secret?: { title: string; how: string; does: string; demo: Demo }
 }
+
+// From above the Operator's shoulder, for a hand that moves over the sensor; from nearer the desk, for a thumb
+// that stands up or down; and from the side a hand on its edge is swept toward.
+const ABOVE: Viewpoint = { yaw: -0.45, pitch: 0.85 }
+const LEVEL: Viewpoint = { yaw: 0.4, pitch: 0.3 }
+const ASIDE: Viewpoint = { yaw: 0.65, pitch: 0.4 }
 
 export const LESSONS: readonly Lesson[] = [
   {
@@ -27,69 +32,69 @@ export const LESSONS: readonly Lesson[] = [
     title: 'Main à plat',
     how: 'Paume vers le bas, à 20 cm au-dessus du capteur. Déplacez-la sur le côté, vers vous, vers le haut.',
     does: 'Pilote la caméra du Twin : tourne autour du site, incline, zoome. Au centre, rien ne bouge.',
-    hands: [modelHand('flat')],
-    view: 'top',
+    demo: DEMOS.flat,
+    from: ABOVE,
   },
   {
     id: 'spread',
     title: 'Deux mains ouvertes',
     how: 'Les deux mains au-dessus du capteur. Écartez-les, puis rapprochez-les.',
     does: 'Zoome et dézoome le Twin, comme deux doigts sur un écran.',
-    hands: [modelHand('flat', { palm: [85, 200, 0] }), modelHand('flat', { palm: [-85, 200, 0], side: 'left', id: 2 })],
-    view: 'top',
+    demo: DEMOS.spread,
+    from: ABOVE,
   },
   {
     id: 'fist',
     title: 'Poing fermé',
     how: 'Fermez la main au-dessus du capteur. Pendant un replay, portez-la à droite ou à gauche.',
     does: 'Tient la caméra où elle est. Pendant un replay, fait avancer ou reculer le temps.',
-    hands: [modelHand('fist')],
-    view: 'top',
+    demo: DEMOS.fist,
+    from: ABOVE,
   },
   {
     id: 'edge',
     title: 'Main sur la tranche, balayée',
     how: 'Main ouverte sur la tranche, pouce vers le haut. Balayez vivement au-dessus du capteur.',
     does: "Change d'écran, comme on tourne une page.",
-    hands: [modelHand('edge')],
-    view: 'side',
+    demo: DEMOS.edge,
+    from: ASIDE,
   },
   {
     id: 'thumb-up',
     title: 'Pouce levé, tenu 1,2 s',
     how: "Poing fermé, pouce vers le haut. Tenez jusqu'à ce que l'anneau soit plein.",
     does: 'Coupe la sirène du Sentinel.',
-    hands: [modelHand('thumb-up')],
-    view: 'front',
+    demo: DEMOS['thumb-up'],
+    from: LEVEL,
   },
   {
     id: 'thumb-down',
     title: 'Pouce baissé, tenu 1,2 s',
     how: "Poing fermé, pouce vers le bas. Tenez jusqu'à ce que l'anneau soit plein.",
     does: 'Déclenche la sirène du Sentinel.',
-    hands: [modelHand('thumb-down')],
-    view: 'front',
+    demo: DEMOS['thumb-down'],
+    from: LEVEL,
   },
   {
     id: 'aim',
     title: 'Index pointé',
     how: "Paume vers le bas, index tendu vers l'écran. Le bout du doigt déplace un viseur, comme une souris en l'air.",
     does: 'Sur le Twin, visez la cuve de gaz, le hall, le boîtier ou un intrus : une fiche dit ce que le système en sait.',
-    hands: [modelHand('point')],
-    view: 'top',
+    demo: DEMOS.aim,
+    from: ABOVE,
   },
   {
     id: 'secret',
     title: 'Geste secret',
     how: "Celui-là n'est écrit nulle part.",
     does: "Indice : l'intrus n'aime pas qu'on le montre du doigt.",
-    hands: [],
-    view: 'top',
+    demo: DEMOS.untold,
+    from: ABOVE,
     secret: {
       title: 'Pistolet',
       how: "Index pointé, pouce écarté : le chien est armé. Rabattez le pouce le long de l'index.",
       does: "Tire où est le viseur. Sur le Twin, l'intrus touché se désintègre, puis revient.",
-      hands: [modelHand('point')],
+      demo: DEMOS.pistol,
     },
   },
 ]

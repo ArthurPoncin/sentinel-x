@@ -3,8 +3,9 @@ import type { Hand, Vec3 } from '../api/hand-frame'
 // Hands made up to show a gesture, as the sensor would see them: what the tutorial draws beside each one. The
 // same shape as the hand bridge's simulated hand (leap/src/simulate.ts), which the dashboard cannot import.
 
-// The poses the tutorial shows. `point` is a hand that aims, its thumb drawn back.
-export type ModelPose = 'flat' | 'fist' | 'edge' | 'thumb-up' | 'thumb-down' | 'point'
+// The poses the tutorial shows. `point` is a hand that aims, its thumb drawn back, and `fire` the same hand once
+// its thumb has come down along the index.
+export type ModelPose = 'flat' | 'fist' | 'edge' | 'thumb-up' | 'thumb-down' | 'point' | 'fire'
 
 const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
 const scale = (a: Vec3, by: number): Vec3 => [a[0] * by, a[1] * by, a[2] * by]
@@ -22,6 +23,7 @@ const AXES: Record<ModelPose, Axes> = {
   flat: FLAT,
   fist: FLAT,
   point: FLAT,
+  fire: FLAT,
   // On its edge, as a page is turned: thumb up, palm to the left.
   edge: { forward: [0, 0, -1], side: [0, 1, 0], normal: [-1, 0, 0] },
   'thumb-up': { forward: [-1, 0, 0], side: [0, 1, 0], normal: [0, 0, 1] },
@@ -43,6 +45,10 @@ const WRIST = -55
 const THUMB_RAISED = 1.4
 // And the thumb of a hand that points, drawn back off its index like a hammer.
 const THUMB_BACK = 1.2
+// And once it has fired: the hammer down, along the index.
+const THUMB_FIRED = 0.2
+// How a thumb leans in a pose that sets it another way than a hand at rest.
+const THUMB: Partial<Record<ModelPose, number>> = { 'thumb-up': THUMB_RAISED, 'thumb-down': THUMB_RAISED, point: THUMB_BACK, fire: THUMB_FIRED }
 
 // Which fingers are folded in each pose, thumb first.
 const CURLED: Record<ModelPose, readonly boolean[]> = {
@@ -50,6 +56,7 @@ const CURLED: Record<ModelPose, readonly boolean[]> = {
   edge: [false, false, false, false, false],
   fist: [true, true, true, true, true],
   point: [false, false, true, true, true],
+  fire: [false, false, true, true, true],
   'thumb-up': [false, true, true, true, true],
   'thumb-down': [false, true, true, true, true],
 }
@@ -63,7 +70,7 @@ export function modelHand(pose: ModelPose, { palm = [0, 200, 0], side = 'right',
 
   const finger = (index: number) => {
     const { knuckle, bones, lean: resting } = FINGERS[index] as (typeof FINGERS)[number]
-    const lean = index !== 0 ? resting : pose.startsWith('thumb') ? THUMB_RAISED : pose === 'point' ? THUMB_BACK : resting
+    const lean = index === 0 ? (THUMB[pose] ?? resting) : resting
     const curled = CURLED[pose][index] ?? false
     const joints: Vec3[] = [at(WRIST, knuckle[1] * 0.4), at(knuckle[0], knuckle[1])]
     // A straight finger goes on from its knuckle, leaning the way it is set on the hand; a folded one turns

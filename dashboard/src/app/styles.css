@@ -362,3 +362,48 @@
     stroke-dashoffset: 0;
   }
 }
+
+/* What the tutorial's hands of light are shown in: a dark well lit from below, ruled with fine lines as a
+   hologram is, and a band of light that goes down it. What is laid over it takes z-index 2. */
+.hologram {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgb(159 220 255 / 16%);
+  background: radial-gradient(120% 95% at 50% 100%, #10314f 0%, #0a1b2c 45%, #060c14 100%);
+}
+
+.hologram::before,
+.hologram::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.hologram::before {
+  inset: 0;
+  background: repeating-linear-gradient(to bottom, rgb(159 220 255 / 5%) 0 1px, transparent 1px 4px);
+}
+
+.hologram::after {
+  inset: 0 0 auto;
+  height: 30%;
+  background: linear-gradient(to bottom, transparent, rgb(159 220 255 / 7%), transparent);
+  animation: hologram-sweep 6s linear infinite;
+}
+
+@keyframes hologram-sweep {
+  from {
+    translate: 0 -100%;
+  }
+
+  to {
+    translate: 0 340%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hologram::after {
+    display: none;
+  }
+}
