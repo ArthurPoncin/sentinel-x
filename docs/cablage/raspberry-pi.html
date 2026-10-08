@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>*,*::before,*::after{box-sizing:border-box}body{margin:0}</style>
+<title>Câblage Raspberry Pi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<style>
+/* Layout: lab wiring sheet. The Pi's ports on its board, then its 40-pin header with the stepper's board, then cards and the table. */
+:root {
+  --bg: #EDF1EE;
+  --paper: #F9FBF9;
+  --grid: #E1E7E2;
+  --fg: #17201B;
+  --muted: #5A6760;
+  --line: #2A3530;
+  --module: #FFFFFF;
+  --board: #1C2733;
+  --board-ink: #E7EEF3;
+  --board-dim: #7D8C99;
+  --shield: #2C3846;
+  --accent: #1C5D8F;
+  --warn-bg: #FFF4E0;
+  --warn-fg: #7A3E00;
+
+  --v5: #D42A2A;
+  --v33: #E07800;
+  --gnd: #1F2428;
+  --vs: #C2307A;
+  --on-v5: #FFFFFF;
+  --on-v33: #261400;
+  --on-gnd: #FFFFFF;
+  --on-vs: #FFFFFF;
+
+  --c-mq2: #7A3DBE;
+  --c-sound: #08899B;
+  --c-pir: #2C8A3A;
+  --c-dht: #B88400;
+  --c-spk: #1F72B8;
+  --c-servo: #4F4FCF;
+  --pcb: #2F7A52;
+  --pcb-edge: #1E5A3A;
+  --hdr: #23282C;
+  --metal: #C9CFD3;
+  --usb3: #2E6FD8;
+  --usb2: #2B3035;
+
+  --f-display: "IBM Plex Sans Condensed", "Arial Narrow", sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E1311; --paper: #141A17; --grid: #1F2723; --fg: #E2E9E4; --muted: #93A199;
+    --line: #A9B7AF; --module: #1A221E; --board: #26323F; --board-ink: #E7EEF3; --board-dim: #8494A2; --shield: #344354;
+    --accent: #6FB2EA; --warn-bg: #2E2110; --warn-fg: #FFC98A;
+    --v5: #FF5B55; --v33: #FFA03A; --gnd: #C5CEC8; --vs: #FF7DB8;
+    --on-v5: #1A0505; --on-v33: #261400; --on-gnd: #111614; --on-vs: #2A0616;
+    --c-mq2: #B48BFF; --c-sound: #4FD3E3; --c-pir: #6FD47C; --c-dht: #F2C94C;
+    --c-spk: #5AB0FF; --c-servo: #9C9CFF;
+    --pcb: #24573D; --pcb-edge: #3E8A62; --hdr: #0F1214; --metal: #8D979D; --usb3: #4C8CF0; --usb2: #181B1E;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E1311; --paper: #141A17; --grid: #1F2723; --fg: #E2E9E4; --muted: #93A199;
+  --line: #A9B7AF; --module: #1A221E; --board: #26323F; --board-ink: #E7EEF3; --board-dim: #8494A2; --shield: #344354;
+  --accent: #6FB2EA; --warn-bg: #2E2110; --warn-fg: #FFC98A;
+  --v5: #FF5B55; --v33: #FFA03A; --gnd: #C5CEC8; --vs: #FF7DB8;
+  --on-v5: #1A0505; --on-v33: #261400; --on-gnd: #111614; --on-vs: #2A0616;
+  --c-mq2: #B48BFF; --c-sound: #4FD3E3; --c-pir: #6FD47C; --c-dht: #F2C94C;
+  --c-spk: #5AB0FF; --c-servo: #9C9CFF;
+  --pcb: #24573D; --pcb-edge: #3E8A62; --hdr: #0F1214; --metal: #8D979D; --usb3: #4C8CF0; --usb2: #181B1E;
+  color-scheme: dark;
+}
+
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 56px; display: grid; gap: 28px; }
+
+header { display: grid; gap: 6px; }
+.eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+h1 { font-family: var(--f-display); font-weight: 700; font-size: clamp(30px, 4.4vw, 44px); line-height: 1.05; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--f-display); font-weight: 600; font-size: 22px; margin: 0; text-wrap: balance; }
+.lede { margin: 0; color: var(--muted); max-width: 72ch; }
+
+.changes { display: flex; flex-wrap: wrap; gap: 8px 10px; margin: 6px 0 0; padding: 0; list-style: none; font-size: 13.5px; }
+.changes li { background: var(--paper); border: 1px solid var(--grid); border-radius: 7px; padding: 3px 10px; }
+.changes b { font-family: var(--f-mono); font-size: 11.5px; letter-spacing: .05em; text-transform: uppercase; margin-right: 6px; color: var(--muted); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; font-size: 13.5px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.chip { font-family: var(--f-mono); font-weight: 600; font-size: 11.5px; padding: 1px 8px; border-radius: 9px; }
+.chip.v5 { background: var(--v5); color: var(--on-v5); }
+.chip.v33 { background: var(--v33); color: var(--on-v33); }
+.chip.gnd { background: var(--gnd); color: var(--on-gnd); }
+.chip.vs { background: var(--vs); color: var(--on-vs); }
+.sw { width: 26px; height: 0; border-top: 3px solid var(--c-spk); border-radius: 2px; }
+.sw.dash { border-top: 2px dashed var(--muted); }
+.legend .rule { flex-basis: 100%; color: var(--fg); }
+
+.sheet { background: var(--paper); border: 1px solid var(--grid); border-radius: 10px; overflow-x: auto; }
+.sheet svg { display: block; width: 100%; min-width: 1000px; height: auto; }
+.sheet-note { font-size: 13px; color: var(--muted); margin: 8px 2px 0; }
+
+/* SVG styling */
+.paper { fill: var(--paper); }
+.gridline { fill: none; stroke: var(--grid); stroke-width: 1; }
+.board { fill: var(--board); }
+.shield { fill: var(--shield); stroke: var(--board-dim); stroke-width: 1; }
+.usb { fill: var(--board-dim); }
+.pad { fill: #C9A227; }
+.pad.off { fill: var(--board-dim); opacity: .55; }
+.board-title { font-family: var(--f-display); font-weight: 700; font-size: 20px; fill: var(--board-ink); letter-spacing: .04em; }
+.board-sub { font-family: var(--f-mono); font-size: 11px; fill: var(--board-dim); }
+.pin { font-family: var(--f-mono); font-size: 13px; font-weight: 600; fill: var(--board-ink); }
+.pin.off { font-weight: 400; fill: var(--board-dim); }
+.shield-txt { font-family: var(--f-mono); font-size: 11px; fill: var(--board-dim); letter-spacing: .06em; }
+
+.mod { fill: var(--module); stroke: var(--line); stroke-width: 1.5; }
+.mpad { fill: var(--line); }
+.mpad.off { opacity: .4; }
+.mt { font-family: var(--f-display); font-weight: 700; font-size: 17px; fill: var(--fg); }
+.ms { font-family: var(--f-body); font-size: 12px; fill: var(--muted); }
+.ml { font-family: var(--f-mono); font-size: 12.5px; fill: var(--fg); }
+.ml.sm { font-size: 11px; }
+.ml.dim { fill: var(--muted); }
+.ml.b { font-weight: 600; }
+.note { font-family: var(--f-body); font-size: 12px; fill: var(--muted); font-style: italic; }
+.warn-txt { font-family: var(--f-body); font-size: 12px; font-weight: 600; fill: var(--warn-fg); }
+.wl { font-family: var(--f-mono); font-size: 11px; font-weight: 600; }
+.wl.spk { fill: var(--c-spk); }
+.wl.servo { fill: var(--c-servo); }
+.wl.gnd { fill: var(--fg); }
+.rlabel { font-family: var(--f-mono); font-size: 12px; fill: var(--fg); font-weight: 600; }
+
+.w { fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.w.thin { stroke-width: 2.5; }
+.w5v { stroke: var(--v5); }
+.w33 { stroke: var(--v33); }
+.wgnd { stroke: var(--gnd); }
+.wvs { stroke: var(--vs); }
+.wnc { fill: none; stroke: var(--muted); stroke-width: 2; stroke-dasharray: 4 4; stroke-linecap: round; }
+.s-mq2 { stroke: var(--c-mq2); } .f-mq2 { fill: var(--c-mq2); }
+.s-sound { stroke: var(--c-sound); }
+.s-pir { stroke: var(--c-pir); }
+.s-dht { stroke: var(--c-dht); } .f-dht { fill: var(--c-dht); }
+.s-spk { stroke: var(--c-spk); } .f-spk { fill: var(--c-spk); }
+.s-servo { stroke: var(--c-servo); }
+.res { fill: var(--module); stroke: var(--fg); stroke-width: 2; }
+.spk { fill: var(--module); stroke: var(--fg); stroke-width: 2; stroke-linejoin: round; }
+.ink { fill: var(--fg); }
+.inkline { fill: none; stroke: var(--fg); stroke-width: 2; stroke-linecap: round; }
+
+.pill rect { stroke: none; }
+.pill text { font-family: var(--f-mono); font-size: 11px; font-weight: 600; text-anchor: middle; }
+.p5v rect { fill: var(--v5); } .p5v text { fill: var(--on-v5); }
+.p33 rect { fill: var(--v33); } .p33 text { fill: var(--on-v33); }
+.pgnd rect { fill: var(--gnd); } .pgnd text { fill: var(--on-gnd); }
+
+.halo { fill: none; stroke: var(--paper); stroke-width: 8; stroke-linecap: round; }
+.bb { fill: var(--module); stroke: var(--line); stroke-width: 1.5; }
+.gap { fill: var(--grid); }
+.dot5v { fill: var(--v5); } .dot33 { fill: var(--v33); } .dotgnd { fill: var(--gnd); } .dotvs { fill: var(--vs); }
+
+/* Cards */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+.card { background: var(--paper); border: 1px solid var(--grid); border-radius: 10px; padding: 18px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.card p { margin: 0; }
+.card svg { width: 100%; height: auto; display: block; }
+.card ol, .card ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.card.warn { background: var(--warn-bg); border-color: color-mix(in srgb, var(--warn-fg) 30%, transparent); }
+.card.warn h2 { color: var(--warn-fg); }
+.tag { font-family: var(--f-mono); font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.card.warn .tag { color: var(--warn-fg); }
+code, .mono { font-family: var(--f-mono); font-size: .92em; }
+.card.warn code { background: color-mix(in srgb, var(--warn-fg) 10%, transparent); padding: 0 4px; border-radius: 4px; }
+
+/* Table */
+.tbl-wrap { overflow-x: auto; background: var(--paper); border: 1px solid var(--grid); border-radius: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 680px; }
+th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+th { font-family: var(--f-mono); font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+tr:last-child td { border-bottom: none; }
+td.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+td .k { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; vertical-align: 0; }
+tr.pi td { background: color-mix(in srgb, var(--c-servo) 7%, transparent); }
+
+.code-card { background: var(--paper); border: 1px solid var(--grid); border-radius: 10px; padding: 16px 18px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.code-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.code-card p { margin: 0; font-size: 13px; color: var(--muted); }
+pre { margin: 0; overflow-x: auto; font-family: var(--f-mono); font-size: 13px; line-height: 1.6; color: var(--fg); }
+button { font-family: var(--f-mono); font-size: 12.5px; padding: 6px 12px; border-radius: 7px; border: 1px solid var(--line); background: var(--module); color: var(--fg); cursor: pointer; }
+button:hover { border-color: var(--accent); color: var(--accent); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.section { display: grid; gap: 12px; }
+
+/* The Pi's board and header */
+.pcb { fill: var(--pcb); stroke: var(--pcb-edge); stroke-width: 2; }
+.hdr { fill: var(--hdr); }
+.hole2 { fill: var(--paper); stroke: var(--pcb-edge); stroke-width: 2; }
+.chip2 { fill: var(--shield); stroke: var(--board-dim); stroke-width: 1; }
+.chip2-txt { font-family: var(--f-mono); font-size: 11px; fill: var(--board-ink); letter-spacing: .04em; }
+.eth { fill: var(--metal); stroke: var(--line); stroke-width: 1.5; }
+.usb3 { fill: var(--usb3); stroke: var(--line); stroke-width: 1.5; }
+.usb2 { fill: var(--usb2); stroke: var(--line); stroke-width: 1.5; }
+.port { fill: var(--metal); stroke: var(--line); stroke-width: 1.5; }
+.slot { fill: none; stroke: var(--paper); stroke-width: 2; opacity: .7; }
+.sd { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.lead { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+.co { font-family: var(--f-mono); font-size: 13px; font-weight: 600; fill: var(--fg); }
+.cs { font-family: var(--f-body); font-size: 12.5px; fill: var(--muted); }
+.pp5 { fill: var(--v5); } .pp33 { fill: var(--v33); } .ppgnd { fill: var(--gnd); } .ppio { fill: #C9A227; opacity: .55; }
+.ppused { fill: var(--c-servo); }
+.ring { fill: none; stroke: var(--c-servo); stroke-width: 2.5; }
+.plab { font-family: var(--f-mono); font-size: 13px; fill: var(--muted); }
+.plab.p5 { fill: var(--v5); font-weight: 600; } .plab.p33 { fill: var(--v33); font-weight: 600; } .plab.gnd { fill: var(--fg); font-weight: 600; }
+.sock { fill: var(--paper); stroke: var(--line); stroke-width: 1.5; }
+.led { fill: var(--v5); opacity: .8; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Sentinel-X · Poste de commande · zéro soudure</div>
+    <h1>Câblage du Raspberry Pi</h1>
+    <p class="lede">Raspberry Pi 4 Model B. Le « 2018 » imprimé sur la carte est l'année de son dessin : tous les Pi 4 le portent. Ce qui se branche sur chaque port, puis le moteur pas à pas de la caméra sur le connecteur GPIO.</p>
+    <ul class="changes" aria-label="En bref">
+      <li><b>Ports</b>alim, écran, webcam, ESP32, Ethernet</li>
+      <li><b>GPIO</b>moteur pas à pas sur les broches 4, 31, 33, 35, 37, 39</li>
+      <li><b>Wi-Fi</b>réservé au point d'accès de la table</li>
+    </ul>
+  </header>
+
+  <div class="legend" aria-label="Légende">
+    <span><span class="chip v5">5V</span> alimentation 5 V</span>
+    <span><span class="chip v33">3V3</span> alimentation 3,3 V</span>
+    <span><span class="chip gnd">GND</span> masse</span>
+    <span><span class="sw" style="border-top-color:var(--c-servo)"></span> commande du moteur (GPIO)</span>
+    <span class="rule">Les broches entourées sont celles qu'on utilise. Toutes les autres restent libres.</span>
+  </div>
+
+  <section class="section">
+    <h2>Ce qui se branche sur les ports</h2>
+    <div class="sheet">
+      <svg viewBox="0 0 1100 640" role="img" aria-labelledby="ports-title">
+        <title id="ports-title">Raspberry Pi 4 vu de dessus : connecteur GPIO en haut, Ethernet et ports USB à droite, USB-C, deux micro-HDMI et prise jack en bas, carte microSD à gauche dessous</title>
+        <defs>
+          <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+            <path d="M20 0H0V20" class="gridline"/>
+          </pattern>
+        </defs>
+        <rect width="1100" height="640" class="paper"/>
+        <rect width="1100" height="640" fill="url(#grid)"/>
+
+        <rect x="238" y="282" width="40" height="52" rx="3" class="sd"/>
+        <rect x="250" y="110" width="600" height="395" rx="20" class="pcb"/>
+        <circle cx="275" cy="135" r="11" class="hole2"/>
+        <circle cx="684" cy="135" r="11" class="hole2"/>
+        <circle cx="275" cy="481" r="11" class="hole2"/>
+        <circle cx="684" cy="481" r="11" class="hole2"/>
+
+        <!-- header, 2 x 20 -->
+        <rect x="297" y="117" width="365" height="41" rx="3" class="hdr"/>
+        <rect x="304.0" y="142" width="10" height="10" class="pp33"/>
+        <circle cx="309.0" cy="128" r="5" class="pp5"/>
+        <circle cx="326.9" cy="147" r="5" class="ppio"/>
+        <circle cx="326.9" cy="128" r="5" class="pp5"/>
+        <circle cx="326.9" cy="128" r="8.5" class="ring"/>
+        <circle cx="344.8" cy="147" r="5" class="ppio"/>
+        <circle cx="344.8" cy="128" r="5" class="ppgnd"/>
+        <circle cx="362.7" cy="147" r="5" class="ppio"/>
+        <circle cx="362.7" cy="128" r="5" class="ppio"/>
+        <circle cx="380.6" cy="147" r="5" class="ppgnd"/>
+        <circle cx="380.6" cy="128" r="5" class="ppio"/>
+        <circle cx="398.5" cy="147" r="5" class="ppio"/>
+        <circle cx="398.5" cy="128" r="5" class="ppio"/>
+        <circle cx="416.4" cy="147" r="5" class="ppio"/>
+        <circle cx="416.4" cy="128" r="5" class="ppgnd"/>
+        <circle cx="434.3" cy="147" r="5" class="ppio"/>
+        <circle cx="434.3" cy="128" r="5" class="ppio"/>
+        <circle cx="452.2" cy="147" r="5" class="pp33"/>
+        <circle cx="452.2" cy="128" r="5" class="ppio"/>
+        <circle cx="470.1" cy="147" r="5" class="ppio"/>
+        <circle cx="470.1" cy="128" r="5" class="ppgnd"/>
+        <circle cx="488.0" cy="147" r="5" class="ppio"/>
+        <circle cx="488.0" cy="128" r="5" class="ppio"/>
+        <circle cx="505.9" cy="147" r="5" class="ppio"/>
+        <circle cx="505.9" cy="128" r="5" class="ppio"/>
+        <circle cx="523.8" cy="147" r="5" class="ppgnd"/>
+        <circle cx="523.8" cy="128" r="5" class="ppio"/>
+        <circle cx="541.7" cy="147" r="5" class="ppio"/>
+        <circle cx="541.7" cy="128" r="5" class="ppio"/>
+        <circle cx="559.6" cy="147" r="5" class="ppio"/>
+        <circle cx="559.6" cy="128" r="5" class="ppgnd"/>
+        <circle cx="577.5" cy="147" r="5" class="ppused"/>
+        <circle cx="577.5" cy="147" r="8.5" class="ring"/>
+        <circle cx="577.5" cy="128" r="5" class="ppio"/>
+        <circle cx="595.4" cy="147" r="5" class="ppused"/>
+        <circle cx="595.4" cy="147" r="8.5" class="ring"/>
+        <circle cx="595.4" cy="128" r="5" class="ppgnd"/>
+        <circle cx="613.3" cy="147" r="5" class="ppused"/>
+        <circle cx="613.3" cy="147" r="8.5" class="ring"/>
+        <circle cx="613.3" cy="128" r="5" class="ppio"/>
+        <circle cx="631.2" cy="147" r="5" class="ppused"/>
+        <circle cx="631.2" cy="147" r="8.5" class="ring"/>
+        <circle cx="631.2" cy="128" r="5" class="ppio"/>
+        <circle cx="649.1" cy="147" r="5" class="ppgnd"/>
+        <circle cx="649.1" cy="147" r="8.5" class="ring"/>
+        <circle cx="649.1" cy="128" r="5" class="ppio"/>
+        <text x="309" y="172" class="chip2-txt" text-anchor="middle" style="fill:var(--board-ink)">1</text>
+
+        <!-- chips -->
+        <rect x="300" y="182" width="70" height="56" rx="4" class="chip2"/>
+        <text x="335" y="214" class="chip2-txt" text-anchor="middle">Wi-Fi</text>
+        <rect x="430" y="268" width="96" height="96" rx="4" class="chip2"/>
+        <text x="478" y="320" class="chip2-txt" text-anchor="middle">BCM2711</text>
+        <rect x="560" y="280" width="62" height="74" rx="4" class="chip2"/>
+        <text x="591" y="321" class="chip2-txt" text-anchor="middle">RAM</text>
+
+        <!-- right edge: Ethernet, USB 3, USB 2 -->
+        <rect x="786" y="126" width="92" height="100" rx="4" class="eth"/>
+        <rect x="806" y="152" width="52" height="48" rx="3" class="hdr"/>
+        <rect x="800" y="240" width="78" height="88" rx="4" class="usb3"/>
+        <path d="M812 268H866M812 300H866" class="slot"/>
+        <rect x="800" y="345" width="78" height="88" rx="4" class="usb2"/>
+        <path d="M812 373H866M812 405H866" class="slot"/>
+
+        <!-- bottom edge: USB-C, micro-HDMI 0 and 1, jack -->
+        <rect x="310" y="490" width="38" height="24" rx="8" class="port"/>
+        <rect x="420" y="492" width="28" height="22" rx="4" class="port"/>
+        <rect x="515" y="492" width="28" height="22" rx="4" class="port"/>
+        <circle cx="631" cy="500" r="13" class="port"/>
+        <circle cx="631" cy="500" r="5" class="hdr"/>
+
+        <!-- callouts: top -->
+        <path d="M480 117V84" class="lead"/>
+        <text x="480" y="62" class="co" text-anchor="middle">Connecteur GPIO</text>
+        <text x="480" y="79" class="cs" text-anchor="middle">carte du moteur pas à pas, schéma ci-dessous</text>
+        <!-- left -->
+        <path d="M300 210H232" class="lead"/>
+        <text x="224" y="206" class="co" text-anchor="end">Wi-Fi intégré</text>
+        <text x="224" y="224" class="cs" text-anchor="end">point d'accès de la table</text>
+        <path d="M238 308H232" class="lead"/>
+        <text x="224" y="304" class="co" text-anchor="end">microSD (dessous)</text>
+        <text x="224" y="322" class="cs" text-anchor="end">Raspberry Pi OS 64 bits</text>
+        <!-- right -->
+        <path d="M878 176H904" class="lead"/>
+        <text x="912" y="172" class="co">Ethernet</text>
+        <text x="912" y="190" class="cs">réseau du labo, Internet</text>
+        <path d="M878 284H904" class="lead"/>
+        <text x="912" y="280" class="co">USB 3 (bleus)</text>
+        <text x="912" y="298" class="cs">webcam USB</text>
+        <path d="M878 389H904" class="lead"/>
+        <text x="912" y="385" class="co">USB 2 (noirs)</text>
+        <text x="912" y="403" class="cs">ESP32, câble de données</text>
+        <!-- bottom -->
+        <path d="M329 514V538" class="lead"/>
+        <text x="329" y="556" class="co" text-anchor="middle">USB-C</text>
+        <text x="329" y="574" class="cs" text-anchor="middle">alim officielle 5,1 V / 3 A</text>
+        <path d="M434 514V596" class="lead"/>
+        <text x="434" y="614" class="co" text-anchor="middle">micro-HDMI 0</text>
+        <text x="434" y="632" class="cs" text-anchor="middle">libre</text>
+        <path d="M529 514V538" class="lead"/>
+        <text x="529" y="556" class="co" text-anchor="middle">micro-HDMI 1</text>
+        <text x="529" y="574" class="cs" text-anchor="middle">écran de statut 800×480</text>
+        <path d="M631 514V596" class="lead"/>
+        <text x="631" y="614" class="co" text-anchor="middle">jack</text>
+        <text x="631" y="632" class="cs" text-anchor="middle">libre</text>
+      </svg>
+    </div>
+    <p class="sheet-note">Vu de dessus, connecteur GPIO en haut. Les ports USB sont interchangeables : la webcam et l'ESP32 marchent sur n'importe lequel. L'écran va sur le micro-HDMI 1, celui à côté de la prise jack.</p>
+  </section>
+
+  <section class="section">
+    <h2>Le connecteur GPIO et le moteur pas à pas</h2>
+    <div class="sheet">
+      <svg viewBox="0 0 1000 700" role="img" aria-labelledby="gpio-title">
+        <title id="gpio-title">Connecteur GPIO du Raspberry Pi, broche 1 en haut. La carte ULN2003 : IN1 sur la broche 31 (GPIO 6), IN2 sur la 33 (GPIO 13), IN3 sur la 35 (GPIO 19), IN4 sur la 37 (GPIO 26), moins sur la 39 (GND), plus sur la 4 (5 V). Le moteur 28BYJ-48 dans la prise blanche de la carte.</title>
+        <rect width="1000" height="700" class="paper"/>
+        <rect width="1000" height="700" fill="url(#grid)"/>
+
+        <rect x="430" y="38" width="60" height="614" rx="6" class="hdr"/>
+        <rect x="439" y="53" width="14" height="14" class="pp33"/>
+        <text x="420" y="64" class="plab p33" text-anchor="end">3V3 · 1</text>
+        <circle cx="474" cy="60" r="7" class="pp5"/>
+        <text x="500" y="64" class="plab p5">2 · 5V</text>
+        <circle cx="446" cy="90" r="7" class="ppio"/>
+        <text x="420" y="94" class="plab" text-anchor="end">GPIO2 SDA · 3</text>
+        <circle cx="474" cy="90" r="7" class="pp5"/>
+        <circle cx="474" cy="90" r="11" class="ring"/>
+        <circle cx="446" cy="120" r="7" class="ppio"/>
+        <text x="420" y="124" class="plab" text-anchor="end">GPIO3 SCL · 5</text>
+        <circle cx="474" cy="120" r="7" class="ppgnd"/>
+        <text x="500" y="124" class="plab gnd">6 · GND</text>
+        <circle cx="446" cy="150" r="7" class="ppio"/>
+        <text x="420" y="154" class="plab" text-anchor="end">GPIO4 · 7</text>
+        <circle cx="474" cy="150" r="7" class="ppio"/>
+        <text x="500" y="154" class="plab">8 · GPIO14 TXD</text>
+        <circle cx="446" cy="180" r="7" class="ppgnd"/>
+        <text x="420" y="184" class="plab gnd" text-anchor="end">GND · 9</text>
+        <circle cx="474" cy="180" r="7" class="ppio"/>
+        <text x="500" y="184" class="plab">10 · GPIO15 RXD</text>
+        <circle cx="446" cy="210" r="7" class="ppio"/>
+        <text x="420" y="214" class="plab" text-anchor="end">GPIO17 · 11</text>
+        <circle cx="474" cy="210" r="7" class="ppio"/>
+        <text x="500" y="214" class="plab">12 · GPIO18</text>
+        <circle cx="446" cy="240" r="7" class="ppio"/>
+        <text x="420" y="244" class="plab" text-anchor="end">GPIO27 · 13</text>
+        <circle cx="474" cy="240" r="7" class="ppgnd"/>
+        <text x="500" y="244" class="plab gnd">14 · GND</text>
+        <circle cx="446" cy="270" r="7" class="ppio"/>
+        <text x="420" y="274" class="plab" text-anchor="end">GPIO22 · 15</text>
+        <circle cx="474" cy="270" r="7" class="ppio"/>
+        <text x="500" y="274" class="plab">16 · GPIO23</text>
+        <circle cx="446" cy="300" r="7" class="pp33"/>
+        <text x="420" y="304" class="plab p33" text-anchor="end">3V3 · 17</text>
+        <circle cx="474" cy="300" r="7" class="ppio"/>
+        <text x="500" y="304" class="plab">18 · GPIO24</text>
+        <circle cx="446" cy="330" r="7" class="ppio"/>
+        <text x="420" y="334" class="plab" text-anchor="end">GPIO10 MOSI · 19</text>
+        <circle cx="474" cy="330" r="7" class="ppgnd"/>
+        <text x="500" y="334" class="plab gnd">20 · GND</text>
+        <circle cx="446" cy="360" r="7" class="ppio"/>
+        <text x="420" y="364" class="plab" text-anchor="end">GPIO9 MISO · 21</text>
+        <circle cx="474" cy="360" r="7" class="ppio"/>
+        <text x="500" y="364" class="plab">22 · GPIO25</text>
+        <circle cx="446" cy="390" r="7" class="ppio"/>
+        <text x="420" y="394" class="plab" text-anchor="end">GPIO11 SCLK · 23</text>
+        <circle cx="474" cy="390" r="7" class="ppio"/>
+        <text x="500" y="394" class="plab">24 · GPIO8 CE0</text>
+        <circle cx="446" cy="420" r="7" class="ppgnd"/>
+        <text x="420" y="424" class="plab gnd" text-anchor="end">GND · 25</text>
+        <circle cx="474" cy="420" r="7" class="ppio"/>
+        <text x="500" y="424" class="plab">26 · GPIO7 CE1</text>
+        <circle cx="446" cy="450" r="7" class="ppio"/>
+        <text x="420" y="454" class="plab" text-anchor="end">GPIO0 ID_SD · 27</text>
+        <circle cx="474" cy="450" r="7" class="ppio"/>
+        <text x="500" y="454" class="plab">28 · GPIO1 ID_SC</text>
+        <circle cx="446" cy="480" r="7" class="ppio"/>
+        <text x="420" y="484" class="plab" text-anchor="end">GPIO5 · 29</text>
+        <circle cx="474" cy="480" r="7" class="ppgnd"/>
+        <text x="500" y="484" class="plab gnd">30 · GND</text>
+        <circle cx="446" cy="510" r="7" class="ppused"/>
+        <circle cx="446" cy="510" r="11" class="ring"/>
+        <circle cx="474" cy="510" r="7" class="ppio"/>
+        <text x="500" y="514" class="plab">32 · GPIO12</text>
+        <circle cx="446" cy="540" r="7" class="ppused"/>
+        <circle cx="446" cy="540" r="11" class="ring"/>
+        <circle cx="474" cy="540" r="7" class="ppgnd"/>
+        <text x="500" y="544" class="plab gnd">34 · GND</text>
+        <circle cx="446" cy="570" r="7" class="ppused"/>
+        <circle cx="446" cy="570" r="11" class="ring"/>
+        <circle cx="474" cy="570" r="7" class="ppio"/>
+        <text x="500" y="574" class="plab">36 · GPIO16</text>
+        <circle cx="446" cy="600" r="7" class="ppused"/>
+        <circle cx="446" cy="600" r="11" class="ring"/>
+        <circle cx="474" cy="600" r="7" class="ppio"/>
+        <text x="500" y="604" class="plab">38 · GPIO20</text>
+        <circle cx="446" cy="630" r="7" class="ppgnd"/>
+        <circle cx="446" cy="630" r="11" class="ring"/>
+        <circle cx="474" cy="630" r="7" class="ppio"/>
+        <text x="500" y="634" class="plab">40 · GPIO21</text>
+
+        <!-- the ULN2003 board -->
+        <text x="182" y="452" class="mt" text-anchor="middle">Carte ULN2003</text>
+        <rect x="70" y="460" width="160" height="190" rx="6" class="mod"/>
+        <rect x="84" y="474" width="52" height="30" rx="3" class="sock"/>
+        <text x="110" y="520" class="ms" text-anchor="middle">prise</text>
+        <circle cx="96" cy="606" r="5" class="led"/><circle cx="114" cy="606" r="5" class="led"/>
+        <circle cx="132" cy="606" r="5" class="led"/><circle cx="150" cy="606" r="5" class="led"/>
+        <text x="123" y="630" class="ms" text-anchor="middle">LED A B C D</text>
+        <rect x="225" y="475" width="10" height="10" class="mpad"/><text x="218" y="484" class="ml" text-anchor="end">+</text>
+        <rect x="225" y="505" width="10" height="10" class="mpad"/><text x="218" y="514" class="ml" text-anchor="end">IN1</text>
+        <rect x="225" y="535" width="10" height="10" class="mpad"/><text x="218" y="544" class="ml" text-anchor="end">IN2</text>
+        <rect x="225" y="565" width="10" height="10" class="mpad"/><text x="218" y="574" class="ml" text-anchor="end">IN3</text>
+        <rect x="225" y="595" width="10" height="10" class="mpad"/><text x="218" y="604" class="ml" text-anchor="end">IN4</text>
+        <rect x="225" y="625" width="10" height="10" class="mpad"/><text x="218" y="634" class="ml" text-anchor="end">−</text>
+
+        <!-- IN1 to IN4 on pins 31, 33, 35, 37; minus on 39 -->
+        <path d="M235 510H439" class="w s-servo"/><text x="420" y="503" class="wl servo" text-anchor="end">GPIO6 · 31</text>
+        <path d="M235 540H439" class="w s-servo"/><text x="420" y="533" class="wl servo" text-anchor="end">GPIO13 · 33</text>
+        <path d="M235 570H439" class="w s-servo"/><text x="420" y="563" class="wl servo" text-anchor="end">GPIO19 · 35</text>
+        <path d="M235 600H439" class="w s-servo"/><text x="420" y="593" class="wl servo" text-anchor="end">GPIO26 · 37</text>
+        <path d="M235 630H439" class="w wgnd"/><text x="420" y="623" class="wl gnd" text-anchor="end">GND · 39</text>
+        <!-- plus on pin 4 -->
+        <path d="M235 480H262V16H720V90H481" class="halo"/>
+        <path d="M235 480H262V16H720V90H481" class="w w5v"/>
+        <text x="500" y="83" class="wl" style="fill:var(--v5)">4 · 5V</text>
+
+        <!-- the motor -->
+        <path d="M110 474V438" class="w thin s-servo"/>
+        <circle cx="110" cy="404" r="34" class="spk"/>
+        <circle cx="110" cy="404" r="8" class="ink"/>
+        <text x="152" y="398" class="ml b">28BYJ-48</text>
+        <text x="152" y="414" class="ms">dans la prise</text>
+
+        <text x="460" y="682" class="note" text-anchor="middle">Pi tourné d'un quart de tour : connecteur à droite, ports USB en bas. Broche 1 : pastille carrée, à l'opposé des ports USB.</text>
+      </svg>
+    </div>
+    <p class="sheet-note">Colonne de gauche : les broches impaires, côté intérieur de la carte. Colonne de droite : les paires, le long du bord. Le moteur tire environ 200 mA, sans à-coups : la broche 5 V du Pi suffit.</p>
+  </section>
+
+  <div class="cards">
+    <section class="card warn" id="wifi">
+      <div class="tag">Wi-Fi</div>
+      <h2>Ne connecte pas le Pi à un autre Wi-Fi</h2>
+      <p>Le Pi n'a qu'une puce Wi-Fi. Elle sert de point d'accès <code>SentinelX-&lt;table&gt;</code> à l'ESP32 et au PC Opérateur.</p>
+      <ul>
+        <li>Connecté au Wi-Fi du labo, le point d'accès s'éteint : plus de mesures, plus de sirène.</li>
+        <li>Pour Internet, branche le câble Ethernet : le Wi-Fi reste le point d'accès.</li>
+        <li>Pour le remettre : <code>sudo nmcli connection up sentinel-x-ap</code></li>
+      </ul>
+    </section>
+    <section class="card">
+      <div class="tag">Avant d'allumer</div>
+      <h2>Quatre vérifications</h2>
+      <ol>
+        <li>Pi éteint pendant que tu câbles le connecteur GPIO.</li>
+        <li>Le − de la carte sur la broche 39, le + sur la broche 4. Inversés, la carte ou le Pi peuvent griller.</li>
+        <li>Rien sur les broches 1 et 17 (3V3), et aucun fil entre un 5V et une GPIO.</li>
+        <li>La caméra tournée à la main pour regarder droit devant : le moteur ne sait pas où il est, il compte ses pas depuis là.</li>
+      </ol>
+    </section>
+    <section class="card">
+      <div class="tag">Mise en route</div>
+      <h2>Sur le Pi, une fois</h2>
+      <ol>
+        <li><code>git pull</code></li>
+        <li><code>infra/stepper.sh</code> : retire le servo s'il y en avait un, déclare le moteur.</li>
+        <li><code>infra/plug-and-play.sh &lt;table&gt; --no-flash</code> : le récapitulatif affiche <code>Moteur ✓ moteur pas à pas</code>.</li>
+        <li><code>docker compose logs vision | grep Stepper</code> doit dire <code>ready</code>. Les LED de la carte clignotent quand la caméra tourne.</li>
+      </ol>
+    </section>
+  </div>
+
+  <section class="section">
+    <h2>Récapitulatif port par port</h2>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Port ou broche</th><th>Ce qui s'y branche</th><th>À savoir</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">USB-C</td><td>Alimentation officielle 5,1 V / 3 A</td><td>Un chargeur de téléphone fait redémarrer le Pi quand il calcule.</td></tr>
+          <tr><td class="mono">micro-HDMI 1</td><td>Écran de statut 800×480</td><td>Celui à côté de la prise jack. Écran noir : <code>video=HDMI-A-2:800x480M@60D</code> à la fin de <code>/boot/firmware/cmdline.txt</code>.</td></tr>
+          <tr><td class="mono">USB 3 (bleu)</td><td>Webcam USB</td><td>N'importe quel port marche.</td></tr>
+          <tr><td class="mono">USB 2 (noir)</td><td>ESP32</td><td>Avec un câble qui transmet les données : un câble de charge seule ne suffit pas.</td></tr>
+          <tr><td class="mono">Ethernet</td><td>Réseau du labo</td><td>Internet pour installer. Le Wi-Fi reste le point d'accès de la table.</td></tr>
+          <tr><td class="mono">microSD</td><td>Raspberry Pi OS 64 bits</td><td>16 Go au moins.</td></tr>
+          <tr class="pi"><td class="mono">31 · 33 · 35 · 37</td><td>ULN2003 IN1 · IN2 · IN3 · IN4</td><td>GPIO 6, 13, 19, 26. Autres GPIO : <code>PAN_STEPPER_PINS</code> dans <code>.env</code>.</td></tr>
+          <tr class="pi"><td class="mono">39 · 4</td><td>ULN2003 − · +</td><td>GND et 5 V du Pi, environ 200 mA.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+</body>
+</html>

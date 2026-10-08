@@ -3,7 +3,7 @@ import logging
 import pytest
 
 from sentinel_common.config import ConfigError
-from vision.pan import PanFollower, SysfsPwmServo, make_pan
+from vision.pan import HALF_STEPS, GpioStepper, PanFollower, SysfsPwmServo, make_pan
 
 
 def follow(follower: PanFollower, bearing: float | None, start: float, seconds: float, every: float = 0.1) -> list[float]:
@@ -243,12 +243,138 @@ def test_the_servo_refuses_invalid_settings(args, settings):
         SysfsPwmServo(*args, **settings)
 
 
+# --- the stepper --------------------------------------------------------------------------------------
+
+
+class Board:
+    """A ULN2003 board as the stepper sees it: what it set on IN1 to IN4, in order, and whether it was given
+    back."""
+
+    def __init__(self) -> None:
+        self.written: list[tuple[int, ...]] = []
+        self.released = False
+
+    def put(self, values) -> None:
+        self.written.append(tuple(values))
+
+    def release(self) -> None:
+        self.released = True
+
+    def steps(self) -> list[tuple[int, ...]]:
+        """The half-steps it was sent, the coils let go left out."""
+        return [values for values in self.written if any(values)]
+
+
+def stepper(board: Board, **settings) -> GpioStepper:
+    settings.setdefault("sleep", lambda seconds: None)
+    return GpioStepper((6, 13, 19, 26), open_lines=lambda chip, pins: board, **settings)
+
+
+def test_a_quarter_turn_is_a_quarter_of_its_half_steps():
+    drive = stepper(Board())
+    assert [drive.steps_for(angle) for angle in (-90, 0, 45, 90, 360)] == [-1024, 0, 512, 1024, 4096]
+    assert [stepper(Board(), invert=True).steps_for(angle) for angle in (-90, 90)] == [1024, -1024]
+    assert stepper(Board(), steps_per_turn=2048).steps_for(90) == 512
+
+
+def test_turns_half_step_by_half_step_then_lets_the_coils_go():
+    board = Board()
+    drive = stepper(board)
+    drive.open()
+    drive.turn(90.0)
+    drive.close()
+    steps = board.steps()
+    assert len(steps) == 1024
+    assert steps[0] == HALF_STEPS[1] and steps[-1] == HALF_STEPS[1024 % 8]
+    # Never a half-step skipped: each is the next one in the cycle.
+    assert all(HALF_STEPS.index(after) == (HALF_STEPS.index(before) + 1) % 8 for before, after in zip(steps, steps[1:]))
+    # There, the coils go, and closed, the lines too.
+    assert board.written[-1] == (0, 0, 0, 0)
+    assert board.released
+
+
+def test_turns_back_the_other_way_to_where_it_was_last_told():
+    board = Board()
+    drive = stepper(board)
+    drive.open()
+    drive.turn(10.0)
+    drive.turn(-10.0)
+    drive.close()
+    # However far it went toward 10°, it ends at -10°: the half-step of -114 is the last one.
+    assert board.steps()[-1] == HALF_STEPS[drive.steps_for(-10.0) % 8]
+    steps = board.steps()
+    assert all(abs(HALF_STEPS.index(after) - HALF_STEPS.index(before)) in (1, 7) for before, after in zip(steps, steps[1:]))
+
+
+def test_never_steps_faster_than_its_pace():
+    board, pauses = Board(), []
+    drive = stepper(board, step_s=0.003, sleep=pauses.append)
+    drive.open()
+    drive.turn(45.0)
+    drive.close()
+    assert pauses == [0.003] * 512
+
+
+def test_a_chip_that_is_not_there_stops_nothing_and_is_tried_again_later(caplog):
+    now, board, missing = [0.0], Board(), [True]
+
+    def open_lines(chip, pins):
+        if missing[0]:
+            raise FileNotFoundError(2, "No such file or directory", chip)
+        return board
+
+    drive = GpioStepper((6, 13, 19, 26), open_lines=open_lines, retry=5.0, clock=lambda: now[0], sleep=lambda seconds: None)
+    with caplog.at_level(logging.WARNING):
+        drive.open()
+        for _ in range(50):
+            now[0] += 0.05
+            drive.turn(20.0)
+    assert len(caplog.records) == 1 and "unavailable" in caplog.text
+    assert board.written == []
+    # The board comes: the next try finds it, and turns to where the camera is told to be.
+    missing[0] = False
+    now[0] = 5.5
+    drive.turn(20.0)
+    drive.close()
+    assert len(board.steps()) == drive.steps_for(20.0)
+
+
+def test_closed_twice_or_never_opened_does_nothing():
+    board = Board()
+    drive = stepper(board)
+    drive.close()
+    assert board.written == [] and not board.released
+    drive.open()
+    drive.close()
+    drive.close()
+    assert board.released
+
+
+@pytest.mark.parametrize(
+    "pins, settings",
+    [
+        ((6, 13, 19), {}),
+        ((6, 13, 19, 19), {}),
+        ((6, 13, 19, -1), {}),
+        ((6, 13, 19, 26), {"chip": ""}),
+        ((6, 13, 19, 26), {"steps_per_turn": 0}),
+        ((6, 13, 19, 26), {"step_s": 0}),
+    ],
+)
+def test_the_stepper_refuses_invalid_settings(pins, settings):
+    with pytest.raises(ValueError):
+        GpioStepper(pins, **settings)
+
+
 # --- PAN_DRIVE ----------------------------------------------------------------------------------------
 
 
 @pytest.fixture(autouse=True)
 def no_pan_settings(monkeypatch):
-    for name in ("PAN_PWM_DIR", "PAN_MIN_DEG", "PAN_MAX_DEG", "PAN_MIN_US", "PAN_MAX_US", "PAN_INVERT", "PAN_SPEED_DEG_S", "PAN_DEADBAND_DEG"):
+    for name in (
+        "PAN_PWM_DIR", "PAN_MIN_DEG", "PAN_MAX_DEG", "PAN_MIN_US", "PAN_MAX_US", "PAN_INVERT", "PAN_SPEED_DEG_S", "PAN_DEADBAND_DEG",
+        "PAN_STEPPER_PINS", "PAN_GPIO_CHIP", "PAN_STEPS_PER_TURN", "PAN_STEP_MS",
+    ):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -270,10 +396,25 @@ def test_the_pwm_drive_takes_its_channel_its_travel_and_its_pulses_from_the_envi
     assert follow(follower, -170.0, 5.0, 8.0)[-1] == -60
 
 
+def test_the_stepper_drive_takes_its_pins_and_its_half_steps_from_the_environment(monkeypatch):
+    monkeypatch.setenv("PAN_STEPPER_PINS", "17, 27, 22, 23")
+    monkeypatch.setenv("PAN_STEPS_PER_TURN", "2048")
+    monkeypatch.setenv("PAN_INVERT", "true")
+    follower, drive = make_pan("stepper")
+    assert drive.name == "stepper"
+    assert drive._pins == (17, 27, 22, 23)
+    assert drive.steps_for(90) == -512
+    assert follower.angle == 0
+
+
 @pytest.mark.parametrize(
     "name, variables",
     [
-        ("stepper", {}),
+        ("dc-motor", {}),
+        ("stepper", {"PAN_STEPPER_PINS": "6,13,19"}),
+        ("stepper", {"PAN_STEPPER_PINS": "6,13,19,19"}),
+        ("stepper", {"PAN_STEPPER_PINS": "six,13,19,26"}),
+        ("stepper", {"PAN_STEP_MS": "0"}),
         ("pwm", {"PAN_MIN_DEG": "10"}),
         ("pwm", {"PAN_MAX_DEG": "-10"}),
         ("pwm", {"PAN_MIN_DEG": "0", "PAN_MAX_DEG": "0"}),

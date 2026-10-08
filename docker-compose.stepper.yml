@@ -1,0 +1,32 @@
+# The stepper motor that turns the webcam (a 28BYJ-48 on its ULN2003 board), for the vision service, on
+# top of docker-compose.yml, in place of docker-compose.pan.yml's servo. Apart for the same reason: Docker
+# refuses to create a container whose device node is missing on the host, and a laptop has no GPIO chip.
+# On the Pi, infra/stepper.sh puts PAN_STEPPER=true in .env once, and infra/plug-and-play.sh then takes
+# this file, through these lines in .env:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.camera.yml:docker-compose.stepper.yml
+#   PAN_GPIO_GID=<the group that owns /dev/gpiochip0: gpio>
+# The chip's device node only, never `privileged` and no capability: the container sets the four lines
+# of the board, IN1 to IN4, through the host's `gpio` group.
+services:
+  vision:
+    group_add: ["${PAN_GPIO_GID:?the group of /dev/gpiochip0, put in .env by infra/plug-and-play.sh}"]
+    devices:
+      - /dev/gpiochip0
+    environment:
+      PAN_DRIVE: stepper
+      PAN_GPIO_CHIP: /dev/gpiochip0
+      # The board's IN1 to IN4 on the Pi's GPIOs, the half-steps of a turn of its shaft and the pause
+      # after each, from .env when they differ from the defaults (ai/vision/.env.example): 6,13,19,26,
+      # 4096 and 2 ms. Empty is unset: the default applies.
+      PAN_STEPPER_PINS: ${PAN_STEPPER_PINS:-}
+      PAN_STEPS_PER_TURN: ${PAN_STEPS_PER_TURN:-}
+      PAN_STEP_MS: ${PAN_STEP_MS:-}
+      # Its travel either way of where the camera rests, which way it is mounted and how far off the
+      # middle of the image it leaves the person be, as for the servo. 40°/s at most: a half-step every
+      # 2 ms is about 44°/s, and the camera must be where it was told to be.
+      PAN_MIN_DEG: ${PAN_MIN_DEG:-}
+      PAN_MAX_DEG: ${PAN_MAX_DEG:-}
+      PAN_INVERT: ${PAN_INVERT:-}
+      PAN_SPEED_DEG_S: ${PAN_SPEED_DEG_S:-40}
+      PAN_DEADBAND_DEG: ${PAN_DEADBAND_DEG:-}
+      CAMERA_FOV_DEG: ${CAMERA_FOV_DEG:-}

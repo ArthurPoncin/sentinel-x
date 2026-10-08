@@ -575,7 +575,7 @@ def test_settings_default_to_the_compose_stack(env):
         ("STREAM_FPS", "30", "STREAM_FPS: expected a number >= 1 and <= 15"),
         ("INFER_EVERY", "0", "INFER_EVERY"),
         ("VISION_TOKEN", "short", "VISION_TOKEN: too short"),
-        ("PAN_DRIVE", "stepper", "PAN_DRIVE: expected one of none, pwm"),
+        ("PAN_DRIVE", "dc-motor", "PAN_DRIVE: expected one of none, pwm, stepper"),
         ("CAMERA_FOV_DEG", "200", "CAMERA_FOV_DEG"),
     ],
 )

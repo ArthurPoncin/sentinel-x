@@ -8,9 +8,9 @@ Dans cette page, la table est la n° **4**. Remplace `4` par ton numéro de tabl
 
 - Le Raspberry Pi 4, son alimentation officielle (USB-C, 5 V / 3 A) et une carte microSD d'au moins 16 Go.
 - Un **câble Ethernet** branché sur un réseau qui a Internet (box, routeur, prise de l'école). Indispensable seulement la première fois.
-- L'ESP32 câblé selon [`firmware/include/pins.h`](../firmware/include/pins.h), avec un **câble USB qui transmet les données**. Beaucoup de câbles ne font que charger : avec eux, le Pi ne voit pas l'ESP32.
+- L'ESP32 câblé selon [le schéma de l'ESP32](cablage/esp32.html) (à ouvrir dans un navigateur) et [`firmware/include/pins.h`](../firmware/include/pins.h), avec un **câble USB qui transmet les données**. Beaucoup de câbles ne font que charger : avec eux, le Pi ne voit pas l'ESP32.
 - Une **webcam USB**, pour la détection d'intrusion.
-- En option, le **servo** qui fait tourner la webcam pour suivre la personne détectée : voir [Le servo de la caméra](#le-servo-de-la-caméra-en-option).
+- En option, un moteur qui fait tourner la webcam pour suivre la personne détectée : un **moteur pas à pas** 28BYJ-48 et sa carte ULN2003 ([Le moteur pas à pas](#le-moteur-pas-à-pas-de-la-caméra-en-option)), ou un **servo** ([Le servo](#le-servo-de-la-caméra-en-option)).
 - L'**écran HDMI** 800×480, branché sur un port micro-HDMI du Pi (le deuxième, côté prise jack, convient) : il affiche le statut du Poste de commande, à la place de l'écran de l'ESP32.
 
 ## 1. Préparer la carte SD (sur ton PC)
@@ -75,7 +75,7 @@ Il déroule 10 étapes numérotées. Chacune affiche un spinner et son temps, av
 1. **Logiciels** : Docker, PlatformIO, dnsmasq (DHCP) et chrony (heure), tant qu'il y a Internet.
 2. **Images Docker** : chaque image construite par GitHub pour ce code exact est téléchargée ; les autres sont construites sur le Pi (code modifié sur le Pi, image pas encore publiée, ou pas d'Internet : alors celles déjà là servent).
 3. **Secrets et certificats** : dans `infra/secrets/`, jamais commités.
-4. **Webcam USB** : elle est donnée au service `vision` si elle est branchée, et son servo aussi s'il est installé.
+4. **Webcam USB** : elle est donnée au service `vision` si elle est branchée, et son moteur aussi s'il est installé.
 5. **Démarrage de la stack** : les conteneurs, sur les images de l'étape 2.
 6. **Firmware du Sentinel** : compilé avec les secrets de ce Pi ; les mots de passe ne quittent jamais le Pi.
 7. **Wi-Fi de la table** : le Wi-Fi du Pi devient le réseau `SentinelX-4`, en 2,4 GHz, WPA2, sans Internet. L'ESP32 a toujours l'adresse `192.168.4.10`, et le Pi lui donne l'heure.
@@ -92,10 +92,39 @@ Le script finit sur un encadré : **vert** « Command Post prêt » si tout s'es
 - **Wi-Fi** et **Passphrase** : note la phrase de passe du Wi-Fi de la table. Elle est aussi gardée dans `infra/secrets/wifi.env`.
 - **Sentinel** `✓ 192.168.4.10` et l'étape 10 qui affiche `première mesure : 23.4 °C · humidité 41 % · gaz 312` : **tout marche**, l'ESP32 envoie ses mesures au Pi.
 - **Webcam** `✓ donnée à vision` : la webcam va au service `vision`.
-- **Servo** `✓ donné à vision` : la caméra tourne pour suivre la personne détectée. `sans` : la caméra est fixe, tout le reste marche pareil.
+- **Moteur** `✓ moteur pas à pas, donné à vision` (ou `servo`) : la caméra tourne pour suivre la personne détectée. `sans` : la caméra est fixe, tout le reste marche pareil.
 - **Écran HDMI** `✓ statut affiché` : l'écran du Pi montre le statut (ci-dessous).
 - Sous **À voir**, chaque remarque `!` dit ce qui manque : voir aussi [Dépannage](#dépannage).
 - Sous **Ensuite**, les commandes à copier telles quelles : récupérer le certificat, puis les journaux.
+
+### Le moteur pas à pas de la caméra (en option)
+
+La webcam peut être posée sur un moteur pas à pas 28BYJ-48, au-dessus du boîtier : elle tourne alors toute seule pour garder au centre de l'image la personne qu'elle suit, et le jumeau numérique place le bonhomme du bon côté du site.
+
+1. **Câble la carte ULN2003, Pi éteint**, le moteur branché dans sa prise blanche. Le [schéma du Raspberry Pi](cablage/raspberry-pi.html) montre ses ports et son connecteur GPIO :
+
+   | Carte ULN2003 | Raspberry Pi |
+   |---|---|
+   | IN1 · IN2 · IN3 · IN4 | GPIO 6 · 13 · 19 · 26 (broches **31 · 33 · 35 · 37**) |
+   | − | masse, broche **39** (juste à côté) |
+   | + | 5 V, broche **4** |
+
+   Les broches impaires sont celles de la rangée intérieure, la broche 1 étant à l'opposé des ports USB. Le moteur tire environ 200 mA, sans à-coups : la broche 5 V du Pi suffit, contrairement à un servo qui force. Laisse du mou au câble USB de la webcam.
+2. **Sur le Pi, une seule fois** : `infra/stepper.sh`. Il retire le servo s'il y en avait un, et déclare le moteur dans `.env`.
+3. **Tourne la caméra à la main** pour qu'elle regarde droit devant, puis lance `infra/plug-and-play.sh 4 --no-flash`. L'étape 4 affiche `moteur pas à pas de la caméra sur GPIO 6,13,19,26, donné à vision`.
+
+Le moteur ne sait pas où il est : il compte les pas qu'il fait depuis son démarrage. `vision` le ramène au centre quand il s'arrête proprement. Si le Pi a été coupé brutalement, ou si tu as tourné la caméra à la main, **remets-la droit devant avant de relancer** `vision`. Entre deux mouvements, le moteur n'est plus alimenté : ses engrenages tiennent la caméra, et il ne chauffe pas.
+
+**Régler le moteur** — dans le fichier `.env` à la racine du dépôt, puis `docker compose up -d vision` :
+
+| Réglage | Défaut | À changer si |
+|---|---|---|
+| `PAN_INVERT` | `false` | La caméra tourne du mauvais côté, à l'opposé de la personne : mets `true` |
+| `PAN_STEPPER_PINS` | `6,13,19,26` | Tu as branché IN1 à IN4 sur d'autres GPIO |
+| `PAN_MIN_DEG` / `PAN_MAX_DEG` | `-90` / `90` | Le câble de la webcam tire en bout de course : réduis (par exemple `-60` / `60`) |
+| `PAN_STEP_MS` | `2` | Le moteur vibre sans tourner, ou la caméra n'est pas au bon endroit après un aller-retour : il manque des pas, mets `3` |
+| `PAN_STEPS_PER_TURN` | `4096` | Un tour demandé ne fait pas un tour : c'est le nombre de demi-pas d'un tour de l'axe |
+| `CAMERA_FOV_DEG` | `60` | Le bonhomme du jumeau n'est pas du bon côté quand la personne est au bord de l'image |
 
 ### Le servo de la caméra (en option)
 
@@ -196,7 +225,8 @@ L'écran HDMI dit si le Sentinel envoie ses mesures ([L'écran de statut](#lécr
 | `MQTT: mot de passe` | Relance le script : il reflashe l'ESP32 avec le bon mot de passe |
 | `heure=0` | `systemctl status chrony` |
 | `T=nan` | Câblage du DHT22 et sa résistance de 10 kΩ entre DATA et 3V3. Rien n'est envoyé tant qu'il ne répond pas |
-| Pas de bip au démarrage, pas de sirène | Le transistor : l'ordre de ses pattes (il diffère entre le 2N2222 et le BC547), IO25 sur sa base par 1 kΩ, son émetteur à GND. L'enceinte entre le 5V (par 47 Ω) et son collecteur |
+| Pas de bip au démarrage, pas de sirène | L'enceinte : un fil sur IO25 **par une résistance de 100 Ω au moins**, l'autre sur **GND**, jamais sur le 5V. Ou le buzzer, + sur IO25 et − sur GND. Le moniteur doit afficher `[command] buzzer pattern` quand tu cliques sur la sirène : sinon, l'ordre n'arrive pas (Wi-Fi, broker) |
+| Tout s'éteint quand la sirène s'arrête, et repart quand elle sonne | Un fil de l'enceinte est sur le 5V : IO25 court-circuite alors le rail 5V. Débranche-la tout de suite, et rebranche-la entre IO25 (par 100 Ω) et GND |
 
 L'écran HDMI :
 
@@ -221,6 +251,8 @@ Le script lui-même :
 | `NetworkManager ne tourne pas` | Le système est trop ancien : réinstalle un Raspberry Pi OS (64-bit) récent |
 | `pas de webcam USB` | Branche la webcam sur un port USB du Pi (elle doit apparaître dans `ls /dev/v4l/by-id`), puis relance avec `--no-flash` |
 | `pas d'écran HDMI détecté` | Branche l'écran : le statut s'y affiche seul. Écran noir : tableau ci-dessus |
+| Le moteur pas à pas ne bouge pas | `docker compose logs vision` : « Stepper on /dev/gpiochip0, GPIO 6, 13, 19, 26, ready » quand il est pris en main. « unavailable » : relance `infra/stepper.sh` puis `infra/plug-and-play.sh <table> --no-flash`. Vérifie les fils IN1 à IN4, et le + et le − de la carte : ses LED s'allument quand le moteur tourne |
+| Le moteur pas à pas vibre sans tourner | Il manque des pas : `PAN_STEP_MS=3` dans `.env`, puis `docker compose up -d vision`. Ou IN1 à IN4 ne sont pas dans l'ordre |
 | Le servo ne bouge pas | `docker compose logs vision` : « Servo on /pwm ready » quand il est pris en main. « unavailable » : relance `infra/servo.sh`, redémarre le Pi, puis `infra/plug-and-play.sh <table> --no-flash`. Vérifie aussi son alimentation et le fil de signal sur le GPIO 18 |
 | Le Pi redémarre quand le servo bouge | Le servo est alimenté par le Pi : donne-lui une alimentation 5 V à part, masses reliées |
 | `vision` redémarre en boucle avec le servo | `DETECTOR=motion` dans `.env` : une caméra qui tourne a besoin du détecteur de personnes, enlève cette ligne |

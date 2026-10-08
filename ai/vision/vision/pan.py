@@ -3,8 +3,9 @@
 - `PanFollower`, the logic: from where that person stands around the camera to how far it is turned, at
   each instant. Pure, like the tracker: no servo and no clock in it, the caller passes the monotonic time.
 - `PanDrive`, what turns the camera: `PAN_DRIVE`, `pwm` (`SysfsPwmServo`, a servo on one of the Pi's
-  hardware PWM pins) or `none` (the camera is fixed: nothing here runs). Another one plugs in the same way:
-  a class with `open()`, `turn()` and `close()`, and a line in `DRIVES`.
+  hardware PWM pins), `stepper` (`GpioStepper`, a geared stepper motor on four of its GPIOs) or `none` (the
+  camera is fixed: nothing here runs). Another one plugs in the same way: a class with `open()`, `turn()`
+  and `close()`, and a line in `DRIVES`.
 
 Angles are in degrees from where the camera rests, positive toward the right of its image: the `pan` of an
 `intrusion` Alert.
@@ -13,9 +14,10 @@ Angles are in degrees from where the camera rests, positive toward the right of 
 import logging
 import math
 import os
+import threading
 import time
 from collections import deque
-from typing import Callable, Protocol
+from typing import Callable, Protocol, Sequence
 
 from sentinel_common.config import ConfigError, env_bool, env_float, env_str
 
@@ -271,6 +273,230 @@ class SysfsPwmServo:
             file.write(str(value))
 
 
+# The coils of a 28BYJ-48, IN1 to IN4 of its ULN2003 board, at each of the 8 half-steps that turn its rotor
+# once: one coil, then two, then the next one alone. Each half-step is next to the one before.
+HALF_STEPS: tuple[tuple[int, int, int, int], ...] = (
+    (1, 0, 0, 0),
+    (1, 1, 0, 0),
+    (0, 1, 0, 0),
+    (0, 1, 1, 0),
+    (0, 0, 1, 0),
+    (0, 0, 1, 1),
+    (0, 0, 0, 1),
+    (1, 0, 0, 1),
+)
+_COILS_OFF = (0, 0, 0, 0)
+
+
+class Lines(Protocol):
+    """The four GPIO lines of a stepper's board, IN1 to IN4: `put` sets them, `release` gives them back."""
+
+    def put(self, values: Sequence[int]) -> None: ...
+
+    def release(self) -> None: ...
+
+
+class GpioStepper:
+    """A geared stepper motor, the 28BYJ-48 on its ULN2003 board: IN1 to IN4 on four of the Pi's GPIOs,
+    through the kernel's GPIO character device (`chip`). In half-steps, `steps_per_turn` of them for a turn
+    of its shaft (4096 through its gears), one every `step_s` seconds at most: faster, it misses some.
+
+    It says nothing of where it is: it counts the half-steps it made from where it started. The camera is
+    taken to rest there when the service starts, and the service parks it there as it stops. A thread of
+    its own steps toward where it was last told to turn, and lets the coils go once there: the gears hold
+    the camera, and the motor does not heat up.
+
+    `invert` is for a motor mounted the other way: it turns the other way for the same angle. A chip, a
+    line or a right that is missing stops nothing, as for the servo: logged, tried again every `retry`
+    seconds, the camera fixed meanwhile.
+    """
+
+    name = "stepper"
+
+    def __init__(
+        self,
+        pins: Sequence[int],
+        *,
+        chip: str = "/dev/gpiochip0",
+        steps_per_turn: float = 4096.0,
+        step_s: float = 0.002,
+        invert: bool = False,
+        retry: float = 5.0,
+        open_lines: Callable[[str, tuple[int, ...]], Lines] | None = None,
+        clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        pins = tuple(pins)
+        if len(pins) != 4 or len(set(pins)) != 4 or not all(isinstance(pin, int) and not isinstance(pin, bool) and pin >= 0 for pin in pins):
+            raise ValueError(f"pins: four different GPIO numbers expected, IN1 to IN4, got {pins!r}")
+        if not chip:
+            raise ValueError("chip: the GPIO chip's device expected")
+        if not (_is_number(steps_per_turn) and steps_per_turn > 0):
+            raise ValueError(f"steps_per_turn: a number > 0 expected, got {steps_per_turn!r}")
+        if not (_is_number(step_s) and step_s > 0):
+            raise ValueError(f"step_s: a number > 0 expected, got {step_s!r}")
+        self._pins, self._chip = pins, chip
+        self._steps_per_turn, self._step_s, self._invert = steps_per_turn, step_s, invert
+        self._retry, self._clock, self._sleep = retry, clock, sleep
+        self._open_lines = open_lines or _gpiod_lines
+        self._lines: Lines | None = None
+        self._thread: threading.Thread | None = None
+        self._moved = threading.Condition()
+        self._position = 0  # half-steps made from where it started
+        self._target = 0  # and where it is stepping to
+        self._closing = False
+        self._tried_at: float | None = None
+        self._problem: str | None = None
+
+    @classmethod
+    def from_env(cls) -> "GpioStepper":
+        return cls(
+            _env_pins("PAN_STEPPER_PINS", (6, 13, 19, 26)),
+            chip=env_str("PAN_GPIO_CHIP", "/dev/gpiochip0"),
+            steps_per_turn=env_float("PAN_STEPS_PER_TURN", 4096, min=100, max=100000),
+            step_s=env_float("PAN_STEP_MS", 2, min=0.5, max=100) / 1000,
+            invert=env_bool("PAN_INVERT", False),
+        )
+
+    def steps_for(self, angle: float) -> int:
+        """The half-steps from where it rests to `angle`."""
+        steps = round(angle / 360 * self._steps_per_turn)
+        return -steps if self._invert else steps
+
+    def open(self) -> None:
+        self._start()
+
+    def turn(self, angle: float) -> None:
+        if self._thread is None:
+            if self._tried_at is not None and self._clock() - self._tried_at < self._retry:
+                return
+            self._start()
+            if self._thread is None:
+                return
+        target = self.steps_for(angle)
+        with self._moved:
+            if target != self._target:
+                self._target = target
+                self._moved.notify()
+
+    def close(self) -> None:
+        """Lets it make the rest of its way, then gives the lines back."""
+        thread = self._thread
+        if thread is None:
+            return
+        with self._moved:
+            self._closing = True
+            left = abs(self._target - self._position)
+            self._moved.notify()
+        thread.join(timeout=left * self._step_s + 2.0)
+        self._thread = None
+        self._release()
+
+    def _start(self) -> None:
+        self._tried_at = self._clock()
+        try:
+            self._lines = self._open_lines(self._chip, self._pins)
+            self._lines.put(_COILS_OFF)
+        except (OSError, ImportError) as error:
+            self._lost(error)
+            return
+        self._closing, self._problem = False, None
+        self._thread = threading.Thread(target=self._run, name="pan-stepper", daemon=True)
+        self._thread.start()
+        logger.info("Stepper on %s, GPIO %s, ready", self._chip, ", ".join(map(str, self._pins)))
+
+    def _run(self) -> None:
+        lines = self._lines
+        while True:
+            with self._moved:
+                while self._position == self._target and not self._closing:
+                    self._moved.wait()
+                if self._position == self._target:
+                    return
+                way = 1 if self._target > self._position else -1
+            try:
+                lines.put(HALF_STEPS[(self._position + way) % len(HALF_STEPS)])
+                self._sleep(self._step_s)
+                with self._moved:
+                    self._position += way
+                    there = self._position == self._target
+                if there:
+                    lines.put(_COILS_OFF)
+            except OSError as error:
+                self._lost(error)
+                return
+
+    def _release(self) -> None:
+        lines, self._lines = self._lines, None
+        if lines is None:
+            return
+        try:
+            lines.put(_COILS_OFF)
+            lines.release()
+        except OSError as error:
+            logger.warning("Stepper on %s could not be let go (%s)", self._chip, error)
+
+    def _lost(self, error: Exception) -> None:
+        self._thread = None
+        self._release()
+        # Logged when the reason changes, not on every retry of a board left unplugged.
+        if str(error) != self._problem:
+            self._problem = str(error)
+            logger.warning("Stepper on %s unavailable (%s): the camera stays fixed, retrying every %g s", self._chip, error, self._retry)
+
+
+class _GpiodLines:
+    """IN1 to IN4 through libgpiod, the Debian package python3-libgpiod: its version 1 (Bookworm's), or 2."""
+
+    def __init__(self, chip: str, pins: tuple[int, ...]) -> None:
+        import gpiod  # in the image, not on a laptop: imported only for PAN_DRIVE=stepper
+
+        self._pins = pins
+        if hasattr(gpiod, "request_lines"):
+            from gpiod.line import Direction, Value
+
+            self._active, self._inactive = Value.ACTIVE, Value.INACTIVE
+            self._request = gpiod.request_lines(
+                chip,
+                consumer="sentinel-x-vision",
+                config={pins: gpiod.LineSettings(direction=Direction.OUTPUT, output_value=Value.INACTIVE)},
+            )
+            self._chip = None
+        else:
+            self._chip = gpiod.Chip(chip)
+            self._request = self._chip.get_lines(list(pins))
+            self._request.request(consumer="sentinel-x-vision", type=gpiod.LINE_REQ_DIR_OUT, default_vals=[0] * len(pins))
+
+    def put(self, values: Sequence[int]) -> None:
+        if self._chip is None:
+            self._request.set_values({pin: self._active if on else self._inactive for pin, on in zip(self._pins, values)})
+        else:
+            self._request.set_values(list(values))
+
+    def release(self) -> None:
+        self._request.release()
+        if self._chip is not None:
+            self._chip.close()
+
+
+def _gpiod_lines(chip: str, pins: tuple[int, ...]) -> Lines:
+    return _GpiodLines(chip, pins)
+
+
+def _env_pins(name: str, default: tuple[int, ...]) -> tuple[int, ...]:
+    """Four GPIO numbers, IN1 to IN4, as `6,13,19,26`."""
+    raw = env_str(name)
+    if raw is None:
+        return default
+    try:
+        pins = tuple(int(part) for part in raw.split(","))
+    except ValueError:
+        pins = ()
+    if len(pins) != 4 or len(set(pins)) != 4 or min(pins) < 0:
+        raise ConfigError(f"{name}: four different GPIO numbers expected, IN1 to IN4, as 6,13,19,26, got {raw!r}")
+    return pins
+
+
 def _env_travel() -> tuple[float, float]:
     """PAN_MIN_DEG and PAN_MAX_DEG: how far the servo turns the camera either way of where it rests."""
     low = env_float("PAN_MIN_DEG", -90, min=-180, max=0)
@@ -283,6 +509,7 @@ def _env_travel() -> tuple[float, float]:
 # PAN_DRIVE → a factory that reads its own settings. `none` is not here: a fixed camera has no drive.
 DRIVES: dict[str, Callable[[], PanDrive]] = {
     "pwm": SysfsPwmServo.from_env,
+    "stepper": GpioStepper.from_env,
 }
 NO_DRIVE = "none"
 

@@ -15,14 +15,14 @@ The 3D-printed (Fusion360), laser-engraved shell that houses the Sentinel **and*
 _Avoid_: box, case, shell.
 
 **Sentinel**:
-The sensing unit: an **ESP32** with the environmental and intrusion Probes and the Alarm hardware (a speaker, driven through a transistor). Lives in the Enclosure and joins the Command Post's Wi-Fi. Carries the Probes, not the camera.
+The sensing unit: an **ESP32** with the environmental and intrusion Probes and the Alarm hardware (a speaker on one of its pins). Lives in the Enclosure and joins the Command Post's Wi-Fi. Carries the Probes, not the camera.
 _Avoid_: box, edge node, device, module.
 
 **Sentinel-X**:
 The product name / the system as a whole. Not a single component.
 
 **Command Post**:
-The Local Server ("PC Serveur Local") — a **Raspberry Pi 4** fixed inside the Enclosure (the brief's Option A). It is the Wi-Fi access point, runs the whole containerized stack (broker, DB, API, dashboard, vision and predictive AI) and owns the USB webcam, the servo that turns it, and the HDMI status screen. The single server of the system.
+The Local Server ("PC Serveur Local") — a **Raspberry Pi 4** fixed inside the Enclosure (the brief's Option A). It is the Wi-Fi access point, runs the whole containerized stack (broker, DB, API, dashboard, vision and predictive AI) and owns the USB webcam, the stepper motor that turns it, and the HDMI status screen. The single server of the system.
 _Avoid_: server, PC, base, local server.
 
 **Operator**:

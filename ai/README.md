@@ -9,7 +9,7 @@ Two jobs, both on the Pi (the brief's Option A): **see** (intrusion on the USB w
 - Capture the **USB webcam** with OpenCV's `VideoCapture`. In the container: its device node passed with `devices:` — never `privileged`. The ZIF camera first planned (Joy-IT RB-Camera-JT, OV5647, read with Picamera2) was dropped: the Pi detected it but never got a frame from it.
 - Resize/throttle frames (**≤ 640x480**, target **< 100 ms/frame**).
 - Emit an `intrusion` Alert with **`x_norm`** (normalized horizontal position 0→1), **`h_norm`** (how tall the person is in the image, 0→1: how near) and **`pan`** (how far the camera is turned), so the 3D twin can stand the intruder where they are on the site — and **`others`**, the other people in the image, for it to stand a figurine for each.
-- **Turn the camera** to the person it follows, when it is on a servo (`PAN_DRIVE=pwm`): [below](#the-camera-on-its-servo--pan_drivepwm).
+- **Turn the camera** to the person it follows, when it is on a servo (`PAN_DRIVE=pwm`, [below](#the-camera-on-its-servo--pan_drivepwm)) or on a stepper motor (`PAN_DRIVE=stepper`, [below](#the-camera-on-a-stepper-motor--pan_drivestepper)).
 - `vision` is the only process that opens the camera, so it also **serves the camera feed** to the dashboard (MJPEG, detections drawn), through the reverse proxy behind the Operator session.
 
 ### The intrusion Alert's lifecycle — `vision.tracker.IntruderTracker`
@@ -62,6 +62,14 @@ The webcam stands on a servo that turns it left and right: `vision` keeps the pe
 - **It needs a person detector**: `PAN_DRIVE=pwm` with `DETECTOR=motion` is refused at start. A camera that turns sees everything move, and would follow its own turning. `MOTION_GATE` is fine: the gate opens while it turns, and the model decides.
 - **Calibrate it on the real mount** (the defaults are a standard servo's): turn it to each end with `PAN_MIN_DEG=…`/`PAN_MAX_DEG=…` and read how far it really goes, adjust `PAN_MIN_US` / `PAN_MAX_US` until −90 and 90 are a quarter turn each way, set `PAN_INVERT` if it turns away from people, and measure the webcam's field of view for `CAMERA_FOV_DEG` (and the Twin's `SITE.camera.fov`). On the Pi these go in `.env`: [`../infra/README.md`](../infra/README.md).
 - **Another drive**: a class with `name`, `open()`, `turn(angle)` and `close()`, and a line in `DRIVES`.
+
+### The camera on a stepper motor — `PAN_DRIVE=stepper`
+The same follower, another motor: a 28BYJ-48 on its ULN2003 board (`vision.pan.GpioStepper`), its IN1 to IN4 on four of the Pi's GPIOs, `PAN_STEPPER_PINS` (6,13,19,26: pins 31, 33, 35, 37, the ground at 39 beside them).
+- **Through the kernel's GPIO character device** (`/dev/gpiochip0`, `PAN_GPIO_CHIP`) and libgpiod, the Debian package `python3-libgpiod` in the image: its version 1 (Bookworm's) or 2. Imported only for this drive; the tests give it a board of their own.
+- **Half-steps**, 4096 for a turn of its shaft through its gears (`PAN_STEPS_PER_TURN`), one every `PAN_STEP_MS` (2 ms) at most: faster, it misses some. That is about 44°/s, so `docker-compose.stepper.yml` sets `PAN_SPEED_DEG_S` to 40: the follower never asks for more, and the camera is where it was told to be.
+- **It says nothing of where it is**: it counts the half-steps it made from where it started. The camera is taken to rest there when `vision` starts, and parked there as it stops. Killed without stopping, or turned by hand meanwhile, it is lost: turn it back by hand to look straight ahead before the next start.
+- **A thread of its own** steps toward where it was last told to turn, and lets the coils go once there: the gears hold the camera, the motor does not heat up, and it can be turned by hand.
+- **A chip or a right that is missing stops nothing**, as for the servo: logged once, tried again every 5 s, the camera fixed meanwhile. `PAN_INVERT=true` for a motor mounted the other way.
 
 ### The person detector — `DETECTOR=tflite`
 `vision.tflite.TFLiteDetector`, adapted from upstream's `src/object-detection-tflite` (its MIT notice is at the top of [`vision/vision/tflite.py`](vision/vision/tflite.py)).
