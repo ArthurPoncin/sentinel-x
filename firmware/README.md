@@ -8,7 +8,7 @@ Firmware for the Sentinel: reads the probes, drives the Alarm, **decides its own
 - **MCU:** ESP32 DevKitC V4 by AZ-Delivery (ESP32-WROOM-32, 38 pins; Wi-Fi 2.4 GHz to the Pi's access point) — ESP8266 deviation justified in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#deviations-to-validate-with-the-coach-monday)
 - **Probes:** DHT22 (temp/humidity), MQ-2 (gas — 5 V heater; its analog output needs a divider to stay under 3.3 V), PIR HC-SR501 (presence), CZN-15E sound sensor (digital output only: HIGH/LOW against the threshold set by its potentiometer; the firmware samples it fast and reports the share of the cycle that was loud). Analog probes go on ADC1 pins: ADC2 is unusable while Wi-Fi is on.
 - **Display:** none on the ESP32. The status screen is the Pi's HDMI screen ([`../infra/README.md`](../infra/README.md#the-status-screen)): it shows whether the Sentinel is online, its readings and its raised Alerts. Why it is not online, the serial monitor says
-- **Alarm:** a passive speaker (4–8 Ω), driven by IO25 through an NPN transistor (2N2222 or BC547): IO25 → 1 kΩ → base, emitter → GND, collector → the speaker's black wire, its red wire → 47 Ω → 5 V. The firmware plays a square wave on it, the siren of the buzzer it replaces, louder. Never the speaker straight on IO25: it would draw far more than the pin gives
+- **Alarm:** a passive speaker (4–8 Ω) between IO25 and GND, through **100 Ω or more**: about 30 mA, what a pin may give. Or the buzzer, straight between IO25 and GND, louder for the same current. The firmware plays a square wave on it: the 1800/2600 Hz siren. **Never the speaker on 5V**: through IO25 it is a short circuit of the 5 V rail, which then fails everything on it, and the pin with it. Louder still through an NPN transistor (2N2222, BC547): IO25 → 1 kΩ → base, emitter → GND, collector → the speaker's black wire, its red wire → 47 Ω → 5 V
 
 ## Responsibilities
 - Cadenced probe sampling → one **telemetry snapshot** per cycle, published over **MQTTS**.
@@ -27,7 +27,7 @@ By hand, from a laptop with PlatformIO: copy `include/secrets.example.h` to `inc
 
 | File | Role |
 |---|---|
-| `include/pins.h` | GPIOs, as on the wiring diagram |
+| `include/pins.h` | GPIOs, as on the wiring diagram: [`../docs/cablage/esp32.html`](../docs/cablage/esp32.html), the Pi's in [`raspberry-pi.html`](../docs/cablage/raspberry-pi.html) |
 | `include/config.h` | cycle, thresholds, hysteresis, warm-ups: **calibrate here** |
 | `src/probes.*` | DHT22, MQ-2 (16-sample average), PIR, sound share (50 ms windows on an esp_timer, idle level read at boot) |
 | `src/alerts.*` | one state machine per kind; a severity change is raised again on the same `alert_id` |
@@ -44,5 +44,5 @@ Telemetry, Alert and command schemas + topics: [`../docs/ARCHITECTURE.md`](../do
 - [x] Breadboard wiring diagram
 - [x] Probe read loop, telemetry snapshot, Alert state machine (hysteresis), autonomous Alarm
 - [x] MQTTS connection with team CA cert + MQTT credentials, actuator commands
-- [x] The Alarm on a speaker through a transistor, in place of the buzzer
+- [x] The Alarm on a speaker, in place of the buzzer
 - [ ] Calibrate the thresholds in `include/config.h` on the real kit (MQ-2 in clean air, a clap, a hand on the DHT22)

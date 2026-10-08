@@ -94,8 +94,8 @@ fi
 next=()
 if changed firmware; then
   next+=("Le firmware du Sentinel a changé : branche l'ESP32 sur le Pi, puis infra/plug-and-play.sh <numéro de table>")
-elif changed infra/setup.sh infra/mosquitto/acl infra/plug-and-play.sh infra/screen.py docker-compose.pan.yml; then
-  next+=("L'installation du Pi a changé (comptes du broker, Wi-Fi, écran, moteur de la caméra…) : infra/plug-and-play.sh <numéro de table> --no-flash")
+elif changed infra/setup.sh infra/mosquitto/acl infra/plug-and-play.sh infra/screen.py infra/servo.sh; then
+  next+=("L'installation du Pi a changé (comptes du broker, Wi-Fi, écran…) : infra/plug-and-play.sh <numéro de table> --no-flash")
 fi
 if changed cyber/harden.sh; then
   next+=("Le durcissement a changé : cyber/harden.sh <numéro de table>, après plug-and-play.sh s'il est à relancer")

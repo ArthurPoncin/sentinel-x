@@ -13,10 +13,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app/common:/app/vision
 
-# Debian's OpenCV and NumPy and, on arm64 (the Pi), Picamera2 and the libcamera it drives, from the
-# Raspberry Pi archive: the Pi OS's own pairing, for CAMERA_SOURCE=picamera2 (the ZIF camera). Elsewhere
-# there is no ZIF camera to read: neither the archive nor Picamera2. The archive's key is checked against
-# its sha256 before apt trusts it.
+# Debian's OpenCV, NumPy and libgpiod (PAN_DRIVE=stepper drives the Pi's GPIOs through it) and, on arm64
+# (the Pi), Picamera2 and the libcamera it drives, from the Raspberry Pi archive: the Pi OS's own pairing,
+# for CAMERA_SOURCE=picamera2 (the ZIF camera). Elsewhere there is no ZIF camera to read: neither the
+# archive nor Picamera2. The archive's key is checked against its sha256 before apt trusts it.
 ARG RPI_ARCHIVE_KEY_SHA256=76603890d82a492175caf17aba68dc73acb1189c9fd58ec0c19145dfa3866d56
 RUN set -eu; \
     camera=; \
@@ -32,7 +32,7 @@ RUN set -eu; \
       camera=python3-picamera2; \
     fi; \
     apt-get update; \
-    apt-get install -y --no-install-recommends python3 python3-numpy python3-opencv $camera; \
+    apt-get install -y --no-install-recommends python3 python3-numpy python3-opencv python3-libgpiod $camera; \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

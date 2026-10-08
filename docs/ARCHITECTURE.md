@@ -52,7 +52,7 @@ flowchart LR
     BROKER <--> API
     API <--> DB
     CAM --> VISION
-    VISION -- "GPIO 17, 18, 27, 22: pan" --> SERVO
+    VISION -- "GPIO 6, 13, 19, 26: pan" --> SERVO
     BROKER -- "MQTTS: telemetry + alerts (read-only)" --> SCREEN
     VISION -- "POST /api/v1/alerts + token" --> API
     BROKER -- "MQTTS: live telemetry" --> PRED
@@ -68,8 +68,8 @@ flowchart LR
 
 The Enclosure (Fusion360, 3D-printed, laser-engraved) houses the Sentinel **and** the Command Post:
 
-- **Pi 4 + USB webcam** — active cooling and vents (the Pi runs hot under inference). The webcam stands on top of the Enclosure, on a **stepper motor** (28BYJ-48, 5 V, geared 1:64, on its ULN2003 driver board) that turns it left and right to follow whoever it sees: half a turn of travel, a quarter either way of where it rests, with slack on its USB cable.
-- **The motor**: IN1 to IN4 of the ULN2003 board on the Pi's **GPIO 17, 18, 27 and 22** (pins 11, 12, 13, 15), its `-` on a ground of the Pi (pin 6), its `+` on **5 V, from a supply of its own for preference** with the grounds joined (about 250 mA with two coils on; never the 3.3 V). It has no end stop: where the camera points when `vision` starts is where it rests. `vision` drives it, half-step by half-step ([`../ai/`](../ai/README.md#the-camera-on-its-motor--pan_drivestepper)); the stack runs the same with a camera left fixed (`PAN_DRIVE=none`). It replaced the servo first planned (S1213, on the hardware PWM of GPIO 18).
+- **Pi 4 + USB webcam** — active cooling and vents (the Pi runs hot under inference). The webcam stands on top of the Enclosure, on a **stepper motor** (28BYJ-48 on its ULN2003 board) that turns it left and right to follow whoever it sees: about half a turn of travel, a quarter either way of where it rests, with slack on its USB cable. It replaced a servo (S1213), lost to a wiring mistake; `PAN_DRIVE=pwm` still drives one.
+- **The stepper motor**: the board's IN1 to IN4 on the Pi's **GPIO 6, 13, 19, 26** (pins 31, 33, 35, 37), its − on the ground beside them (pin 39), its + on the Pi's 5 V (pin 4): some 200 mA, steadily. `vision` drives it ([`../ai/`](../ai/README.md#the-camera-on-a-stepper-motor--pan_drivestepper)); the stack runs the same without one. A servo would go on **GPIO 18** (pin 12, hardware PWM) with **5 V from a supply of its own**: one that stalls draws more than the Pi's 5 V pin gives, and the Pi restarts.
 - **DHT22 and MQ-2 in a separate ventilated compartment**, away from the Pi and from each other (the MQ-2 has a heater). Otherwise the probes measure the Pi's own heat and the predictive model learns inference load as "thermal drift".
 - **Status screen visible** through the shell, clean cable passthroughs, no visible wires (brief requirement).
 - **Power:** official 15 W USB-C supply (5.1 V / 3 A) for the Pi 4.
@@ -318,7 +318,7 @@ This plan is the basis of the network schema deliverable (engineering report) �
 | `mosquitto` | MQTT broker (MQTTS, ACL) | 8883 |
 | `api` | REST + WebSocket, Alert pipeline, `Status`, auth; keeps the telemetry + Alert history (time-scrubber, predictive training) in an SQLite file on the `api-data` volume — there is no separate `db` container | — |
 | `dashboard` | Web app + 3D Digital Twin (rendered in the Operator's browser) | — |
-| `vision` | Person detection on the USB webcam (OpenCV, its device node via `devices:` in `docker-compose.camera.yml` and the host's `video` group); turns the webcam's motor to whom it follows (the header's GPIO chip via `docker-compose.pan.yml` and the host's `gpio` group); serves the annotated camera feed | — |
+| `vision` | Person detection on the USB webcam (OpenCV, its device node via `devices:` in `docker-compose.camera.yml` and the host's `video` group); turns the webcam's motor to whom it follows (the GPIO chip via `docker-compose.stepper.yml`, or a servo's PWM channel via `docker-compose.pan.yml`, and the host's `gpio` group); serves the annotated camera feed | — |
 | `predictive` | Isolation Forest on live telemetry (MQTTS subscriber); trains on the api's SQLite history, the `api-data` volume mounted read-only (and opened `mode=ro`); its model on the `predictive-model` volume | — |
 
 `docker compose up` brings the whole Command Post online. Hardening rules for every service (non-root, no `privileged`, `cap_drop: ALL`…) are in [`../cyber/`](../cyber/).

@@ -4,7 +4,7 @@
 
 namespace {
 
-// A square wave on the transistor's base: the speaker, between the 5 V and the collector, plays it.
+// A square wave on IO25: the speaker (through its resistor) or the buzzer, between the pin and GND, plays it.
 constexpr int CHANNEL = 0;
 constexpr uint32_t STEADY_HZ = 2600;
 constexpr uint32_t SIREN_LOW_HZ = 1800, SIREN_HIGH_HZ = 2600, SIREN_STEP_MS = 350;

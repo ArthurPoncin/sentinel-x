@@ -1,13 +1,9 @@
 import logging
-import os
-import struct
-import time
 
 import pytest
 
 from sentinel_common.config import ConfigError
-from vision import pan
-from vision.pan import GpioLines, PanFollower, SysfsPwmServo, Uln2003Stepper, make_pan
+from vision.pan import HALF_STEPS, GpioStepper, PanFollower, SysfsPwmServo, make_pan
 
 
 def follow(follower: PanFollower, bearing: float | None, start: float, seconds: float, every: float = 0.1) -> list[float]:
@@ -249,282 +245,125 @@ def test_the_servo_refuses_invalid_settings(args, settings):
 
 # --- the stepper --------------------------------------------------------------------------------------
 
-# IN1 to IN4 at each of the eight half-steps, and with the coils let go.
-HALF = [(1, 0, 0, 0), (1, 1, 0, 0), (0, 1, 0, 0), (0, 1, 1, 0), (0, 0, 1, 0), (0, 0, 1, 1), (0, 0, 0, 1), (1, 0, 0, 1)]
-OFF = (0, 0, 0, 0)
-# The angle of one half-step, at 4096 to a turn.
-STEP = 360 / 4096
-
 
 class Board:
-    """The ULN2003 board, in place of the kernel's GPIO: what its four inputs were set to, and when."""
+    """A ULN2003 board as the stepper sees it: what it set on IN1 to IN4, in order, and whether it was given
+    back."""
 
-    label = "a board on the bench"
+    def __init__(self) -> None:
+        self.written: list[tuple[int, ...]] = []
+        self.released = False
 
-    def __init__(self):
-        self.asked, self.states, self.times, self.closed = [], [], [], 0
-        self.missing: OSError | None = None  # what asking for the GPIO raises
-        self.broken: OSError | None = None  # what setting them raises
+    def put(self, values) -> None:
+        self.written.append(tuple(values))
 
-    def __call__(self, chip, pins):
-        if self.missing is not None:
-            raise self.missing
-        self.asked.append((chip, tuple(pins)))
-        return self
+    def release(self) -> None:
+        self.released = True
 
-    def set(self, values):
-        if self.broken is not None:
-            raise self.broken
-        self.states.append(tuple(values))
-        self.times.append(time.monotonic())
-
-    def close(self):
-        self.closed += 1
-
-    def steps(self) -> list[int]:
-        """Which of the eight half-steps each state was, the coils let go aside."""
-        return [HALF.index(state) for state in self.states if state != OFF]
+    def steps(self) -> list[tuple[int, ...]]:
+        """The half-steps it was sent, the coils let go left out."""
+        return [values for values in self.written if any(values)]
 
 
-@pytest.fixture
-def board():
-    return Board()
+def stepper(board: Board, **settings) -> GpioStepper:
+    settings.setdefault("sleep", lambda seconds: None)
+    return GpioStepper((6, 13, 19, 26), open_lines=lambda chip, pins: board, **settings)
 
 
-@pytest.fixture
-def stepper(board):
-    """Makes a motor on the board, fast enough for the tests, and closes it after them."""
-    made = []
-
-    def make(**settings) -> Uln2003Stepper:
-        motor = Uln2003Stepper("/dev/gpiochip0", (17, 18, 27, 22), lines=board, **{"step_ms": 0.2, "hold": 0.02, **settings})
-        made.append(motor)
-        return motor
-
-    yield make
-    for motor in made:
-        motor.close()
+def test_a_quarter_turn_is_a_quarter_of_its_half_steps():
+    drive = stepper(Board())
+    assert [drive.steps_for(angle) for angle in (-90, 0, 45, 90, 360)] == [-1024, 0, 512, 1024, 4096]
+    assert [stepper(Board(), invert=True).steps_for(angle) for angle in (-90, 90)] == [1024, -1024]
+    assert stepper(Board(), steps_per_turn=2048).steps_for(90) == 512
 
 
-def settle(done, seconds: float = 5.0) -> None:
-    """Waits for the motor's thread to get there."""
-    deadline = time.monotonic() + seconds
-    while not done():
-        assert time.monotonic() < deadline, "the motor did not get there"
-        time.sleep(0.001)
-
-
-def at_rest(board) -> bool:
-    return board.states[-1:] == [OFF]
-
-
-def test_asks_for_its_four_gpio_and_leaves_the_coils_off_until_told_to_turn(board, stepper):
-    motor = stepper()
-    motor.open()
-    assert board.asked == [("/dev/gpiochip0", (17, 18, 27, 22))]
-    motor.turn(0.0)
-    time.sleep(0.05)
-    assert board.states == [] and motor.angle == 0
-
-
-def test_turns_by_half_steps_in_the_order_of_the_board_then_lets_the_coils_go(board, stepper):
-    motor = stepper()
-    motor.open()
-    motor.turn(10 * STEP)
-    settle(lambda: at_rest(board))
-    # The coils on as they are counted to be, ten half-steps, off.
-    assert board.states == [HALF[0], *(HALF[step % 8] for step in range(1, 11)), OFF]
-    assert motor.angle == pytest.approx(10 * STEP)
-
-
-def test_turns_the_other_way_by_the_same_half_steps_read_backwards(board, stepper):
-    motor = stepper()
-    motor.open()
-    motor.turn(-10 * STEP)
-    settle(lambda: at_rest(board))
-    assert board.states == [HALF[0], *(HALF[-step % 8] for step in range(1, 11)), OFF]
-    assert motor.angle == pytest.approx(-10 * STEP)
-
-
-def test_a_motor_mounted_the_other_way_up_turns_the_other_way_for_the_same_angle(board, stepper):
-    motor = stepper(invert=True)
-    motor.open()
-    motor.turn(10 * STEP)
-    settle(lambda: at_rest(board))
-    assert board.steps() == [0, *(-step % 8 for step in range(1, 11))]
-    assert motor.angle == pytest.approx(10 * STEP)
-
-
-def test_goes_on_from_where_it_let_the_coils_go(board, stepper):
-    motor = stepper()
-    motor.open()
-    motor.turn(3 * STEP)
-    settle(lambda: at_rest(board))
-    motor.turn(5 * STEP)
-    settle(lambda: at_rest(board) and len(board.states) > 5)
-    # Back on at the half-step it stopped at, before the next.
-    assert board.states == [HALF[0], HALF[1], HALF[2], HALF[3], OFF, HALF[3], HALF[4], HALF[5], OFF]
-
-
-def test_never_skips_a_half_step_when_told_elsewhere_on_its_way(board, stepper):
-    motor = stepper(step_ms=0.5)
-    motor.open()
-    motor.turn(60 * STEP)
-    settle(lambda: len(board.states) > 10)
-    motor.turn(-20 * STEP)
-    settle(lambda: at_rest(board))
-    assert motor.angle == pytest.approx(-20 * STEP)
+def test_turns_half_step_by_half_step_then_lets_the_coils_go():
+    board = Board()
+    drive = stepper(board)
+    drive.open()
+    drive.turn(90.0)
+    drive.close()
     steps = board.steps()
-    assert all((later - earlier) % 8 in (1, 7) for earlier, later in zip(steps, steps[1:]))
-    # It turned back before it got to the first place.
-    assert len(steps) < 1 + 60 + 80
+    assert len(steps) == 1024
+    assert steps[0] == HALF_STEPS[1] and steps[-1] == HALF_STEPS[1024 % 8]
+    # Never a half-step skipped: each is the next one in the cycle.
+    assert all(HALF_STEPS.index(after) == (HALF_STEPS.index(before) + 1) % 8 for before, after in zip(steps, steps[1:]))
+    # There, the coils go, and closed, the lines too.
+    assert board.written[-1] == (0, 0, 0, 0)
+    assert board.released
 
 
-def test_never_steps_faster_than_the_motor_follows(board, stepper):
-    motor = stepper(step_ms=2)
-    motor.open()
-    motor.turn(25 * STEP)
-    settle(lambda: at_rest(board))
-    assert len(board.times) == 27
-    # 5 % for the clock read between the board and the motor's own.
-    assert all(later - earlier >= 0.0019 for earlier, later in zip(board.times, board.times[1:]))
-    assert motor.max_speed == pytest.approx(0.8 * STEP / 0.002)
+def test_turns_back_the_other_way_to_where_it_was_last_told():
+    board = Board()
+    drive = stepper(board)
+    drive.open()
+    drive.turn(10.0)
+    drive.turn(-10.0)
+    drive.close()
+    # However far it went toward 10°, it ends at -10°: the half-step of -114 is the last one.
+    assert board.steps()[-1] == HALF_STEPS[drive.steps_for(-10.0) % 8]
+    steps = board.steps()
+    assert all(abs(HALF_STEPS.index(after) - HALF_STEPS.index(before)) in (1, 7) for before, after in zip(steps, steps[1:]))
 
 
-def test_remembers_how_far_it_had_turned_the_camera_when_an_image_was_taken(board, stepper):
-    motor = stepper(step_ms=2)
-    before = time.monotonic()
-    motor.open()
-    assert motor.angle_at(before) == 0
-    motor.turn(20 * STEP)
-    settle(lambda: at_rest(board))
-    # The board saw each half-step a moment before the motor counted it.
-    reached = dict(zip(range(1, 21), board.times[1:]))
-    assert motor.angle_at(before) == 0
-    assert motor.angle_at(reached[10] + 0.001) == pytest.approx(10 * STEP)
-    assert motor.angle_at(reached[15] + 0.001) == pytest.approx(15 * STEP)
-    assert motor.angle_at(time.monotonic()) == motor.angle == pytest.approx(20 * STEP)
-    # No further back than its memory, 25 of these half-steps at most: the oldest it remembers.
-    forgetful = stepper(memory=0.005)
-    forgetful.open()
-    forgetful.turn(100 * STEP)
-    settle(lambda: at_rest(board) and forgetful.angle == pytest.approx(100 * STEP))
-    assert 70 * STEP < forgetful.angle_at(before) < 100 * STEP
+def test_never_steps_faster_than_its_pace():
+    board, pauses = Board(), []
+    drive = stepper(board, step_s=0.003, sleep=pauses.append)
+    drive.open()
+    drive.turn(45.0)
+    drive.close()
+    assert pauses == [0.003] * 512
 
 
-def test_never_turns_past_its_travel(board, stepper):
-    motor = stepper(low=-1, high=2, steps_per_turn=3600)
-    motor.open()
-    motor.turn(400.0)
-    settle(lambda: at_rest(board))
-    assert motor.angle == pytest.approx(2)
-    motor.turn(-400.0)
-    settle(lambda: at_rest(board) and motor.angle < 0)
-    assert motor.angle == pytest.approx(-1)
+def test_a_chip_that_is_not_there_stops_nothing_and_is_tried_again_later(caplog):
+    now, board, missing = [0.0], Board(), [True]
 
+    def open_lines(chip, pins):
+        if missing[0]:
+            raise FileNotFoundError(2, "No such file or directory", chip)
+        return board
 
-def test_closing_ends_where_it_was_last_told_to_turn_the_coils_off(board, stepper):
-    motor = stepper(step_ms=1, hold=5)
-    motor.open()
-    motor.turn(50 * STEP)
-    motor.turn(0.0)
-    motor.turn(40 * STEP)
-    motor.close()
-    assert motor.angle == pytest.approx(40 * STEP)
-    assert board.states[-1] == OFF and board.closed == 1
-    # Closed twice, or never opened: nothing to do.
-    motor.close()
-    stepper().close()
-    assert board.closed == 1
-
-
-def test_a_chip_that_is_not_there_stops_nothing_and_is_tried_again_later(board, stepper, caplog):
-    board.missing = FileNotFoundError(2, "No such file or directory")
-    motor = stepper(retry=0.05)
+    drive = GpioStepper((6, 13, 19, 26), open_lines=open_lines, retry=5.0, clock=lambda: now[0], sleep=lambda seconds: None)
     with caplog.at_level(logging.WARNING):
-        motor.open()
-        motor.turn(8 * STEP)
-        time.sleep(0.2)
+        drive.open()
+        for _ in range(50):
+            now[0] += 0.05
+            drive.turn(20.0)
     assert len(caplog.records) == 1 and "unavailable" in caplog.text
-    assert board.states == [] and motor.angle == 0
-    # The chip comes: the next try finds it, and turns to where the camera is told to be.
-    board.missing = None
-    settle(lambda: at_rest(board))
-    assert motor.angle == pytest.approx(8 * STEP)
+    assert board.written == []
+    # The board comes: the next try finds it, and turns to where the camera is told to be.
+    missing[0] = False
+    now[0] = 5.5
+    drive.turn(20.0)
+    drive.close()
+    assert len(board.steps()) == drive.steps_for(20.0)
 
 
-def test_gpio_that_stop_answering_are_asked_for_again_and_the_count_kept(board, stepper):
-    motor = stepper(step_ms=1, retry=0.05)
-    motor.open()
-    motor.turn(40 * STEP)
-    settle(lambda: len(board.states) > 5)
-    board.broken = OSError(5, "Input/output error")
-    settle(lambda: board.closed == 1)
-    reached = len(board.steps()) - 1
-    assert 5 <= reached < 40 and motor.angle == pytest.approx(reached * STEP)
-    board.broken = None
-    settle(lambda: at_rest(board))
-    assert len(board.asked) == 2
-    assert motor.angle == pytest.approx(40 * STEP)
-    # On again where it was, then the half-steps it had left.
-    assert board.steps() == [step % 8 for step in [*range(reached + 1), *range(reached, 41)]]
+def test_closed_twice_or_never_opened_does_nothing():
+    board = Board()
+    drive = stepper(board)
+    drive.close()
+    assert board.written == [] and not board.released
+    drive.open()
+    drive.close()
+    drive.close()
+    assert board.released
 
 
 @pytest.mark.parametrize(
-    "args, settings",
+    "pins, settings",
     [
-        (("", (17, 18, 27, 22)), {}),
-        (("/dev/gpiochip0", (17, 18, 27)), {}),
-        (("/dev/gpiochip0", (17, 18, 27, 27)), {}),
-        (("/dev/gpiochip0", (17, 18, 27, -1)), {}),
-        (("/dev/gpiochip0", (17, 18, 27, 22)), {"low": 90, "high": -90}),
-        (("/dev/gpiochip0", (17, 18, 27, 22)), {"steps_per_turn": 0}),
-        (("/dev/gpiochip0", (17, 18, 27, 22)), {"step_ms": 0}),
-        (("/dev/gpiochip0", (17, 18, 27, 22)), {"hold": -1}),
-        (("/dev/gpiochip0", (17, 18, 27, 22)), {"retry": 0}),
-        (("/dev/gpiochip0", (17, 18, 27, 22)), {"memory": 0}),
+        ((6, 13, 19), {}),
+        ((6, 13, 19, 19), {}),
+        ((6, 13, 19, -1), {}),
+        ((6, 13, 19, 26), {"chip": ""}),
+        ((6, 13, 19, 26), {"steps_per_turn": 0}),
+        ((6, 13, 19, 26), {"step_s": 0}),
     ],
 )
-def test_the_stepper_refuses_invalid_settings(args, settings):
+def test_the_stepper_refuses_invalid_settings(pins, settings):
     with pytest.raises(ValueError):
-        Uln2003Stepper(*args, **settings)
-
-
-def test_the_gpio_are_asked_of_the_kernel_as_outputs_and_set_all_at_once(tmp_path, monkeypatch):
-    fcntl = pytest.importorskip("fcntl", reason="no GPIO character device without Unix's ioctl")
-    chip = tmp_path / "gpiochip0"
-    chip.write_bytes(b"")
-    theirs, ours = os.pipe()
-    calls = []
-
-    def ioctl(fd, request, arg):
-        calls.append((fd, request, bytes(arg)))
-        if request == 0x8044B401:  # GPIO_GET_CHIPINFO_IOCTL
-            struct.pack_into("32s32sI", arg, 0, b"gpiochip0", b"pinctrl-bcm2711", 58)
-        elif request == 0xC250B407:  # GPIO_V2_GET_LINE_IOCTL
-            struct.pack_into("i", arg, 588, ours)
-        return 0
-
-    monkeypatch.setattr(fcntl, "ioctl", ioctl)
-    try:
-        lines = GpioLines(str(chip), (17, 18, 27, 22))
-        assert lines.label == "pinctrl-bcm2711"
-        (_, first, info), (_, second, request) = calls
-        assert (first, len(info), second, len(request)) == (0x8044B401, 68, 0xC250B407, 592)
-        # struct gpio_v2_line_request: offsets, consumer, config.flags (output, nothing else), num_lines.
-        assert struct.unpack_from("64I", request, 0) == (17, 18, 27, 22, *[0] * 60)
-        assert request[256:288] == b"sentinel-x".ljust(32, b"\0")
-        assert struct.unpack_from("QI", request, 288) == (1 << 3, 0)
-        assert struct.unpack_from("I", request, 560) == (4,)
-        lines.set((1, 1, 0, 0))
-        lines.set((0, 0, 0, 1))
-        # On the lines' own descriptor, the four of them at each call: IN1 is the lowest bit.
-        assert calls[2:] == [(ours, 0xC010B40F, struct.pack("QQ", 0b0011, 0b1111)), (ours, 0xC010B40F, struct.pack("QQ", 0b1000, 0b1111))]
-        lines.close()
-        with pytest.raises(OSError):
-            os.fstat(ours)
-    finally:
-        os.close(theirs)
+        GpioStepper(pins, **settings)
 
 
 # --- PAN_DRIVE ----------------------------------------------------------------------------------------
@@ -532,8 +371,10 @@ def test_the_gpio_are_asked_of_the_kernel_as_outputs_and_set_all_at_once(tmp_pat
 
 @pytest.fixture(autouse=True)
 def no_pan_settings(monkeypatch):
-    for name in ("PAN_PWM_DIR", "PAN_MIN_DEG", "PAN_MAX_DEG", "PAN_MIN_US", "PAN_MAX_US", "PAN_INVERT", "PAN_SPEED_DEG_S", "PAN_DEADBAND_DEG",
-                 "PAN_GPIO_CHIP", "PAN_STEP_PINS", "PAN_STEPS_PER_TURN", "PAN_STEP_MS"):
+    for name in (
+        "PAN_PWM_DIR", "PAN_MIN_DEG", "PAN_MAX_DEG", "PAN_MIN_US", "PAN_MAX_US", "PAN_INVERT", "PAN_SPEED_DEG_S", "PAN_DEADBAND_DEG",
+        "PAN_STEPPER_PINS", "PAN_GPIO_CHIP", "PAN_STEPS_PER_TURN", "PAN_STEP_MS",
+    ):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -555,69 +396,25 @@ def test_the_pwm_drive_takes_its_channel_its_travel_and_its_pulses_from_the_envi
     assert follow(follower, -170.0, 5.0, 8.0)[-1] == -60
 
 
-def fastest(follower: PanFollower, toward: float = 80.0) -> float:
-    """How fast the follower turns at most, in degrees a second."""
-    follower.step(0.0)
-    angles = [0.0, *follow(follower, toward, start=0.0, seconds=1.0, every=0.05)]
-    return max(abs(later - earlier) for earlier, later in zip(angles, angles[1:])) / 0.05
-
-
-def test_the_stepper_drive_is_the_28byj_48_as_the_installation_wires_it(board, monkeypatch):
-    monkeypatch.setattr(pan, "GpioLines", board)
+def test_the_stepper_drive_takes_its_pins_and_its_half_steps_from_the_environment(monkeypatch):
+    monkeypatch.setenv("PAN_STEPPER_PINS", "17, 27, 22, 23")
+    monkeypatch.setenv("PAN_STEPS_PER_TURN", "2048")
+    monkeypatch.setenv("PAN_INVERT", "true")
     follower, drive = make_pan("stepper")
     assert drive.name == "stepper"
-    drive.open()
-    drive.turn(4 * STEP)
-    drive.close()
-    assert board.asked == [("/dev/gpiochip0", (17, 18, 27, 22))]
-    assert board.states == [HALF[0], HALF[1], HALF[2], HALF[3], HALF[4], OFF]
-    # A half-step every 2 ms, and the follower no faster than the motor then turns the camera.
-    assert drive.max_speed == pytest.approx(35.16, abs=0.01)
-    assert fastest(follower) == pytest.approx(drive.max_speed)
-
-
-def test_the_stepper_drive_takes_its_chip_its_gpio_its_steps_and_its_travel_from_the_environment(board, monkeypatch):
-    monkeypatch.setattr(pan, "GpioLines", board)
-    monkeypatch.setenv("PAN_GPIO_CHIP", "/dev/gpiochip4")
-    monkeypatch.setenv("PAN_STEP_PINS", "5, 6,13,19")
-    monkeypatch.setenv("PAN_STEPS_PER_TURN", "3600")
-    monkeypatch.setenv("PAN_STEP_MS", "1")
-    monkeypatch.setenv("PAN_INVERT", "true")
-    monkeypatch.setenv("PAN_MIN_DEG", "-45")
-    monkeypatch.setenv("PAN_MAX_DEG", "0.5")
-    monkeypatch.setenv("PAN_SPEED_DEG_S", "20")
-    follower, drive = make_pan("stepper")
-    drive.open()
-    drive.turn(400.0)
-    drive.close()
-    assert board.asked == [("/dev/gpiochip4", (5, 6, 13, 19))]
-    # Half a degree is five of its half-steps, taken backwards.
-    assert board.steps() == [0, 7, 6, 5, 4, 3]
-    assert drive.max_speed == pytest.approx(80)
-    assert fastest(follower, toward=-80.0) == pytest.approx(20)
-    assert follow(follower, -170.0, 1.0, 8.0)[-1] == -45
-
-
-def test_the_follower_is_kept_to_the_speed_of_the_stepper(board, monkeypatch, caplog):
-    monkeypatch.setattr(pan, "GpioLines", board)
-    monkeypatch.setenv("PAN_SPEED_DEG_S", "60")
-    with caplog.at_level(logging.WARNING):
-        follower, drive = make_pan("stepper")
-    assert "PAN_SPEED_DEG_S" in caplog.text
-    assert fastest(follower) == pytest.approx(drive.max_speed)
+    assert drive._pins == (17, 27, 22, 23)
+    assert drive.steps_for(90) == -512
+    assert follower.angle == 0
 
 
 @pytest.mark.parametrize(
     "name, variables",
     [
-        ("gimbal", {}),
-        ("stepper", {"PAN_STEP_PINS": "17,18,27"}),
-        ("stepper", {"PAN_STEP_PINS": "17,18,27,27"}),
-        ("stepper", {"PAN_STEP_PINS": "17,18,27,40"}),
-        ("stepper", {"PAN_STEP_PINS": "IN1,IN2,IN3,IN4"}),
-        ("stepper", {"PAN_STEPS_PER_TURN": "0"}),
+        ("dc-motor", {}),
+        ("stepper", {"PAN_STEPPER_PINS": "6,13,19"}),
+        ("stepper", {"PAN_STEPPER_PINS": "6,13,19,19"}),
+        ("stepper", {"PAN_STEPPER_PINS": "six,13,19,26"}),
         ("stepper", {"PAN_STEP_MS": "0"}),
-        ("stepper", {"PAN_MIN_DEG": "10"}),
         ("pwm", {"PAN_MIN_DEG": "10"}),
         ("pwm", {"PAN_MAX_DEG": "-10"}),
         ("pwm", {"PAN_MIN_DEG": "0", "PAN_MAX_DEG": "0"}),

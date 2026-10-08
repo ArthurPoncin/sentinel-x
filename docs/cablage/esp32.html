@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>*,*::before,*::after{box-sizing:border-box}body{margin:0}</style>
+<title>Câblage Sentinel enceinte</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<style>
+/* Layout: lab wiring sheet. One wide schematic of the ESP32 on grid paper, then side cards (rails, a louder speaker, the stepper on the Pi), then the pin table. */
+:root {
+  --bg: #EDF1EE;
+  --paper: #F9FBF9;
+  --grid: #E1E7E2;
+  --fg: #17201B;
+  --muted: #5A6760;
+  --line: #2A3530;
+  --module: #FFFFFF;
+  --board: #1C2733;
+  --board-ink: #E7EEF3;
+  --board-dim: #7D8C99;
+  --shield: #2C3846;
+  --accent: #1C5D8F;
+  --warn-bg: #FFF4E0;
+  --warn-fg: #7A3E00;
+
+  --v5: #D42A2A;
+  --v33: #E07800;
+  --gnd: #1F2428;
+  --vs: #C2307A;
+  --on-v5: #FFFFFF;
+  --on-v33: #261400;
+  --on-gnd: #FFFFFF;
+  --on-vs: #FFFFFF;
+
+  --c-mq2: #7A3DBE;
+  --c-sound: #08899B;
+  --c-pir: #2C8A3A;
+  --c-dht: #B88400;
+  --c-spk: #1F72B8;
+  --c-servo: #4F4FCF;
+
+  --f-display: "IBM Plex Sans Condensed", "Arial Narrow", sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E1311; --paper: #141A17; --grid: #1F2723; --fg: #E2E9E4; --muted: #93A199;
+    --line: #A9B7AF; --module: #1A221E; --board: #26323F; --board-ink: #E7EEF3; --board-dim: #8494A2; --shield: #344354;
+    --accent: #6FB2EA; --warn-bg: #2E2110; --warn-fg: #FFC98A;
+    --v5: #FF5B55; --v33: #FFA03A; --gnd: #C5CEC8; --vs: #FF7DB8;
+    --on-v5: #1A0505; --on-v33: #261400; --on-gnd: #111614; --on-vs: #2A0616;
+    --c-mq2: #B48BFF; --c-sound: #4FD3E3; --c-pir: #6FD47C; --c-dht: #F2C94C;
+    --c-spk: #5AB0FF; --c-servo: #9C9CFF;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E1311; --paper: #141A17; --grid: #1F2723; --fg: #E2E9E4; --muted: #93A199;
+  --line: #A9B7AF; --module: #1A221E; --board: #26323F; --board-ink: #E7EEF3; --board-dim: #8494A2; --shield: #344354;
+  --accent: #6FB2EA; --warn-bg: #2E2110; --warn-fg: #FFC98A;
+  --v5: #FF5B55; --v33: #FFA03A; --gnd: #C5CEC8; --vs: #FF7DB8;
+  --on-v5: #1A0505; --on-v33: #261400; --on-gnd: #111614; --on-vs: #2A0616;
+  --c-mq2: #B48BFF; --c-sound: #4FD3E3; --c-pir: #6FD47C; --c-dht: #F2C94C;
+  --c-spk: #5AB0FF; --c-servo: #9C9CFF;
+  color-scheme: dark;
+}
+
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 56px; display: grid; gap: 28px; }
+
+header { display: grid; gap: 6px; }
+.eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+h1 { font-family: var(--f-display); font-weight: 700; font-size: clamp(30px, 4.4vw, 44px); line-height: 1.05; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--f-display); font-weight: 600; font-size: 22px; margin: 0; text-wrap: balance; }
+.lede { margin: 0; color: var(--muted); max-width: 72ch; }
+
+.changes { display: flex; flex-wrap: wrap; gap: 8px 10px; margin: 6px 0 0; padding: 0; list-style: none; font-size: 13.5px; }
+.changes li { background: var(--paper); border: 1px solid var(--grid); border-radius: 7px; padding: 3px 10px; }
+.changes b { font-family: var(--f-mono); font-size: 11.5px; letter-spacing: .05em; text-transform: uppercase; margin-right: 6px; color: var(--muted); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; font-size: 13.5px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.chip { font-family: var(--f-mono); font-weight: 600; font-size: 11.5px; padding: 1px 8px; border-radius: 9px; }
+.chip.v5 { background: var(--v5); color: var(--on-v5); }
+.chip.v33 { background: var(--v33); color: var(--on-v33); }
+.chip.gnd { background: var(--gnd); color: var(--on-gnd); }
+.chip.vs { background: var(--vs); color: var(--on-vs); }
+.sw { width: 26px; height: 0; border-top: 3px solid var(--c-spk); border-radius: 2px; }
+.sw.dash { border-top: 2px dashed var(--muted); }
+.legend .rule { flex-basis: 100%; color: var(--fg); }
+
+.sheet { background: var(--paper); border: 1px solid var(--grid); border-radius: 10px; overflow-x: auto; }
+.sheet svg { display: block; width: 100%; min-width: 1000px; height: auto; }
+.sheet-note { font-size: 13px; color: var(--muted); margin: 8px 2px 0; }
+
+/* SVG styling */
+.paper { fill: var(--paper); }
+.gridline { fill: none; stroke: var(--grid); stroke-width: 1; }
+.board { fill: var(--board); }
+.shield { fill: var(--shield); stroke: var(--board-dim); stroke-width: 1; }
+.usb { fill: var(--board-dim); }
+.pad { fill: #C9A227; }
+.pad.off { fill: var(--board-dim); opacity: .55; }
+.board-title { font-family: var(--f-display); font-weight: 700; font-size: 20px; fill: var(--board-ink); letter-spacing: .04em; }
+.board-sub { font-family: var(--f-mono); font-size: 11px; fill: var(--board-dim); }
+.pin { font-family: var(--f-mono); font-size: 13px; font-weight: 600; fill: var(--board-ink); }
+.pin.off { font-weight: 400; fill: var(--board-dim); }
+.shield-txt { font-family: var(--f-mono); font-size: 11px; fill: var(--board-dim); letter-spacing: .06em; }
+
+.mod { fill: var(--module); stroke: var(--line); stroke-width: 1.5; }
+.mpad { fill: var(--line); }
+.mpad.off { opacity: .4; }
+.mt { font-family: var(--f-display); font-weight: 700; font-size: 17px; fill: var(--fg); }
+.ms { font-family: var(--f-body); font-size: 12px; fill: var(--muted); }
+.ml { font-family: var(--f-mono); font-size: 12.5px; fill: var(--fg); }
+.ml.sm { font-size: 11px; }
+.ml.dim { fill: var(--muted); }
+.ml.b { font-weight: 600; }
+.note { font-family: var(--f-body); font-size: 12px; fill: var(--muted); font-style: italic; }
+.warn-txt { font-family: var(--f-body); font-size: 12px; font-weight: 600; fill: var(--warn-fg); }
+.wl { font-family: var(--f-mono); font-size: 11px; font-weight: 600; }
+.wl.spk { fill: var(--c-spk); }
+.wl.servo { fill: var(--c-servo); }
+.wl.gnd { fill: var(--fg); }
+.rlabel { font-family: var(--f-mono); font-size: 12px; fill: var(--fg); font-weight: 600; }
+
+.w { fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.w.thin { stroke-width: 2.5; }
+.w5v { stroke: var(--v5); }
+.w33 { stroke: var(--v33); }
+.wgnd { stroke: var(--gnd); }
+.wvs { stroke: var(--vs); }
+.wnc { fill: none; stroke: var(--muted); stroke-width: 2; stroke-dasharray: 4 4; stroke-linecap: round; }
+.s-mq2 { stroke: var(--c-mq2); } .f-mq2 { fill: var(--c-mq2); }
+.s-sound { stroke: var(--c-sound); }
+.s-pir { stroke: var(--c-pir); }
+.s-dht { stroke: var(--c-dht); } .f-dht { fill: var(--c-dht); }
+.s-spk { stroke: var(--c-spk); } .f-spk { fill: var(--c-spk); }
+.s-servo { stroke: var(--c-servo); }
+.res { fill: var(--module); stroke: var(--fg); stroke-width: 2; }
+.spk { fill: var(--module); stroke: var(--fg); stroke-width: 2; stroke-linejoin: round; }
+.ink { fill: var(--fg); }
+.inkline { fill: none; stroke: var(--fg); stroke-width: 2; stroke-linecap: round; }
+
+.pill rect { stroke: none; }
+.pill text { font-family: var(--f-mono); font-size: 11px; font-weight: 600; text-anchor: middle; }
+.p5v rect { fill: var(--v5); } .p5v text { fill: var(--on-v5); }
+.p33 rect { fill: var(--v33); } .p33 text { fill: var(--on-v33); }
+.pgnd rect { fill: var(--gnd); } .pgnd text { fill: var(--on-gnd); }
+
+.halo { fill: none; stroke: var(--paper); stroke-width: 8; stroke-linecap: round; }
+.bb { fill: var(--module); stroke: var(--line); stroke-width: 1.5; }
+.gap { fill: var(--grid); }
+.dot5v { fill: var(--v5); } .dot33 { fill: var(--v33); } .dotgnd { fill: var(--gnd); } .dotvs { fill: var(--vs); }
+
+/* Cards */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+.card { background: var(--paper); border: 1px solid var(--grid); border-radius: 10px; padding: 18px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.card p { margin: 0; }
+.card svg { width: 100%; height: auto; display: block; }
+.card ol, .card ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.card.warn { background: var(--warn-bg); border-color: color-mix(in srgb, var(--warn-fg) 30%, transparent); }
+.card.warn h2 { color: var(--warn-fg); }
+.tag { font-family: var(--f-mono); font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.card.warn .tag { color: var(--warn-fg); }
+code, .mono { font-family: var(--f-mono); font-size: .92em; }
+.card.warn code { background: color-mix(in srgb, var(--warn-fg) 10%, transparent); padding: 0 4px; border-radius: 4px; }
+
+/* Table */
+.tbl-wrap { overflow-x: auto; background: var(--paper); border: 1px solid var(--grid); border-radius: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 680px; }
+th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+th { font-family: var(--f-mono); font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+tr:last-child td { border-bottom: none; }
+td.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+td .k { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; vertical-align: 0; }
+tr.pi td { background: color-mix(in srgb, var(--c-servo) 7%, transparent); }
+
+.code-card { background: var(--paper); border: 1px solid var(--grid); border-radius: 10px; padding: 16px 18px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.code-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.code-card p { margin: 0; font-size: 13px; color: var(--muted); }
+pre { margin: 0; overflow-x: auto; font-family: var(--f-mono); font-size: 13px; line-height: 1.6; color: var(--fg); }
+button { font-family: var(--f-mono); font-size: 12.5px; padding: 6px 12px; border-radius: 7px; border: 1px solid var(--line); background: var(--module); color: var(--fg); cursor: pointer; }
+button:hover { border-color: var(--accent); color: var(--accent); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.section { display: grid; gap: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Sentinel-X · firmware · zéro soudure</div>
+    <h1>Câblage du Sentinel avec enceinte et moteur pas à pas</h1>
+    <p class="lede">ESP32 DevKitC V4 d'AZ-Delivery (module WROOM-32, 38 broches) sur breadboard et câbles Dupont. <span class="mono">IO34</span> = GPIO 34 : selon la carte, la sérigraphie affiche <span class="mono">34</span> ou <span class="mono">IO34</span>.</p>
+    <ul class="changes" aria-label="Ce qui change">
+      <li><b>Retirés</b>l'écran ST7735S, le DFPlayer et le servo</li>
+      <li><b>Ajouté</b>l'enceinte sur IO25, par 100 Ω</li>
+      <li><b>Moteur</b>pas à pas sur le Raspberry Pi, pas sur l'ESP32</li>
+    </ul>
+  </header>
+
+  <div class="legend" aria-label="Légende">
+    <span><span class="chip v5">5V</span> alimentation 5 V</span>
+    <span><span class="chip v33">3V3</span> alimentation 3,3 V</span>
+    <span><span class="chip gnd">GND</span> masse</span>
+    <span><span class="sw"></span> signal (une couleur par module)</span>
+    <span><span class="sw dash"></span> non branché</span>
+    <span class="rule">Toutes les pastilles de même nom sont reliées entre elles : ce sont les rails de la breadboard (voir « Rails »).</span>
+  </div>
+
+  <div>
+    <div class="sheet">
+      <svg viewBox="0 0 1260 940" role="img" aria-labelledby="schema-title">
+        <title id="schema-title">Schéma de câblage : ESP32 DevKitC V4 au centre, MQ-2, enceinte, son et PIR à gauche, DHT22 à droite</title>
+        <defs>
+          <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+            <path d="M20 0H0V20" class="gridline"/>
+          </pattern>
+        </defs>
+        <rect width="1260" height="940" class="paper"/>
+        <rect width="1260" height="940" fill="url(#grid)"/>
+
+        <!-- ===== ESP32 DevKitC V4 (antenna up, USB down) ===== -->
+        <rect x="540" y="86" width="180" height="790" rx="10" class="board"/>
+        <text x="630" y="112" class="board-title" text-anchor="middle">ESP32</text>
+        <text x="630" y="129" class="board-sub" text-anchor="middle">DevKitC V4 · AZ-Delivery</text>
+        <rect x="598" y="146" width="64" height="232" rx="3" class="shield"/>
+        <text x="630" y="262" class="shield-txt" text-anchor="middle" transform="rotate(-90 630 262)">ESP32-WROOM-32</text>
+        <rect x="602" y="870" width="56" height="22" rx="3" class="usb"/>
+        <text x="630" y="920" class="note" text-anchor="middle">USB : vers le Raspberry Pi (alimentation et flash)</text>
+
+        <!-- left header J2 -->
+        <g>
+          <rect x="534" y="144" width="12" height="12" class="pad"/><text x="552" y="154" class="pin">3V3</text>
+          <rect x="534" y="182" width="12" height="12" class="pad off"/><text x="552" y="192" class="pin off">EN</text>
+          <rect x="534" y="220" width="12" height="12" class="pad off"/><text x="552" y="230" class="pin off">VP</text>
+          <rect x="534" y="258" width="12" height="12" class="pad off"/><text x="552" y="268" class="pin off">VN</text>
+          <rect x="534" y="296" width="12" height="12" class="pad"/><text x="552" y="306" class="pin">IO34</text>
+          <rect x="534" y="334" width="12" height="12" class="pad off"/><text x="552" y="344" class="pin off">IO35</text>
+          <rect x="534" y="372" width="12" height="12" class="pad off"/><text x="552" y="382" class="pin off">IO32</text>
+          <rect x="534" y="410" width="12" height="12" class="pad off"/><text x="552" y="420" class="pin off">IO33</text>
+          <rect x="534" y="448" width="12" height="12" class="pad"/><text x="552" y="458" class="pin">IO25</text>
+          <rect x="534" y="486" width="12" height="12" class="pad"/><text x="552" y="496" class="pin">IO26</text>
+          <rect x="534" y="524" width="12" height="12" class="pad"/><text x="552" y="534" class="pin">IO27</text>
+          <rect x="534" y="562" width="12" height="12" class="pad off"/><text x="552" y="572" class="pin off">IO14</text>
+          <rect x="534" y="600" width="12" height="12" class="pad off"/><text x="552" y="610" class="pin off">IO12</text>
+          <rect x="534" y="638" width="12" height="12" class="pad"/><text x="552" y="648" class="pin">GND</text>
+          <rect x="534" y="676" width="12" height="12" class="pad off"/><text x="552" y="686" class="pin off">IO13</text>
+          <rect x="534" y="714" width="12" height="12" class="pad off"/><text x="552" y="724" class="pin off">SD2</text>
+          <rect x="534" y="752" width="12" height="12" class="pad off"/><text x="552" y="762" class="pin off">SD3</text>
+          <rect x="534" y="790" width="12" height="12" class="pad off"/><text x="552" y="800" class="pin off">CMD</text>
+          <rect x="534" y="828" width="12" height="12" class="pad"/><text x="552" y="838" class="pin">5V</text>
+        </g>
+        <!-- right header J3 -->
+        <g>
+          <rect x="714" y="144" width="12" height="12" class="pad"/><text x="708" y="154" class="pin" text-anchor="end">GND</text>
+          <rect x="714" y="182" width="12" height="12" class="pad off"/><text x="708" y="192" class="pin off" text-anchor="end">IO23</text>
+          <rect x="714" y="220" width="12" height="12" class="pad off"/><text x="708" y="230" class="pin off" text-anchor="end">IO22</text>
+          <rect x="714" y="258" width="12" height="12" class="pad off"/><text x="708" y="268" class="pin off" text-anchor="end">TX</text>
+          <rect x="714" y="296" width="12" height="12" class="pad off"/><text x="708" y="306" class="pin off" text-anchor="end">RX</text>
+          <rect x="714" y="334" width="12" height="12" class="pad off"/><text x="708" y="344" class="pin off" text-anchor="end">IO21</text>
+          <rect x="714" y="372" width="12" height="12" class="pad off"/><text x="708" y="382" class="pin off" text-anchor="end">GND</text>
+          <rect x="714" y="410" width="12" height="12" class="pad off"/><text x="708" y="420" class="pin off" text-anchor="end">IO19</text>
+          <rect x="714" y="448" width="12" height="12" class="pad off"/><text x="708" y="458" class="pin off" text-anchor="end">IO18</text>
+          <rect x="714" y="486" width="12" height="12" class="pad off"/><text x="708" y="496" class="pin off" text-anchor="end">IO5</text>
+          <rect x="714" y="524" width="12" height="12" class="pad off"/><text x="708" y="534" class="pin off" text-anchor="end">IO17</text>
+          <rect x="714" y="562" width="12" height="12" class="pad off"/><text x="708" y="572" class="pin off" text-anchor="end">IO16</text>
+          <rect x="714" y="600" width="12" height="12" class="pad"/><text x="708" y="610" class="pin" text-anchor="end">IO4</text>
+          <rect x="714" y="638" width="12" height="12" class="pad off"/><text x="708" y="648" class="pin off" text-anchor="end">IO0</text>
+          <rect x="714" y="676" width="12" height="12" class="pad off"/><text x="708" y="686" class="pin off" text-anchor="end">IO2</text>
+          <rect x="714" y="714" width="12" height="12" class="pad off"/><text x="708" y="724" class="pin off" text-anchor="end">IO15</text>
+          <rect x="714" y="752" width="12" height="12" class="pad off"/><text x="708" y="762" class="pin off" text-anchor="end">SD1</text>
+          <rect x="714" y="790" width="12" height="12" class="pad off"/><text x="708" y="800" class="pin off" text-anchor="end">SD0</text>
+          <rect x="714" y="828" width="12" height="12" class="pad off"/><text x="708" y="838" class="pin off" text-anchor="end">CLK</text>
+        </g>
+        <text x="740" y="800" class="note">SD0 à SD3, CMD, CLK : flash interne,</text>
+        <text x="740" y="816" class="note">ne rien y brancher.</text>
+
+        <!-- ESP32 power out to rails -->
+        <path d="M526 150H534" class="w thin w33"/>
+        <g class="pill p33"><rect x="488" y="141" width="38" height="18" rx="9"/><text x="507" y="154">3V3</text></g>
+        <text x="480" y="154" class="note" text-anchor="end">alimente le rail 3V3</text>
+        <path d="M526 644H534" class="w thin wgnd"/>
+        <g class="pill pgnd"><rect x="486" y="635" width="40" height="18" rx="9"/><text x="506" y="648">GND</text></g>
+        <path d="M524 834H534" class="w thin w5v"/>
+        <g class="pill p5v"><rect x="492" y="825" width="32" height="18" rx="9"/><text x="508" y="838">5V</text></g>
+        <text x="484" y="838" class="note" text-anchor="end">alimente le rail 5 V</text>
+        <path d="M726 150H736" class="w thin wgnd"/>
+        <g class="pill pgnd"><rect x="736" y="141" width="40" height="18" rx="9"/><text x="756" y="154">GND</text></g>
+
+        <!-- ===== MQ-2 ===== -->
+        <rect x="40" y="168" width="220" height="108" rx="6" class="mod"/>
+        <text x="54" y="192" class="mt">MQ-2</text>
+        <text x="54" y="209" class="ms">Gaz · Flying Fish</text>
+        <text x="54" y="264" class="ms">chauffe en 5 V</text>
+        <rect x="255" y="187" width="10" height="10" class="mpad"/><text x="248" y="196" class="ml" text-anchor="end">VCC</text>
+        <rect x="255" y="207" width="10" height="10" class="mpad"/><text x="248" y="216" class="ml" text-anchor="end">GND</text>
+        <rect x="255" y="227" width="10" height="10" class="mpad"/><text x="248" y="236" class="ml" text-anchor="end">DO</text>
+        <rect x="255" y="247" width="10" height="10" class="mpad"/><text x="248" y="256" class="ml" text-anchor="end">AO</text>
+        <path d="M265 192H284" class="w thin w5v"/>
+        <g class="pill p5v"><rect x="284" y="183" width="32" height="18" rx="9"/><text x="300" y="196">5V</text></g>
+        <path d="M265 212H284" class="w thin wgnd"/>
+        <g class="pill pgnd"><rect x="284" y="203" width="40" height="18" rx="9"/><text x="304" y="216">GND</text></g>
+        <path d="M265 232H280" class="wnc"/>
+        <path d="M282 226l11 11M293 226l-11 11" class="inkline"/>
+        <text x="300" y="236" class="note">non branché (sortie 5 V)</text>
+        <!-- divider -->
+        <path d="M265 252H330" class="w s-mq2"/>
+        <rect x="330" y="244" width="60" height="16" rx="2" class="res"/>
+        <text x="360" y="278" class="rlabel" text-anchor="middle">10 kΩ</text>
+        <path d="M390 252H490V302H534" class="w s-mq2"/>
+        <circle cx="440" cy="252" r="5" class="f-mq2"/>
+        <path d="M440 252V266" class="w s-mq2"/>
+        <rect x="432" y="266" width="16" height="50" rx="2" class="res"/>
+        <text x="424" y="294" class="rlabel" text-anchor="end">20 kΩ</text>
+        <text x="424" y="309" class="note" text-anchor="end">(2 × 10 kΩ)</text>
+        <path d="M440 316V330" class="w thin wgnd"/>
+        <g class="pill pgnd"><rect x="420" y="330" width="40" height="18" rx="9"/><text x="440" y="343">GND</text></g>
+        <text x="432" y="374" class="note" text-anchor="middle">pont diviseur : 5 V → 3,3 V</text>
+
+        <!-- ===== Speaker, through 100 ohms, between IO25 and GND ===== -->
+        <text x="40" y="430" class="mt">Enceinte</text>
+        <text x="40" y="447" class="ms">passive, 4 à 8 Ω</text>
+        <text x="40" y="464" class="ms">ou le buzzer</text>
+        <rect x="200" y="432" width="16" height="44" rx="2" class="spk"/>
+        <polygon points="200,438 166,418 166,490 200,470" class="spk"/>
+        <text x="222" y="437" class="ml sm b">+</text>
+        <text x="222" y="484" class="ml sm b">−</text>
+        <path d="M216 442H260V454H330" class="w s-spk"/>
+        <rect x="330" y="446" width="60" height="16" rx="2" class="res"/>
+        <text x="360" y="440" class="rlabel" text-anchor="middle">100 Ω</text>
+        <path d="M390 454H534" class="w s-spk"/>
+        <path d="M216 466H250V480" class="w thin wgnd"/>
+        <g class="pill pgnd"><rect x="230" y="480" width="40" height="18" rx="9"/><text x="250" y="493">GND</text></g>
+        <text x="290" y="493" class="warn-txt">jamais sur le 5V</text>
+
+        <!-- ===== Sound ===== -->
+        <rect x="40" y="506" width="220" height="74" rx="6" class="mod"/>
+        <text x="54" y="530" class="mt">Son</text>
+        <text x="54" y="547" class="ms">CZN-15E</text>
+        <rect x="255" y="515" width="10" height="10" class="mpad"/><text x="248" y="524" class="ml" text-anchor="end">OUT</text>
+        <rect x="255" y="535" width="10" height="10" class="mpad"/><text x="248" y="544" class="ml" text-anchor="end">GND</text>
+        <rect x="255" y="555" width="10" height="10" class="mpad"/><text x="248" y="564" class="ml" text-anchor="end">VCC</text>
+        <path d="M265 520H490V492H534" class="w s-sound"/>
+        <path d="M265 540H284" class="w thin wgnd"/>
+        <g class="pill pgnd"><rect x="284" y="531" width="40" height="18" rx="9"/><text x="304" y="544">GND</text></g>
+        <path d="M265 560H284" class="w thin w33"/>
+        <g class="pill p33"><rect x="284" y="551" width="38" height="18" rx="9"/><text x="303" y="564">3V3</text></g>
+
+        <!-- ===== PIR ===== -->
+        <rect x="40" y="590" width="220" height="70" rx="6" class="mod"/>
+        <text x="54" y="614" class="mt">PIR</text>
+        <text x="54" y="631" class="ms">HC-SR501</text>
+        <rect x="255" y="601" width="10" height="10" class="mpad"/><text x="248" y="610" class="ml" text-anchor="end">VCC</text>
+        <rect x="255" y="621" width="10" height="10" class="mpad"/><text x="248" y="630" class="ml" text-anchor="end">OUT</text>
+        <rect x="255" y="641" width="10" height="10" class="mpad"/><text x="248" y="650" class="ml" text-anchor="end">GND</text>
+        <path d="M265 606H284" class="w thin w5v"/>
+        <g class="pill p5v"><rect x="284" y="597" width="32" height="18" rx="9"/><text x="300" y="610">5V</text></g>
+        <path d="M265 626H460V530H534" class="w s-pir"/>
+        <path d="M265 646H284" class="w thin wgnd"/>
+        <g class="pill pgnd"><rect x="284" y="637" width="40" height="18" rx="9"/><text x="304" y="650">GND</text></g>
+
+        <!-- the camera's motor: not on this board -->
+        <text x="40" y="716" class="warn-txt">Le moteur de la caméra ne se branche pas sur l'ESP32 :</text>
+        <text x="40" y="733" class="warn-txt">il va sur le Raspberry Pi (encadré « Moteur »).</text>
+        <text x="40" y="752" class="note">IO35 reste libre.</text>
+
+        <!-- ===== DHT22 (4 pins) ===== -->
+        <rect x="950" y="526" width="230" height="144" rx="6" class="mod"/>
+        <text x="964" y="548" class="mt">AM2302 (DHT22)</text>
+        <text x="964" y="565" class="ms">Température / humidité · 4 broches</text>
+        <rect x="945" y="579" width="10" height="10" class="mpad"/><text x="962" y="588" class="ml">1 · VCC</text>
+        <rect x="945" y="601" width="10" height="10" class="mpad"/><text x="962" y="610" class="ml">2 · DATA</text>
+        <rect x="945" y="623" width="10" height="10" class="mpad off"/><text x="962" y="632" class="ml">3 · NC</text><text x="1018" y="632" class="note">non branché</text>
+        <rect x="945" y="645" width="10" height="10" class="mpad"/><text x="962" y="654" class="ml">4 · GND</text>
+        <path d="M945 584H934" class="w thin w33"/>
+        <g class="pill p33"><rect x="896" y="575" width="38" height="18" rx="9"/><text x="915" y="588">3V3</text></g>
+        <path d="M945 650H934" class="w thin wgnd"/>
+        <g class="pill pgnd"><rect x="894" y="641" width="40" height="18" rx="9"/><text x="914" y="654">GND</text></g>
+        <path d="M945 606H726" class="w s-dht"/>
+        <!-- pull-up DATA -> 3V3 -->
+        <circle cx="840" cy="606" r="5" class="f-dht"/>
+        <path d="M840 606V592" class="w s-dht"/>
+        <rect x="832" y="542" width="16" height="50" rx="2" class="res"/>
+        <path d="M840 542V528" class="w thin w33"/>
+        <g class="pill p33"><rect x="821" y="510" width="38" height="18" rx="9"/><text x="840" y="523">3V3</text></g>
+        <text x="856" y="566" class="rlabel">10 kΩ</text>
+        <text x="856" y="581" class="note">pull-up</text>
+        <text x="950" y="692" class="note">Broches comptées de gauche à droite, grille face à toi.</text>
+        <text x="950" y="709" class="note">Elles se plantent directement dans la breadboard.</text>
+        <text x="950" y="726" class="note">La 10 kΩ entre DATA et 3V3 est obligatoire sur ce modèle.</text>
+      </svg>
+    </div>
+    <p class="sheet-note">Brochage de la DevKitC V4 d'AZ-Delivery, identique à celui d'Espressif. Si ta carte a 30 broches, c'est un autre modèle : le câblage par numéro d'IO reste valable, seule la position des broches change.</p>
+  </div>
+
+  <div class="cards">
+    <section class="card" id="rails">
+      <div class="tag">Rails</div>
+      <h2>Alimenter la breadboard</h2>
+      <svg viewBox="0 0 440 260" role="img" aria-label="Breadboard vue de dessus : la broche 5V vers le rail 5V du haut, la broche 3V3 vers le rail 3V3 du bas en passant par le bout de la carte, les deux rails GND reliés">
+        <rect x="10" y="10" width="420" height="240" rx="10" class="bb"/>
+        <text x="24" y="30" class="rlabel">5V</text>
+        <path d="M24 34H416" class="w thin w5v"/>
+        <text x="24" y="50" class="rlabel">GND</text>
+        <path d="M24 54H416" class="w thin wgnd"/>
+        <text x="416" y="30" class="note" text-anchor="end">MQ-2, PIR</text>
+        <text x="24" y="202" class="rlabel">GND</text>
+        <path d="M24 206H416" class="w thin wgnd"/>
+        <text x="24" y="222" class="rlabel">3V3</text>
+        <path d="M24 226H416" class="w thin w33"/>
+        <text x="416" y="244" class="note" text-anchor="end">DHT22, son</text>
+        <rect x="10" y="127" width="420" height="6" class="gap"/>
+        <rect x="120" y="94" width="210" height="72" rx="4" class="board"/>
+        <rect x="106" y="118" width="16" height="24" rx="2" class="usb"/>
+        <text x="236" y="135" class="board-sub" text-anchor="middle" style="font-size:13px;fill:var(--board-ink)">ESP32</text>
+        <text x="132" y="117" class="board-sub" text-anchor="middle">5V</text>
+        <text x="184" y="117" class="board-sub" text-anchor="middle">GND</text>
+        <text x="318" y="117" class="board-sub" text-anchor="middle">3V3</text>
+        <text x="318" y="153" class="board-sub" text-anchor="middle">GND</text>
+        <text x="300" y="135" class="board-sub" text-anchor="middle">antenne</text>
+        <path d="M132 100V34" class="halo"/><path d="M132 100V34" class="w w5v"/>
+        <path d="M184 100V54" class="halo"/><path d="M184 100V54" class="w wgnd"/>
+        <path d="M318 100V76H352V226" class="halo"/><path d="M318 100V76H352V226" class="w w33"/>
+        <path d="M318 160V206" class="halo"/><path d="M318 160V206" class="w wgnd"/>
+        <path d="M60 54V206" class="halo"/><path d="M60 54V206" class="w wgnd"/>
+        <text x="68" y="86" class="note">pont GND</text>
+        <circle cx="132" cy="100" r="3" class="pad"/><circle cx="184" cy="100" r="3" class="pad"/>
+        <circle cx="318" cy="100" r="3" class="pad"/><circle cx="318" cy="160" r="3" class="pad"/>
+        <circle cx="132" cy="34" r="4" class="dot5v"/><circle cx="184" cy="54" r="4" class="dotgnd"/>
+        <circle cx="352" cy="226" r="4" class="dot33"/><circle cx="318" cy="206" r="4" class="dotgnd"/>
+        <circle cx="60" cy="54" r="4" class="dotgnd"/><circle cx="60" cy="206" r="4" class="dotgnd"/>
+      </svg>
+      <ul>
+        <li>Rail du haut : broche <b>5V → 5V</b>. Rail du bas : broche <b>3V3 → 3V3</b>. Un fil relie les deux rails GND.</li>
+        <li>Les broches 5V et 3V3 sont du même côté de la carte, aux deux bouts. Fais passer le fil 3V3 par le bout côté antenne pour rejoindre le rail du bas.</li>
+        <li>Ne relie <b>jamais</b> le rail 5V au rail 3V3.</li>
+        <li>L'ESP32 couvre presque une breadboard entière. Colle deux breadboards et pose-le à cheval dessus, ou relie ses broches avec des Dupont femelles.</li>
+      </ul>
+    </section>
+
+    <section class="card" id="enceinte">
+      <div class="tag">Option</div>
+      <h2>Plus fort, avec un transistor NPN</h2>
+      <svg viewBox="0 0 440 170" role="img" aria-label="Deux transistors vus de face, face plate vers soi, pattes en bas. BC547 : C, B, E de gauche à droite. 2N2222 : E, B, C de gauche à droite.">
+        <rect x="76" y="20" width="68" height="56" rx="10" class="mod"/>
+        <text x="110" y="53" class="ml sm b" text-anchor="middle">BC547</text>
+        <path d="M88 76V118M110 76V118M132 76V118" class="inkline"/>
+        <text x="88" y="136" class="ml b" text-anchor="middle">C</text>
+        <text x="110" y="136" class="ml b" text-anchor="middle">B</text>
+        <text x="132" y="136" class="ml b" text-anchor="middle">E</text>
+        <rect x="296" y="20" width="68" height="56" rx="10" class="mod"/>
+        <text x="330" y="53" class="ml sm b" text-anchor="middle">2N2222</text>
+        <path d="M308 76V118M330 76V118M352 76V118" class="inkline"/>
+        <text x="308" y="136" class="ml b" text-anchor="middle">E</text>
+        <text x="330" y="136" class="ml b" text-anchor="middle">B</text>
+        <text x="352" y="136" class="ml b" text-anchor="middle">C</text>
+        <text x="220" y="162" class="note" text-anchor="middle">face plate vers toi, pattes en bas</text>
+      </svg>
+      <ul>
+        <li>Sans transistor, l'enceinte va de IO25 (par 100 Ω) à GND : environ 30 mA, ce qu'une broche peut donner. Avec un transistor, elle prend son courant sur le 5V, et sonne bien plus fort.</li>
+        <li><b>B</b> (base) ← 1 kΩ ← IO25. <b>E</b> (émetteur) → GND. <b>C</b> (collecteur) → fil noir de l'enceinte. Le fil rouge → 47 Ω → rail 5V. Ce 5V ne doit <b>jamais</b> toucher l'enceinte sans le transistor.</li>
+        <li>L'ordre des pattes dépend du modèle, parfois du fabricant (le P2N2222A est C-B-E) : vérifie la fiche de celui que tu as.</li>
+        <li>La 47 Ω (¼ W) limite le courant vers 90 mA. Sans elle, l'enceinte tirerait plus de 500 mA du 5 V de l'USB, et le BC547 n'en supporte que 100. Pas de 47 Ω : deux 100 Ω côte à côte font 50 Ω.</li>
+        <li>Une diode (1N4148 ou 1N4007) en parallèle sur l'enceinte, bague côté fil rouge, protège le transistor. Facultatif.</li>
+      </ul>
+    </section>
+
+    <section class="card warn" id="moteur">
+      <div class="tag">Moteur</div>
+      <h2>Le moteur pas à pas va sur le Raspberry Pi</h2>
+      <svg viewBox="0 0 520 300" role="img" aria-label="Carte ULN2003 reliée au connecteur du Raspberry Pi : IN1 à la broche 31 (GPIO 6), IN2 à la broche 33 (GPIO 13), IN3 à la broche 35 (GPIO 19), IN4 à la broche 37 (GPIO 26), moins à la broche 39 (GND), plus à la broche 4 (5 V). Le moteur 28BYJ-48 se branche dans la prise blanche de la carte.">
+        <text x="290" y="100" class="ms">Raspberry Pi 4 · connecteur</text>
+        <rect x="220" y="24" width="52" height="50" rx="4" class="board"/>
+        <rect x="220" y="106" width="52" height="138" rx="4" class="board"/>
+        <text x="246" y="94" class="ms" text-anchor="middle">⋮</text>
+        <!-- pins 1 to 4 -->
+        <rect x="229" y="33" width="10" height="10" class="pad off"/><rect x="253" y="33" width="10" height="10" class="pad off"/>
+        <rect x="229" y="55" width="10" height="10" class="pad off"/><rect x="253" y="55" width="10" height="10" class="pad"/>
+        <text x="212" y="42" class="ml sm dim" text-anchor="end">3V3 · 1</text>
+        <text x="212" y="64" class="ml sm dim" text-anchor="end">GPIO2 · 3</text>
+        <text x="280" y="42" class="ml sm dim">2 · 5V</text>
+        <!-- pins 29 to 40 -->
+        <rect x="229" y="115" width="10" height="10" class="pad off"/><rect x="253" y="115" width="10" height="10" class="pad off"/>
+        <rect x="229" y="137" width="10" height="10" class="pad"/><rect x="253" y="137" width="10" height="10" class="pad off"/>
+        <rect x="229" y="159" width="10" height="10" class="pad"/><rect x="253" y="159" width="10" height="10" class="pad off"/>
+        <rect x="229" y="181" width="10" height="10" class="pad"/><rect x="253" y="181" width="10" height="10" class="pad off"/>
+        <rect x="229" y="203" width="10" height="10" class="pad"/><rect x="253" y="203" width="10" height="10" class="pad off"/>
+        <rect x="229" y="225" width="10" height="10" class="pad"/><rect x="253" y="225" width="10" height="10" class="pad off"/>
+        <text x="280" y="124" class="ml sm dim">30 · GND</text>
+        <text x="280" y="146" class="ml sm dim">32 · GPIO12</text>
+        <text x="280" y="168" class="ml sm dim">34 · GND</text>
+        <text x="280" y="190" class="ml sm dim">36 · GPIO16</text>
+        <text x="280" y="212" class="ml sm dim">38 · GPIO20</text>
+        <text x="280" y="234" class="ml sm dim">40 · GPIO21</text>
+
+        <!-- ULN2003 board -->
+        <text x="70" y="110" class="mt" text-anchor="middle">ULN2003</text>
+        <rect x="20" y="118" width="100" height="126" rx="6" class="mod"/>
+        <rect x="115" y="121" width="10" height="10" class="mpad"/><text x="108" y="130" class="ml sm" text-anchor="end">+</text>
+        <rect x="115" y="137" width="10" height="10" class="mpad"/><text x="108" y="146" class="ml sm" text-anchor="end">IN1</text>
+        <rect x="115" y="159" width="10" height="10" class="mpad"/><text x="108" y="168" class="ml sm" text-anchor="end">IN2</text>
+        <rect x="115" y="181" width="10" height="10" class="mpad"/><text x="108" y="190" class="ml sm" text-anchor="end">IN3</text>
+        <rect x="115" y="203" width="10" height="10" class="mpad"/><text x="108" y="212" class="ml sm" text-anchor="end">IN4</text>
+        <rect x="115" y="225" width="10" height="10" class="mpad"/><text x="108" y="234" class="ml sm" text-anchor="end">−</text>
+
+        <!-- IN1 to IN4: pins 31, 33, 35, 37 -->
+        <path d="M125 142H229" class="w s-servo"/><text x="150" y="137" class="wl servo">31 · GPIO6</text>
+        <path d="M125 164H229" class="w s-servo"/><text x="150" y="159" class="wl servo">33 · GPIO13</text>
+        <path d="M125 186H229" class="w s-servo"/><text x="150" y="181" class="wl servo">35 · GPIO19</text>
+        <path d="M125 208H229" class="w s-servo"/><text x="150" y="203" class="wl servo">37 · GPIO26</text>
+        <!-- minus: pin 39 -->
+        <path d="M125 230H229" class="w wgnd"/><text x="150" y="225" class="wl gnd">39 · GND</text>
+        <!-- plus: pin 4 -->
+        <path d="M125 126H140V12H350V60H263" class="w w5v"/>
+        <text x="292" y="54" class="wl" style="fill:var(--v5)">4 · 5V</text>
+
+        <!-- the motor, in the white socket -->
+        <path d="M70 244V258" class="w thin s-servo"/>
+        <circle cx="70" cy="278" r="20" class="spk"/>
+        <circle cx="70" cy="278" r="5" class="ink"/>
+        <text x="98" y="276" class="ml sm b">28BYJ-48</text>
+        <text x="98" y="291" class="note">dans la prise blanche</text>
+        <text x="240" y="262" class="note">broche 1 : pastille carrée,</text>
+        <text x="240" y="277" class="note">à l'opposé des ports USB ;</text>
+        <text x="240" y="292" class="note">les impaires sont à l'intérieur.</text>
+      </svg>
+      <p><code>vision</code> fait tourner la caméra en pilotant le moteur par quatre GPIO du Pi. L'ESP32 ne s'en occupe pas.</p>
+      <ul>
+        <li><b>IN1 · IN2 · IN3 · IN4</b> → broches 31 · 33 · 35 · 37. <b>−</b> → broche 39 (GND). <b>+</b> → broche 4 (5 V).</li>
+        <li>Le moteur tire environ 200 mA, sans à-coups : la broche 5 V du Pi suffit. Ne mets rien d'autre dessus.</li>
+        <li>Il ne sait pas où il est : <b>tourne la caméra à la main pour qu'elle regarde droit devant</b> avant chaque démarrage.</li>
+        <li>Sur le Pi, une fois : <code>infra/stepper.sh</code>, puis <code>infra/plug-and-play.sh &lt;table&gt; --no-flash</code>.</li>
+      </ul>
+    </section>
+  </div>
+
+  <section class="section">
+    <h2>Récapitulatif broche par broche</h2>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Module</th><th>Broche du module</th><th>Vers</th><th>À savoir</th></tr></thead>
+        <tbody>
+          <tr><td><span class="k" style="background:var(--c-mq2)"></span>MQ-2</td><td class="mono">VCC · GND</td><td class="mono">5V · GND</td><td>La chauffe consomme environ 150 mA.</td></tr>
+          <tr><td><span class="k" style="background:var(--c-mq2)"></span>MQ-2</td><td class="mono">AO</td><td class="mono">IO34 via 10 kΩ / 20 kΩ</td><td>Jamais en direct : la sortie monte jusqu'à 5 V. DO reste débranché.</td></tr>
+          <tr><td><span class="k" style="background:var(--c-sound)"></span>Son CZN-15E</td><td class="mono">OUT · GND · VCC</td><td class="mono">IO26 · GND · 3V3</td><td>Le plus souvent LOW quand un son est détecté.</td></tr>
+          <tr><td><span class="k" style="background:var(--c-pir)"></span>PIR HC-SR501</td><td class="mono">VCC · OUT · GND</td><td class="mono">5V · IO27 · GND</td><td>Sa sortie est déjà en 3,3 V. Les noms des broches sont sous le dôme blanc.</td></tr>
+          <tr><td><span class="k" style="background:var(--c-dht)"></span>AM2302 / DHT22</td><td class="mono">1 VCC · 2 DATA · 3 NC · 4 GND</td><td class="mono">3V3 · IO4 · rien · GND</td><td>Résistance de 10 kΩ entre DATA et 3V3, obligatoire. Broches comptées de gauche à droite, grille face à toi.</td></tr>
+          <tr><td><span class="k" style="background:var(--c-spk)"></span>Enceinte</td><td class="mono">rouge · noir</td><td class="mono">IO25 via 100 Ω · GND</td><td>Passive, 4 à 8 Ω. Jamais sur le 5V : entre le 5V et IO25, elle court-circuite le rail 5V et tout ce qui est dessus.</td></tr>
+          <tr><td><span class="k" style="background:var(--c-spk)"></span>Buzzer (au choix)</td><td class="mono">+ · −</td><td class="mono">IO25 · GND</td><td>À la place de l'enceinte : plus fort pour le même courant.</td></tr>
+          <tr class="pi"><td><span class="k" style="background:var(--c-servo)"></span>Carte ULN2003</td><td class="mono">IN1 · IN2 · IN3 · IN4</td><td class="mono">Pi broches 31 · 33 · 35 · 37</td><td>GPIO 6, 13, 19, 26 du Raspberry Pi. Le 28BYJ-48 dans sa prise blanche.</td></tr>
+          <tr class="pi"><td><span class="k" style="background:var(--c-servo)"></span>Carte ULN2003</td><td class="mono">− · +</td><td class="mono">Pi broche 39 · broche 4</td><td>GND et 5 V du Pi : environ 200 mA.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="cards">
+    <section class="card">
+      <div class="tag">Avant de brancher l'USB</div>
+      <h2>Cinq vérifications</h2>
+      <ol>
+        <li>Aucun fil ne relie le 5 V à une broche IO, l'enceinte comprise. L'ESP32 et le Pi n'acceptent que 3,3 V au maximum.</li>
+        <li>Toutes les masses sont reliées : les deux rails GND, l'ESP32, et le − de l'alim 5 V externe s'il y en a une.</li>
+        <li>L'enceinte va de IO25 (par 100 Ω) à GND, jamais au 5V.</li>
+        <li>Le MQ-2 est sur IO34, une broche de l'ADC1. L'ADC2 ne marche plus quand le Wi-Fi est actif.</li>
+        <li>Les rails 5V et 3V3 ne se touchent nulle part.</li>
+      </ol>
+    </section>
+    <section class="card">
+      <div class="tag">Réglages</div>
+      <h2>Au premier démarrage</h2>
+      <ul>
+        <li><b>PIR</b> : cavalier sur H, potentiomètre de durée au minimum. Compte environ 60 s de chauffe pendant lesquelles il peut y avoir de fausses détections.</li>
+        <li><b>MQ-2</b> : 1 à 2 min de chauffe à chaque démarrage. La toute première fois, laisse-le alimenté quelques heures.</li>
+        <li><b>Son</b> : tourne la vis bleue jusqu'à ce que la LED du module s'allume quand tu claques des doigts.</li>
+        <li><b>Enceinte</b> : un bip court au démarrage. Trop faible : le buzzer à sa place, ou un transistor (encadré « Option »). Jamais moins de 100 Ω en direct sur IO25.</li>
+      </ul>
+    </section>
+    <section class="code-card">
+      <div class="code-head">
+        <div class="tag">firmware · include/pins.h</div>
+        <button type="button" id="copy-pins">Copier</button>
+      </div>
+<pre id="pins-code">// Sentinel : brochage ESP32 DevKitC V4 (AZ-Delivery)
+constexpr int PIN_MQ2_AO  = 34;  // via pont diviseur
+constexpr int PIN_SOUND   = 26;  // DO, actif bas
+constexpr int PIN_PIR     = 27;
+constexpr int PIN_DHT     = 4;
+constexpr int PIN_SPEAKER = 25;  // enceinte par 100 Ω, ou buzzer, vers GND</pre>
+      <p>Le brochage de <code>firmware/include/pins.h</code>. La sirène est un signal carré sur IO25 : 1800 et 2600 Hz en alternance.</p>
+    </section>
+  </div>
+</div>
+
+<script>
+(function () {
+  var btn = document.getElementById('copy-pins');
+  var code = document.getElementById('pins-code');
+  btn.addEventListener('click', function () {
+    var text = code.textContent;
+    function selectFallback() {
+      var r = document.createRange(); r.selectNodeContents(code);
+      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      btn.textContent = 'Sélectionné, fais Ctrl+C';
+    }
+    try {
+      navigator.clipboard.writeText(text).then(function () {
+        btn.textContent = 'Copié';
+        setTimeout(function () { btn.textContent = 'Copier'; }, 1800);
+      }, selectFallback);
+    } catch (e) { selectFallback(); }
+  });
+})();
+</script>
+</body>
+</html>

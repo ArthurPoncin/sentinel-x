@@ -1,31 +1,29 @@
-# The motor that turns the webcam, for the vision service, on top of docker-compose.yml: a 28BYJ-48
-# stepper on its ULN2003 driver board, IN1 to IN4 on the Pi's GPIO 17, 18, 27 and 22 (pins 11, 12, 13
-# and 15). Apart, like docker-compose.camera.yml and for the same reason: Docker refuses to create a
-# container whose device node is missing on the host, and a laptop has no GPIO chip.
-# On the Pi, infra/plug-and-play.sh takes this file once it finds the chip, through these lines in .env:
+# The servo that turns the webcam, for the vision service, on top of docker-compose.yml. Apart, like
+# docker-compose.camera.yml and for the same reason: Docker refuses to create a container whose
+# mount is missing on the host, and a laptop — or a Pi without a servo — has no PWM channel.
+# On the Pi, infra/servo.sh sets the channel up once (GPIO 18, exported at each boot), and
+# infra/plug-and-play.sh takes this file once it finds the channel, through these lines in .env:
 #   COMPOSE_FILE=docker-compose.yml:docker-compose.camera.yml:docker-compose.pan.yml
-#   PAN_GID=<the group that owns the chip's node: gpio>
-# The chip's node only, never `privileged`: the kernel has no node per line, so the container could
-# set any GPIO of the header, and sees nothing else of /dev, through the host's `gpio` group.
+#   PAN_PWM_CHANNEL=/sys/devices/platform/soc/fe20c000.pwm/pwm/pwmchip0/pwm0
+#   PAN_GID=<the group that owns the channel's files: gpio>
+# The channel's own directory only, never `privileged`: the container writes the pulse the kernel
+# sends to the servo and sees nothing else of /sys/class/pwm, through the host's `gpio` group.
 services:
   vision:
-    group_add: ["${PAN_GID:?the group of the GPIO chip, put in .env by infra/plug-and-play.sh}"]
-    devices:
-      # The header's chip on a Pi 4. Another one: PAN_GPIO_CHIP in .env.
-      - ${PAN_GPIO_CHIP:-/dev/gpiochip0}:/dev/gpiochip0
+    group_add: ["${PAN_GID:?the group of the PWM channel, put in .env by infra/plug-and-play.sh}"]
+    volumes:
+      - ${PAN_PWM_CHANNEL:?the PWM channel of the servo, put in .env by infra/plug-and-play.sh}:/pwm
     environment:
-      # PAN_DRIVE=none in .env: the camera is fixed, whatever is wired.
-      PAN_DRIVE: ${PAN_DRIVE:-stepper}
-      # The motor as it is wired and mounted, from .env when it differs from the defaults
-      # (ai/vision/.env.example): the GPIO of IN1 to IN4, its half-steps to a turn, the time it is given
-      # for each, which way up, its travel either way of where the camera rests. Empty is unset: the
-      # default applies.
-      PAN_STEP_PINS: ${PAN_STEP_PINS:-}
-      PAN_STEPS_PER_TURN: ${PAN_STEPS_PER_TURN:-}
-      PAN_STEP_MS: ${PAN_STEP_MS:-}
-      PAN_INVERT: ${PAN_INVERT:-}
+      PAN_DRIVE: pwm
+      PAN_PWM_DIR: /pwm
+      # The servo as it is mounted, from .env when it differs from the defaults (ai/vision/.env.example):
+      # its travel either way of where the camera rests, the pulse at each end of it, which way up.
+      # Empty is unset: the default applies.
       PAN_MIN_DEG: ${PAN_MIN_DEG:-}
       PAN_MAX_DEG: ${PAN_MAX_DEG:-}
+      PAN_MIN_US: ${PAN_MIN_US:-}
+      PAN_MAX_US: ${PAN_MAX_US:-}
+      PAN_INVERT: ${PAN_INVERT:-}
       PAN_SPEED_DEG_S: ${PAN_SPEED_DEG_S:-}
       PAN_DEADBAND_DEG: ${PAN_DEADBAND_DEG:-}
       CAMERA_FOV_DEG: ${CAMERA_FOV_DEG:-}

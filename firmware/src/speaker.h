@@ -2,9 +2,9 @@
 
 #include <Arduino.h>
 
-// The Alarm: a speaker, driven by the ESP32 through an NPN transistor. It sounds on its own while
-// an Alert is critical, Command Post or not; the Operator can also sound it or silence it with a
-// command.
+// The Alarm: a speaker through 100 ohms, or the buzzer, between IO25 and GND. It sounds on its own
+// while an Alert is critical, Command Post or not; the Operator can also sound it or silence it with
+// a command.
 namespace speaker {
 
 void begin();
