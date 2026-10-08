@@ -1,10 +1,13 @@
-"""The camera on its servo: it turns to keep the person followed in the middle of its image.
+"""The camera on its motor: it turns to keep the person followed in the middle of its image.
 
 - `PanFollower`, the logic: from where that person stands around the camera to how far it is turned, at
-  each instant. Pure, like the tracker: no servo and no clock in it, the caller passes the monotonic time.
-- `PanDrive`, what turns the camera: `PAN_DRIVE`, `pwm` (`SysfsPwmServo`, a servo on one of the Pi's
-  hardware PWM pins) or `none` (the camera is fixed: nothing here runs). Another one plugs in the same way:
-  a class with `open()`, `turn()` and `close()`, and a line in `DRIVES`.
+  each instant. Pure, like the tracker: no motor and no clock in it, the caller passes the monotonic time.
+- `PanDrive`, what turns the camera: `PAN_DRIVE`, `stepper` (`Uln2003Stepper`, a 28BYJ-48 stepper motor
+  on its ULN2003 driver board, on four of the Pi's GPIO: the stack's), `pwm` (`SysfsPwmServo`, a servo on
+  one of the Pi's hardware PWM pins) or `none` (the camera is fixed: nothing here runs). Another one plugs
+  in the same way: a class with `open()`, `turn()` and `close()`, and a line in `DRIVES`.
+- `python -m vision.pan <degrees>`, the service stopped: turns the camera by that much and leaves it
+  there. Says whether the motor is wired, and which way it turns.
 
 Angles are in degrees from where the camera rests, positive toward the right of its image: the `pan` of an
 `intrusion` Alert.
@@ -13,9 +16,12 @@ Angles are in degrees from where the camera rests, positive toward the right of 
 import logging
 import math
 import os
+import struct
+import sys
+import threading
 import time
 from collections import deque
-from typing import Callable, Protocol
+from typing import Callable, Protocol, Sequence
 
 from sentinel_common.config import ConfigError, env_bool, env_float, env_str
 
@@ -33,8 +39,8 @@ class PanFollower:
       inference (`gain`: an inference is always a little late on where they are), and leaves them be once
       they are within `deadband` degrees of the middle of its image: it does not hunt for the last degree;
     - it never turns faster than `speed` degrees a second, so that what it frames does not blur and the
-      servo, which says nothing of where it is, is where it was told to be; nor past `low` and `high`, the
-      servo's travel;
+      motor, which says nothing of where it is, is where it was told to be; nor past `low` and `high`, the
+      motor's travel;
     - when the last inference did not see that person, it stays where it is: they are found again where
       they were lost;
     - with no intrusion (`rest`), it goes back to where it rests, at `home_speed`.
@@ -132,16 +138,20 @@ class PanFollower:
 
 
 class PanDrive(Protocol):
+    """What turns the camera. One that counts how far it really turned it also has `angle_at(moment)`, on
+    the monotonic clock: the service then takes its word rather than the follower's, which only supposes
+    that the motor kept up."""
+
     name: str
 
     def open(self) -> None:
-        """Gets ready to turn the camera, to where it rests. Never raises because the servo is not there."""
+        """Gets ready to turn the camera, to where it rests. Never raises because the motor is not there."""
 
     def turn(self, angle: float) -> None:
         """Turns the camera to `angle` degrees. Called on the loop's thread, many times a second."""
 
     def close(self) -> None:
-        """Lets the servo go."""
+        """Lets the motor go."""
 
 
 class SysfsPwmServo:
@@ -150,9 +160,9 @@ class SysfsPwmServo:
     The kernel times the pulses: none of the jitter of pulses timed from Python, which a servo shakes
     with, and the camera on it.
 
-    `directory` is the channel's own directory (`…/pwmchip0/pwm0`), exported by the host and given to the
-    container: docker-compose.pan.yml. `invert` is for a servo mounted the other way up: it turns the
-    other way for the same pulse.
+    `directory` is the channel's own directory (`…/pwmchip0/pwm0`), exported by the host and, under Docker,
+    given to the container. `invert` is for a servo mounted the other way up: it turns the other way for
+    the same pulse.
 
     A servo, a channel or a right that is missing stops nothing: it is logged, tried again every
     `retry` seconds, and the camera stays fixed meanwhile.
@@ -271,8 +281,268 @@ class SysfsPwmServo:
             file.write(str(value))
 
 
+# The kernel's GPIO character device (linux/gpio.h, its v2): a chip is asked for some of its lines, which
+# are then set all at once. The same numbers and the same layouts on every Linux, the Pi's included.
+_GPIO_GET_CHIPINFO = 0x8044B401  # struct gpiochip_info, 68 bytes: its label at 32
+_GPIO_V2_GET_LINE = 0xC250B407  # struct gpio_v2_line_request, 592 bytes
+_GPIO_V2_LINE_SET_VALUES = 0xC010B40F  # struct gpio_v2_line_values: bits, mask
+_GPIO_V2_LINE_FLAG_OUTPUT = 1 << 3
+
+
+class GpioLines:
+    """Some lines of one of the Pi's GPIO chips (`/dev/gpiochip0`, the header's: a line's number is its BCM
+    one), as outputs, all low to begin with. Through the kernel's GPIO character device: no package
+    needed. The kernel gives a line to one process at a time, and takes it back when that process ends."""
+
+    def __init__(self, chip: str, offsets: Sequence[int], consumer: str = "sentinel-x") -> None:
+        import fcntl  # Unix only: for a camera that turns, not for whoever imports this module
+
+        self._ioctl = fcntl.ioctl
+        info, request = bytearray(68), bytearray(592)
+        struct.pack_into(f"={len(offsets)}I", request, 0, *offsets)  # offsets
+        struct.pack_into("=31s", request, 256, consumer.encode())  # consumer
+        struct.pack_into("=Q", request, 288, _GPIO_V2_LINE_FLAG_OUTPUT)  # config.flags
+        struct.pack_into("=I", request, 560, len(offsets))  # num_lines
+        fd = os.open(chip, os.O_RDWR)
+        try:
+            self._ioctl(fd, _GPIO_GET_CHIPINFO, info)
+            self._ioctl(fd, _GPIO_V2_GET_LINE, request)
+        finally:
+            os.close(fd)
+        self.label = bytes(info[32:64]).split(b"\0")[0].decode(errors="replace")
+        self._fd = struct.unpack_from("=i", request, 588)[0]  # fd: the lines' own
+        self._mask = (1 << len(offsets)) - 1
+
+    def set(self, values: Sequence[int]) -> None:
+        """Each line high or low, in the order they were asked for."""
+        bits = sum(1 << place for place, value in enumerate(values) if value)
+        self._ioctl(self._fd, _GPIO_V2_LINE_SET_VALUES, struct.pack("=QQ", bits, self._mask))
+
+    def close(self) -> None:
+        os.close(self._fd)
+
+
+# A step of the 28BYJ-48's rotor in eight half-steps, as IN1 to IN4 of the ULN2003 board: a coil, it and
+# the next, the next alone… Read the other way, it turns the other way.
+_HALF_STEPS = (
+    (1, 0, 0, 0), (1, 1, 0, 0), (0, 1, 0, 0), (0, 1, 1, 0),
+    (0, 0, 1, 0), (0, 0, 1, 1), (0, 0, 0, 1), (1, 0, 0, 1),
+)
+_OFF = (0, 0, 0, 0)
+
+
+class Uln2003Stepper:
+    """A 28BYJ-48 stepper motor on its ULN2003 driver board, IN1 to IN4 on four of the Pi's GPIO (`pins`,
+    their BCM numbers, in that order) of `chip`: `steps_per_turn` half-steps to a turn of the camera, one
+    every `step_ms` milliseconds at most — faster, the motor misses some, and is no longer where it is
+    counted to be. `invert` is for a motor mounted the other way up.
+
+    A stepper says nothing of where it is and has no end stop: where the camera points when the service
+    starts is where it rests, and every angle is counted from there. The service parks it there as it
+    stops; after a power cut it is turned back with `python -m vision.pan`.
+
+    A thread of its own paces the half-steps: the loop's, which says where to turn to, is held by each
+    inference for longer than a motor that turns can wait. So it is always an inference behind where it
+    was told to be, and says where it really was (`angle_at`), for the `memory` seconds it remembers. Once
+    there, the coils are let go after `hold` seconds: the gears hold the camera, and coils left on only heat.
+
+    A chip or a right that is missing stops nothing: it is logged, tried again every `retry` seconds, and
+    the camera stays fixed meanwhile.
+    """
+
+    name = "stepper"
+
+    def __init__(
+        self,
+        chip: str,
+        pins: Sequence[int],
+        *,
+        low: float = -90.0,
+        high: float = 90.0,
+        steps_per_turn: float = 4096.0,
+        step_ms: float = 2.0,
+        invert: bool = False,
+        hold: float = 0.2,
+        retry: float = 5.0,
+        memory: float = 2.0,
+        lines: Callable[[str, Sequence[int]], GpioLines] | None = None,
+    ) -> None:
+        if not chip:
+            raise ValueError("chip: the GPIO chip's device expected")
+        if len(pins) != 4 or len(set(pins)) != 4 or not all(isinstance(pin, int) and pin >= 0 for pin in pins):
+            raise ValueError(f"pins: the four GPIO of IN1 to IN4 expected, got {pins!r}")
+        if not low < high:
+            raise ValueError(f"low and high: low < high expected, got {low!r} to {high!r}")
+        if not (_is_number(steps_per_turn) and steps_per_turn > 0 and _is_number(step_ms) and step_ms > 0):
+            raise ValueError(f"steps_per_turn and step_ms: numbers > 0 expected, got {steps_per_turn!r} and {step_ms!r}")
+        if not (_is_number(hold) and hold >= 0 and _is_number(retry) and retry > 0):
+            raise ValueError(f"hold and retry: a number >= 0 and one > 0 expected, got {hold!r} and {retry!r}")
+        if not (_is_number(memory) and memory > 0):
+            raise ValueError(f"memory: a number > 0 expected, got {memory!r}")
+        self._chip, self._pins = chip, tuple(pins)
+        self._open_lines = lines  # what asks the kernel for the four GPIO: GpioLines, but in the tests
+        self._low, self._high = low, high
+        self._per_degree = steps_per_turn / 360 * (-1 if invert else 1)  # half-steps
+        self._interval, self._hold, self._retry, self._memory = step_ms / 1000, hold, retry, memory
+        # Where it is told to be and where it is, in half-steps from where the camera rests.
+        self._changed = threading.Condition()
+        self._goal = 0
+        self._at = 0
+        self._trail: deque[tuple[float, int]] = deque([(0.0, 0)])  # (when, the half-step it got to), oldest first
+        self._closing = False
+        self._thread: threading.Thread | None = None
+        self._lines: GpioLines | None = None  # the four GPIO, once the kernel gave them
+        self._problem: str | None = None
+
+    @classmethod
+    def from_env(cls) -> "Uln2003Stepper":
+        low, high = _env_travel()
+        raw = env_str("PAN_STEP_PINS", "17,18,27,22")
+        try:
+            pins = [int(pin) for pin in raw.split(",")]
+        except ValueError:
+            pins = []
+        # The GPIO of the Pi's header.
+        if len(pins) != 4 or len(set(pins)) != 4 or not all(2 <= pin <= 27 for pin in pins):
+            raise ConfigError(f"PAN_STEP_PINS: the four GPIO of IN1 to IN4 expected, as 17,18,27,22, got {raw!r}")
+        return cls(
+            env_str("PAN_GPIO_CHIP", "/dev/gpiochip0"),
+            pins,
+            low=low,
+            high=high,
+            steps_per_turn=env_float("PAN_STEPS_PER_TURN", 4096, min=100, max=100_000),
+            step_ms=env_float("PAN_STEP_MS", 2, min=0.5, max=50),
+            invert=env_bool("PAN_INVERT", False),
+        )
+
+    @property
+    def max_speed(self) -> float:
+        """How fast the camera may be told to turn, in degrees a second: four fifths of what a half-step
+        every `step_ms` gives, the rest for the thread to catch up when it is woken late."""
+        return 0.8 / (self._interval * abs(self._per_degree))
+
+    @property
+    def angle(self) -> float:
+        """How far it has turned the camera, as counted."""
+        return self._at / self._per_degree or 0.0
+
+    def angle_at(self, moment: float) -> float:
+        """How far it had turned the camera at `moment`, on the monotonic clock. Further back than it
+        remembers, the oldest it does."""
+        with self._changed:
+            at = self._trail[0][1]
+            for when, reached in reversed(self._trail):
+                if when <= moment:
+                    at = reached
+                    break
+        return at / self._per_degree or 0.0
+
+    def open(self) -> None:
+        if self._thread is not None:
+            return
+        self._closing = False
+        self._connect()
+        self._thread = threading.Thread(target=self._run, name="pan", daemon=True)
+        self._thread.start()
+
+    def turn(self, angle: float) -> None:
+        goal = round(min(max(angle, self._low), self._high) * self._per_degree)
+        with self._changed:
+            if goal != self._goal:
+                self._goal = goal
+                self._changed.notify_all()
+
+    def close(self) -> None:
+        """Lets the motor go, once it is where it was last told to turn."""
+        thread, self._thread = self._thread, None
+        if thread is None:
+            return
+        with self._changed:
+            self._closing = True
+            left = abs(self._goal - self._at)
+            self._changed.notify_all()
+        # Twice the time the way left takes.
+        thread.join(1 + 2 * left * self._interval)
+        if thread.is_alive():
+            logger.warning("Stepper on %s still turning: left to it", self._chip)
+
+    def _run(self) -> None:
+        powered, stepped = False, 0.0  # whether a coil is on, and when the coils were last set
+        while True:
+            with self._changed:
+                while self._goal == self._at and not self._closing:
+                    if not powered:
+                        self._changed.wait()
+                    elif not self._changed.wait(self._hold):
+                        break
+                way = (self._goal > self._at) - (self._goal < self._at)
+                closing = self._closing
+            if way and self._lines is None and not self._connect():
+                if closing:
+                    break
+                self._pause()
+                continue
+            if way or powered:
+                # No sooner than `step_ms` after the last: the rotor is still on its way.
+                wait = stepped + self._interval - time.monotonic()
+                if wait > 0:
+                    time.sleep(wait)
+                # A half-step on. Before the first, the coils back on as they were let go: the gears held
+                # the rotor there. Once there and told nothing more, off.
+                at = self._at + way if powered else self._at
+                try:
+                    self._lines.set(_HALF_STEPS[at % 8] if way else _OFF)
+                except OSError as error:
+                    self._lost(error)
+                    powered = False
+                    if closing:
+                        break
+                    self._pause()
+                    continue
+                powered, stepped = bool(way), time.monotonic()
+                if at != self._at:
+                    with self._changed:
+                        self._at = at
+                        self._trail.append((stepped, at))
+                        while len(self._trail) > 1 and stepped - self._trail[1][0] >= self._memory:
+                            self._trail.popleft()
+            if closing and not way:
+                break
+        lines, self._lines = self._lines, None
+        if lines is not None:
+            lines.close()
+
+    def _pause(self) -> None:
+        # Until the next try, or the close.
+        with self._changed:
+            self._changed.wait_for(lambda: self._closing, self._retry)
+
+    def _connect(self) -> bool:
+        try:
+            self._lines = (self._open_lines or GpioLines)(self._chip, self._pins)
+        except OSError as error:
+            self._lost(error)
+            return False
+        self._problem = None
+        pins = ", ".join(map(str, self._pins))
+        logger.info("Stepper on %s ready: IN1 to IN4 on GPIO %s (%s)", self._chip, pins, self._lines.label)
+        return True
+
+    def _lost(self, error: OSError) -> None:
+        lines, self._lines = self._lines, None
+        if lines is not None:
+            try:
+                lines.close()
+            except OSError:
+                pass
+        # Logged when the reason changes, not on every retry of a chip that stays out of reach.
+        if str(error) != self._problem:
+            self._problem = str(error)
+            logger.warning("Stepper on %s unavailable (%s): the camera stays fixed, retrying every %g s", self._chip, error, self._retry)
+
+
 def _env_travel() -> tuple[float, float]:
-    """PAN_MIN_DEG and PAN_MAX_DEG: how far the servo turns the camera either way of where it rests."""
+    """PAN_MIN_DEG and PAN_MAX_DEG: how far the motor turns the camera either way of where it rests."""
     low = env_float("PAN_MIN_DEG", -90, min=-180, max=0)
     high = env_float("PAN_MAX_DEG", 90, min=0, max=180)
     if not low < high:
@@ -282,6 +552,7 @@ def _env_travel() -> tuple[float, float]:
 
 # PAN_DRIVE → a factory that reads its own settings. `none` is not here: a fixed camera has no drive.
 DRIVES: dict[str, Callable[[], PanDrive]] = {
+    "stepper": Uln2003Stepper.from_env,
     "pwm": SysfsPwmServo.from_env,
 }
 NO_DRIVE = "none"
@@ -296,10 +567,47 @@ def make_pan(name: str) -> tuple[PanFollower, PanDrive] | None:
     if factory is None:
         raise ConfigError(f"PAN_DRIVE: expected one of {', '.join([NO_DRIVE, *DRIVES])}, got {name!r}")
     low, high = _env_travel()
+    drive = factory()
+    # A motor that has a speed of its own is never told to turn faster: it would be left behind.
+    limit = getattr(drive, "max_speed", None)
+    speed = env_float("PAN_SPEED_DEG_S", 60 if limit is None else limit, min=1, max=360)
+    if limit is not None and speed > limit:
+        logger.warning("PAN_SPEED_DEG_S: %g is more than the %s drive turns at, kept to %.1f", speed, name, limit)
+        speed = limit
     follower = PanFollower(
         low=low,
         high=high,
-        speed=env_float("PAN_SPEED_DEG_S", 60, min=1, max=360),
+        speed=speed,
+        home_speed=min(30.0, speed),
         deadband=env_float("PAN_DEADBAND_DEG", 4, min=0, max=45),
     )
-    return follower, factory()
+    return follower, drive
+
+
+def main() -> None:
+    """python -m vision.pan <degrees>: turns the camera by that much from where it is, positive toward the
+    right of its image, and leaves it there: where it then points is where it rests. With the service
+    stopped, which holds the motor otherwise."""
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    try:
+        (by,) = (float(arg) for arg in sys.argv[1:])
+    except ValueError:
+        sys.exit("Usage: python -m vision.pan <degrees>, positive toward the right of the camera's image")
+    try:
+        pan = make_pan(env_str("PAN_DRIVE", NO_DRIVE))
+    except ConfigError as error:
+        sys.exit(f"Invalid configuration: {error}")
+    if pan is None:
+        sys.exit("PAN_DRIVE=none: this camera is fixed")
+    drive = pan[1]
+    drive.open()
+    drive.turn(by)
+    drive.close()
+    turned = drive.angle_at(time.monotonic()) if hasattr(drive, "angle_at") else by
+    if by and not turned:
+        sys.exit("The camera did not turn")
+    print(f"Turned by {turned:+.1f} degrees")
+
+
+if __name__ == "__main__":
+    main()

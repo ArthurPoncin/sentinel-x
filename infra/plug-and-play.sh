@@ -126,6 +126,19 @@ UNIT
   sudo systemctl enable --quiet sentinel-x-screen.service
   sudo systemctl restart sentinel-x-screen.service
 }
+# What infra/servo.sh installed for the servo this motor replaced: a hardware PWM channel on GPIO 18,
+# which is now the motor's IN2.
+servo_unit=/etc/systemd/system/sentinel-x-servo.service
+servo_overlay="dtoverlay=pwm,pin=18,func=2"
+boot_config=/boot/firmware/config.txt
+retire_servo() {
+  sudo systemctl disable --now sentinel-x-servo.service || true
+  sudo rm -f "$servo_unit"
+  sudo systemctl daemon-reload
+  if [[ -f "$boot_config" ]]; then
+    sudo sed -i -e '/^# Sentinel-X: the camera servo, hardware PWM on GPIO 18/d' -e "/^$servo_overlay\$/d" "$boot_config"
+  fi
+}
 open_firewall() {
   local rule
   for rule in 67/udp 123/udp 443/tcp 8883/tcp; do
@@ -306,7 +319,7 @@ api_password="$(sed -n 's/^MQTT_PASSWORD=//p' "$secrets/api.env")"
 ui_detail "dans infra/secrets, jamais commités"
 ui_done
 
-# --- 4. The webcam, and the servo that turns it ------------------------------------------------
+# --- 4. The webcam, and the motor that turns it ------------------------------------------------
 ui_step "Webcam USB"
 # Its node goes to vision only when it is plugged in: missing, Docker would refuse to start the
 # container, and `docker compose up` would stop at step 5. Found by its name in /dev/v4l/by-id,
@@ -319,7 +332,8 @@ for node in /dev/v4l/by-id/usb-*-video-index0; do
   if [[ -z "$webcam" && -e "$node" ]]; then webcam="$node"; fi
 done
 touch .env
-# The COMPOSE_FILE lines this step writes: with the webcam, with its servo, with both.
+# The COMPOSE_FILE lines this step writes: with the webcam, with its motor, with both. And what the
+# servo this motor replaced left there.
 sed -i -e '\|^COMPOSE_FILE=docker-compose\.yml\(:docker-compose\.camera\.yml\)\?\(:docker-compose\.pan\.yml\)\?$|d' \
   -e '/^CAMERA_DEVICE=/d' -e '/^PAN_PWM_CHANNEL=/d' -e '/^PAN_GID=/d' .env
 if [[ -z "$webcam" ]]; then
@@ -332,15 +346,32 @@ else
   webcam_name="${webcam_name%-video-index0}"
   ui_detail "${webcam_name//_/ }, donnée à vision"
 fi
-# The servo is optional: infra/servo.sh gives the Pi its PWM channel, once. Like the webcam's
-# node, the channel goes to vision only when it is there, with the group that owns its files.
-servo_ok=false
-pwm_channel=/sys/class/pwm/pwmchip0/pwm0
-if [[ -e "$pwm_channel/duty_cycle" ]]; then
-  compose_files+=:docker-compose.pan.yml
-  printf 'PAN_PWM_CHANNEL=%s\nPAN_GID=%s\n' "$(readlink -f "$pwm_channel")" "$(stat -c %g "$pwm_channel/duty_cycle")" >>.env
-  servo_ok=true
-  ui_detail "servo de la caméra sur GPIO 18, donné à vision"
+# The motor that turns it, a 28BYJ-48 on its ULN2003 board wired to GPIO 17, 18, 27 and 22, needs
+# nothing installed: the header's GPIO chip goes to vision, with the group that owns its node. A
+# camera left fixed says so in .env: PAN_DRIVE=none. So does DETECTOR=motion: a camera that turns
+# needs the person detector, and vision would leave it where it is.
+if [[ -f "$servo_unit" ]] || grep -qsxF "$servo_overlay" "$boot_config"; then
+  ui_run "retrait du PWM de l'ancien servo" retire_servo
+  ui_note "le PWM de l'ancien servo occupait GPIO 18, maintenant un fil du moteur : il est retiré, redémarre le Pi (sudo reboot) pour libérer la broche."
+fi
+motor=absent
+gpio_chip="$(sed -n 's/^PAN_GPIO_CHIP=//p' .env | tail -n 1)"
+gpio_chip="${gpio_chip:-/dev/gpiochip0}"
+if grep -qx 'PAN_DRIVE=none' .env; then
+  motor=off
+elif grep -qx 'DETECTOR=motion' .env; then
+  motor=motion
+elif [[ -c "$gpio_chip" ]]; then
+  # Never the root group, which a chip no rule gave to `gpio` is left to.
+  gpio_gid="$(stat -c %g "$gpio_chip")"
+  if ((gpio_gid == 0)); then
+    ui_note "$gpio_chip n'est ouvert qu'à root : la caméra restera fixe. Sur Raspberry Pi OS, il est au groupe gpio."
+  else
+    compose_files+=:docker-compose.pan.yml
+    printf 'PAN_GID=%s\n' "$gpio_gid" >>.env
+    motor=on
+    ui_detail "${UI_DETAIL:+$UI_DETAIL · }moteur de la caméra sur GPIO 17, 18, 27 et 22"
+  fi
 fi
 [[ "$compose_files" == docker-compose.yml ]] || printf 'COMPOSE_FILE=%s\n' "$compose_files" >>.env
 ui_done
@@ -451,13 +482,17 @@ fi
 ui_done
 
 # --- The summary -------------------------------------------------------------------------------
+motor_summary="$G_FAIL pas de GPIO sur cette machine"
+if [[ $motor == on ]]; then motor_summary="$G_OK donné à vision, la caméra suit"; fi
+if [[ $motor == off ]]; then motor_summary="caméra fixe (PAN_DRIVE=none dans .env)"; fi
+if [[ $motor == motion ]]; then motor_summary="caméra fixe (DETECTOR=motion dans .env)"; fi
 summary=(
   "Wi-Fi        $ssid"
   "Passphrase   $passphrase"
   "Dashboard    https://$pi_ip/"
   "Sentinel     $($sentinel_ok && echo "$G_OK $sentinel_ip" || echo "$G_FAIL pas encore sur le Wi-Fi")"
   "Webcam       $($camera_ok && echo "$G_OK donnée à vision" || echo "$G_FAIL absente")"
-  "Servo        $($servo_ok && echo "$G_OK donné à vision" || echo "sans (infra/servo.sh pour l'installer)")"
+  "Moteur       $motor_summary"
   "Écran HDMI   $($screen_ok && echo "$G_OK statut affiché" || echo "$G_FAIL non détecté")"
   "Durée        $(_ui_duration "$SECONDS")"
   "Journal      $(_ui_home "$UI_LOG")"

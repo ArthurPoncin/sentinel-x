@@ -147,12 +147,11 @@ jobs:
       - name: The status screen compiles
         run: python3 -m py_compile infra/screen.py
       # With what infra/setup.sh and infra/plug-and-play.sh put there on the Pi: the secrets' files, the
-      # webcam and its servo.
-      - name: The Compose stack is valid, with the webcam and its servo
+      # webcam and its motor.
+      - name: The Compose stack is valid, with the webcam and its motor
         env:
           COMPOSE_FILE: docker-compose.yml:docker-compose.camera.yml:docker-compose.pan.yml
           CAMERA_DEVICE: /dev/video0
-          PAN_PWM_CHANNEL: /sys/class/pwm/pwmchip0/pwm0
           PAN_GID: "993"
         run: |
           mkdir -p infra/secrets && touch infra/secrets/api.env infra/secrets/vision.env infra/secrets/predictive.env
