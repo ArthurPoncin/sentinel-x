@@ -7,7 +7,7 @@ import { useFraming } from '../hooks/use-framing'
 import { cameraTurn } from '../utils/alert-framing'
 import type { CameraTouch } from '../utils/auto-orbit'
 import { TARGET, wholeStageDistance } from '../utils/framing'
-import { type OperatorHands, steered } from '../utils/operator-hands'
+import { type OperatorHands, type Stand, steered, stretched } from '../utils/operator-hands'
 import type { SceneProps } from '../utils/scene'
 
 // Seconds the automatic orbit takes to go once around the Outpost.
@@ -21,6 +21,8 @@ const MAX_POLAR = MathUtils.degToRad(82)
 // The longest a frame is taken to last on the way to an Alert: after one that took longer, the tab coming
 // back, the camera turns no further than this, and never past the anchor.
 const LONGEST_FRAME = 0.1
+// The share of the way to where two hands want it that the camera goes in a second, eased: palms tremble.
+const STRETCH_PULL = 12
 // What the camera turns around: the vertical through its target.
 const UP = new Vector3(0, 1, 0)
 
@@ -35,8 +37,9 @@ export interface OrbitCameraProps {
   // Stands back just far enough to hold the whole stage, whatever the shape of the frame. The Operator can
   // still turn the camera, no longer zoom.
   wholeStage?: boolean
-  // The Operator's hands over a sensor, when they have one: a flat hand steers the camera as a drag does, and
-  // the orbit waits for it the same way.
+  // The Operator's hands over a sensor, when they have one: a flat hand steers the camera as a drag does, two
+  // open ones zoom as two fingers do on a screen, one that aims holds it still, and the orbit waits for them
+  // the same way.
   operator?: OperatorHands
 }
 
@@ -49,6 +52,8 @@ export function OrbitCamera({ anchor, frames, wholeStage = false, operator }: Or
   const hand = useRef(false)
   const mouse = useRef(false)
   const stand = useRef(new Spherical())
+  // How far the camera stood as two hands took hold of the view.
+  const grip = useRef<number | null>(null)
   const framingNow = useFraming(anchor, frames)
 
   useEffect(() => {
@@ -86,18 +91,24 @@ export function OrbitCamera({ anchor, frames, wholeStage = false, operator }: Or
     if (!orbit) return
     // Both bounds at once: the controls bring the camera there, and follow the frame when it changes shape.
     if (wholeStage) orbit.minDistance = orbit.maxDistance = wholeStageDistance(size.width / size.height)
-    // The hand first: it moves the camera round its target, and the controls then read where it is.
+    // The hands first: they move the camera round its target, and the controls then read where it is.
     const steer = operator?.steer() ?? null
-    if (steer) {
+    const stretch = operator?.stretch() ?? null
+    if (stretch === null) grip.current = null
+    if (steer || stretch !== null || operator?.aim()) {
       hand.current = true
       touch.current = { kind: 'holding' }
+      const elapsed = Math.min(delta, LONGEST_FRAME)
+      const bounds = { minPolar: MIN_POLAR, maxPolar: MAX_POLAR, minDistance: orbit.minDistance, maxDistance: orbit.maxDistance }
       const from = stand.current.setFromVector3(camera.position.sub(orbit.target))
-      const to = steered({ azimuth: from.theta, polar: from.phi, distance: from.radius }, steer, Math.min(delta, LONGEST_FRAME), {
-        minPolar: MIN_POLAR,
-        maxPolar: MAX_POLAR,
-        minDistance: orbit.minDistance,
-        maxDistance: orbit.maxDistance,
-      })
+      let to: Stand = { azimuth: from.theta, polar: from.phi, distance: from.radius }
+      if (stretch !== null) {
+        grip.current ??= to.distance
+        const wanted = stretched(grip.current, stretch, bounds)
+        to = { ...to, distance: to.distance + (wanted - to.distance) * (1 - Math.exp(-STRETCH_PULL * elapsed)) }
+      } else if (steer) {
+        to = steered(to, steer, elapsed, bounds)
+      }
       camera.position.setFromSphericalCoords(to.distance, to.polar, to.azimuth).add(orbit.target)
     } else if (hand.current) {
       // The hand let go: the orbit waits its usual delay, unless the mouse holds the camera still.

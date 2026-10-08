@@ -1,5 +1,5 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   type AmbientLight,
   type DirectionalLight,
@@ -15,10 +15,12 @@ import { useStatusLight } from '../hooks/use-status-light'
 import { FIELD_OF_VIEW } from '../utils/framing'
 import type { OperatorHands } from '../utils/operator-hands'
 import type { SceneProps, StatusGrade } from '../utils/scene'
+import { createRange } from '../utils/shooting'
 import { SITE } from '../utils/site'
 import { Dust } from './dust'
 import { Enclosure } from './enclosure'
 import { Floodlights } from './floodlights'
+import { Gunsight } from './gunsight'
 import { Halo } from './halo'
 import { HandHologram } from './hand-hologram'
 import { Haze } from './haze'
@@ -113,8 +115,8 @@ export interface OutpostTwinProps {
   // Keeps the whole stage in frame whatever the shape of the window, a vertical one included: the camera
   // stands back as far as that takes, and no longer zooms.
   wholeStage?: boolean
-  // The Operator's hands over a hand sensor, when the hand control is on: a flat hand steers the camera, and
-  // the Twin shows the hands in hologram in a corner of its view.
+  // The Operator's hands over a hand sensor, when the hand control is on: a flat hand steers the camera, two
+  // open ones zoom, and the Twin shows the hands in hologram in a corner of its view.
   operator?: OperatorHands
 }
 
@@ -142,11 +144,14 @@ export interface OutpostTwinProps {
 // The camera orbits the site, and turns to an Alert as it is raised: it faces where it happens for a few
 // seconds, then orbits again. Without its signal it all turns grey, the picture drops out like a screen's
 // (snow, tears, a rolling bar) and it says so: what it shows is no longer live. With a hand sensor, the Operator's
-// hands float in hologram in a corner of the view, and a flat one steers the camera. It fills its parent: give that
+// hands float in hologram in a corner of the view, a flat one steers the camera and two open ones, moved apart or
+// together, zoom. It fills its parent: give that
 // the size the Twin should have on screen.
 export function OutpostTwin({ scene, frames, wholeStage = false, operator }: OutpostTwinProps) {
   const frame = useRef<HTMLDivElement>(null)
   const dpr = usePixelRatio(frame)
+  // What the sight of a hand that aims and the intruder's figurines tell each other.
+  const range = useMemo(createRange, [])
 
   return (
     <div ref={frame} className="twin-scene">
@@ -172,7 +177,7 @@ export function OutpostTwin({ scene, frames, wholeStage = false, operator }: Out
         <NoiseWaves frames={frames} />
         <Perimeter sectorLit={scene.sector.lit} pan={scene.camera.pan} presence={scene.presence.active} />
         <Floodlights {...scene.floodlights} />
-        <Intruder intruder={scene.intruder} />
+        <Intruder intruder={scene.intruder} range={range} />
         {/* Where the site plan stands it, turned the way its lens looks. */}
         <group position={[SITE.enclosure.x, 0, SITE.enclosure.z]} rotation={[0, SITE.enclosure.heading, 0]}>
           <Enclosure
@@ -184,6 +189,7 @@ export function OutpostTwin({ scene, frames, wholeStage = false, operator }: Out
         </group>
         <OrbitCamera anchor={scene.anchor} frames={frames} wholeStage={wholeStage} operator={operator} />
         {operator && <HandHologram operator={operator} />}
+        {operator && <Gunsight operator={operator} range={range} />}
         <Halo signal={scene.signalLost ? 0 : 1} />
       </Canvas>
       {/* Next to the image, not in it: a screen reader skips what an image holds. */}

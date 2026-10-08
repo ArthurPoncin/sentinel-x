@@ -31,6 +31,7 @@ import {
   torsoSpan,
 } from '../utils/figure'
 import { INTRUSION_COLOR, type SceneProps } from '../utils/scene'
+import { isWhole, type Range, struckFigurine } from '../utils/shooting'
 import { bearingTo, lensHeight, lensPoint } from '../utils/site'
 import { figurineLevel, lastKnown, MOST_FIGURINES, marksLevel, NO_TRACKS, type Track, tracksAt } from '../utils/track'
 import { type LimbPose, turnedTo, walkCycle, walkPhase } from '../utils/walk'
@@ -512,6 +513,9 @@ export interface IntruderProps {
   // The intruder of the active `intrusion` Alerts, and the other people their camera sees, or null: there is
   // none.
   intruder: SceneProps['intruder']
+  // Told who stands where, for an Operator who aims at them, and tells who was hit: a figurine that was is
+  // left out for a few seconds, what tells it included, then swept in again. No Alert is any the less active.
+  range?: Range
 }
 
 // The people the camera sees: a human figurine in hologram for each, in the intrusion's red, standing inside
@@ -530,7 +534,7 @@ export interface IntruderProps {
 // goes out. An intruder raised meanwhile appears at its own place, and the outlines of those before it go out
 // where they are. Unlit and brighter than white, so the halo takes it all for lights.
 // Nothing casts a shadow: the shadows are drawn once, and they move.
-export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
+export const Intruder = memo(function Intruder({ intruder, range }: IntruderProps) {
   const pin = useRef<Group>(null)
   const sighted = useRef<Group>(null)
   const label = useRef<Group>(null)
@@ -575,6 +579,13 @@ export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
 
   useFrame(({ clock, camera }, delta) => {
     tracks.current = tracksAt(tracks.current, people, delta)
+    if (range) {
+      range.standing.length = 0
+      for (const [id, since] of range.struck) {
+        if (isWhole(since + delta)) range.struck.delete(id)
+        else range.struck.set(id, since + delta)
+      }
+    }
     // The one the camera follows, or followed last, while what tells it still shows.
     let followed: Track | null = null
 
@@ -586,12 +597,18 @@ export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
       if (!track) return
 
       const walk = stand(figurine.posed, track, lens)
+      // Who they are, to whoever aims at them, and what a shot left of their figurine.
+      const id = `${track.alertId}/${track.key}`
+      const hit = struckFigurine(range?.struck.get(id))
+      if (range && track.seen && hit.level === 1) range.standing.push({ id, at: track.at })
+      // Its shade leaves its depth even where it shows nothing: taken apart, it is not drawn at all.
+      if (figurine.posed.skeleton.body) figurine.posed.skeleton.body.visible = hit.level === 1
       // While it is seen the figurine is whole, its sweep brings it in: it only fades out, and its outline
       // comes as it goes.
-      const level = figurineLevel(track)
+      const level = figurineLevel(track) * hit.level
       const outline = lastKnown(track)?.level ?? 0
       figurine.uniforms.level.value = level
-      figurine.uniforms.swept.value = sweptHeight(track)
+      figurine.uniforms.swept.value = Math.min(sweptHeight(track), hit.swept * (figureHeight() + BAND))
       figurine.uniforms.time.value = clock.elapsedTime
       figurine.light.visible = level > 0
       figurine.outline.level.value = outline
@@ -599,7 +616,7 @@ export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
 
       // What tells someone the camera sees: the ring at their feet, the brackets around their middle, which
       // face the Twin's camera wherever it orbits, and the line from the lens to their head.
-      const told = marksLevel(track)
+      const told = marksLevel(track) * hit.level * hit.swept
       figurine.ring.opacity = told
       figurine.frame.opacity = told
       figurine.rod.opacity = told
@@ -615,7 +632,7 @@ export const Intruder = memo(function Intruder({ intruder }: IntruderProps) {
 
     // What tells the one the camera follows from the others: all of it fades with its figurine.
     const one = followed as Track | null
-    marked.current = one ? marksLevel(one) : 0
+    marked.current = one ? marksLevel(one) * struckFigurine(range?.struck.get(`${one.alertId}/${one.key}`)).swept : 0
     if (pin.current) pin.current.visible = one !== null
     if (sighted.current) sighted.current.visible = one !== null
     if (!one) return

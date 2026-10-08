@@ -11,6 +11,8 @@ import {
   type SensedHand,
   type Stand,
   steered,
+  STRETCH_POWER,
+  stretched,
   TILT_SPEED,
   TURN_SPEED,
   ZOOM_SPEED,
@@ -100,5 +102,22 @@ describe('the hologram of a hand', () => {
 
     expect(handBones(short).length).toBeLessThan(MOST_BONES)
     expect(handJoints(short).length).toBeLessThan(MOST_JOINTS)
+  })
+})
+
+describe('stretched', () => {
+  it('leaves the camera where it stood as two hands take hold', () => {
+    expect(stretched(8, 1, BOUNDS)).toBe(8)
+  })
+
+  it('brings it closer as they move apart, and further as they come together', () => {
+    expect(stretched(8, 1.5, BOUNDS)).toBeCloseTo(8 / 1.5 ** STRETCH_POWER)
+    expect(stretched(8, 0.8, BOUNDS)).toBeCloseTo(8 / 0.8 ** STRETCH_POWER)
+  })
+
+  it('never takes it past the bounds a drag has', () => {
+    expect(stretched(8, 10, BOUNDS)).toBe(BOUNDS.minDistance)
+    expect(stretched(8, 0.1, BOUNDS)).toBe(BOUNDS.maxDistance)
+    expect(stretched(8, 0, BOUNDS)).toBe(BOUNDS.maxDistance)
   })
 })

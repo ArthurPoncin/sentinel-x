@@ -21,7 +21,8 @@ import { decimal } from '@/shared/lib/format'
 // is live any more. The time-scrubber replays a past Incident or the scripted scenario in it, second by second,
 // labelled REPLAY: the Twin is then rebuilt from the replayed frames, not the live ones.
 // With the hand control on, a flat hand over the sensor steers the camera and the hands float in hologram in a
-// corner of the view, green as a thumb is raised and red as one is turned down; a fist held to one side winds a replay.
+// corner of the view, green as a thumb is raised and red as one is turned down; two open hands moved apart or
+// together zoom, a fist held to one side winds a replay.
 // With `?capture` it is the Twin alone, on the same feed: no top bar, no sidebar, no caption, no scrubber, the whole stage
 // held in frame, to be filmed in a vertical window for the teaser.
 export function TwinRoute() {
@@ -39,6 +40,9 @@ export function TwinRoute() {
       live
         ? {
             steer: live.steer,
+            stretch: () => live.reading().stretch,
+            aim: () => live.reading().aim,
+            shot: () => live.reading().shot,
             hands() {
               const { confirming } = live.reading()
               const tint = confirming ? (confirming.pose === 'thumb-up' ? 'ok' : 'alarm') : 'idle'

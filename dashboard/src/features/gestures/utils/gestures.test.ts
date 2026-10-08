@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { HandFrameSchema } from '../api/hand-frame'
 import { readEnabled, writeEnabled } from './enabled'
-import { FIST, hand, ON_EDGE, THUMB_DOWN, THUMB_UP } from './fixtures'
-import { type Action, type Gestures, HOLD, interpret, NO_GESTURE, read, SETTLE, SWIPE_REST, SWIPE_SPEED } from './interpret'
-import { poseOf } from './pose'
-import { axis, DEAD_ZONE, FULL, NEUTRAL, steerOf, windOf } from './steer'
+import { AIMING, FIST, HAMMER_DROPPED, hand, ON_EDGE, THUMB_DOWN, THUMB_UP } from './fixtures'
+import { type Action, CLOSEST_GAP, type Gestures, HOLD, interpret, NO_GESTURE, read, SETTLE, SHOT_REST, SWIPE_REST, SWIPE_SPEED } from './interpret'
+import { HAMMER_BACK, HAMMER_DOWN, hammerOf, isOpen, poseOf } from './pose'
+import { AIM, AIM_EDGE, aimOf, axis, DEAD_ZONE, FULL, gapOf, NEUTRAL, steerOf, windOf } from './steer'
 
 describe('HandFrameSchema', () => {
   it('takes a frame of hands as the bridge sends it, and an empty one', () => {
@@ -49,10 +49,40 @@ describe('poseOf', () => {
     expect(poseOf(hand({ ...THUMB_UP, thumb: [-0.8, 0.6, 0] }))).toBe('fist')
   })
 
-  it('reads nothing in a hand that points, in one that closes, in one that faces up', () => {
-    expect(poseOf(hand({ out: [false, true, false, false, false] }))).toBe('none')
+  it('reads nothing in a hand that closes, in one that faces up, in one with two fingers out', () => {
     expect(poseOf(hand({ grab: 0.7 }))).toBe('none')
     expect(poseOf(hand({ normal: [0, 1, 0] }))).toBe('none')
+    expect(poseOf(hand({ out: [false, true, true, false, false] }))).toBe('none')
+  })
+
+  it('takes the index out alone for a hand that aims, its thumb out or not', () => {
+    expect(poseOf(hand(AIMING))).toBe('aim')
+    expect(poseOf(hand(HAMMER_DROPPED))).toBe('aim')
+    expect(poseOf(hand({ out: [false, false, true, false, false] }))).toBe('none')
+  })
+
+  it('tells an open hand whichever way it faces', () => {
+    expect(isOpen(hand({ normal: [0, 1, 0] }))).toBe(true)
+    expect(isOpen(hand({ out: [true, true, true, false, true] }))).toBe(true)
+    expect(isOpen(hand(FIST))).toBe(false)
+    expect(isOpen(hand({ grab: 0.7 }))).toBe(false)
+  })
+
+  it('reads the thumb of a hand that aims as a hammer, drawn back off the index or down along it', () => {
+    expect(hammerOf(hand(AIMING))).toBeLessThanOrEqual(HAMMER_BACK)
+    expect(hammerOf(hand(HAMMER_DROPPED))).toBeGreaterThanOrEqual(HAMMER_DOWN)
+  })
+})
+
+describe('aimOf', () => {
+  it('has the sight in the middle of the view with the index over the sensor, at its resting height', () => {
+    expect(aimOf([0, AIM.rest, -80])).toEqual([0, 0])
+  })
+
+  it('moves it with the fingertip, to the side and up, and never off the view', () => {
+    expect(aimOf([AIM.x / 2, AIM.rest + AIM.y / 2, 0])).toEqual([0.5, 0.5])
+    expect(aimOf([-AIM.x / 2, AIM.rest - AIM.y / 2, 0])).toEqual([-0.5, -0.5])
+    expect(aimOf([5 * AIM.x, AIM.rest - 5 * AIM.y, 0])).toEqual([AIM_EDGE, -AIM_EDGE])
   })
 })
 
@@ -197,6 +227,139 @@ describe('interpret', () => {
 
     expect(gestures).toMatchObject({ hand: 7, pose: 'flat' })
     expect(actions).toEqual([])
+  })
+})
+
+// Plays one or two hands through the interpreter, one frame every 50 ms, and keeps what they asked for.
+function playHands(frames: [seconds: number, shapes: Parameters<typeof hand>[0][]][]) {
+  const step = 0.05
+  let gestures: Gestures = NO_GESTURE
+  let now = 0
+  const actions: Action[] = []
+  let hands: ReturnType<typeof hand>[] = []
+  for (const [seconds, shapes] of frames) {
+    for (let elapsed = 0; elapsed < seconds - 1e-9; elapsed += step) {
+      hands = shapes.map((shape, index) => hand({ id: index + 1, ...shape }))
+      const next = interpret(gestures, hands, now)
+      gestures = next.gestures
+      if (next.action) actions.push(next.action)
+      now += step
+    }
+  }
+  return { gestures, actions, reading: read(gestures, hands, now - step) }
+}
+
+describe('two open hands', () => {
+  const left = (x: number) => ({ palm: [-x, 200, 0] as [number, number, number], side: 'left' as const })
+  const right = (x: number) => ({ palm: [x, 200, 0] as [number, number, number] })
+
+  it('take hold of the view once they have settled, and steer nothing', () => {
+    expect(playHands([[SETTLE / 2, [right(100), left(100)]]]).reading.stretch).toBeNull()
+
+    const held = playHands([[1, [right(100), left(100)]]])
+    expect(held.gestures.pose).toBe('spread')
+    expect(held.reading).toMatchObject({ stretch: 1, steer: null, wind: null })
+  })
+
+  it('stretch it as they move apart, and shrink it as they come together', () => {
+    expect(playHands([[1, [right(100), left(100)]], [0.5, [right(200), left(200)]]]).reading.stretch).toBeCloseTo(2)
+    expect(playHands([[1, [right(100), left(100)]], [0.5, [right(50), left(50)]]]).reading.stretch).toBeCloseTo(0.5)
+  })
+
+  it('whichever way they face, palm to palm as well as flat', () => {
+    const facing = playHands([[1, [{ ...right(100), normal: [-1, 0, 0] }, { ...left(100), normal: [1, 0, 0] }]]])
+
+    expect(facing.reading.stretch).toBe(1)
+  })
+
+  it('turn no page as they move apart fast', () => {
+    const apart = playHands([
+      [1, [{ ...right(100), ...ON_EDGE }, { ...left(100), ...ON_EDGE }]],
+      [0.2, [{ ...right(200), ...ON_EDGE, velocity: [2 * SWIPE_SPEED, 0, 0] }, { ...left(200), ...ON_EDGE, velocity: [-2 * SWIPE_SPEED, 0, 0] }]],
+    ])
+
+    expect(apart.actions).toEqual([])
+  })
+
+  it('hold nothing once one of them closes or leaves, and take hold anew from where they then are', () => {
+    expect(playHands([[1, [right(100), left(100)]], [0.1, [right(100), { ...left(100), ...FIST }]]]).reading.stretch).toBeNull()
+    expect(playHands([[1, [right(100), left(100)]], [1, [right(100)]]]).reading).toMatchObject({ stretch: null, steer: { tilt: 0, zoom: 0 } })
+
+    const again = playHands([[1, [right(100), left(100)]], [0.5, [right(100)]], [1, [right(200), left(200)]]])
+    expect(again.reading.stretch).toBe(1)
+  })
+
+  it('are never closer than touching', () => {
+    const touching = playHands([[1, [right(100), left(100)]], [0.2, [right(0), left(0)]]])
+
+    expect(touching.reading.stretch).toBeCloseTo(CLOSEST_GAP / 200)
+    expect(gapOf([0, 0, 0], [3, 4, 0])).toBe(5)
+  })
+})
+
+describe('a hand that aims', () => {
+  const at = (x: number, y: number) => ({ palm: [x + 15, y, 125] as [number, number, number] })
+
+  it('moves a sight over the view once it has settled, and steers nothing', () => {
+    expect(play([[SETTLE / 2, AIMING]]).reading.aim).toBeNull()
+
+    const aiming = play([[1, { ...AIMING, ...at(AIM.x / 2, AIM.rest) }]])
+    expect(aiming.gestures.pose).toBe('aim')
+    expect(aiming.reading.aim?.x).toBeCloseTo(0.5)
+    expect(aiming.reading.aim?.y).toBeCloseTo(0)
+    expect(aiming.reading.steer).toBeNull()
+  })
+
+  it('eases the sight to where the index goes', () => {
+    const moved = play([[1, { ...AIMING, ...at(0, AIM.rest) }], [0.05, { ...AIMING, ...at(AIM.x / 2, AIM.rest) }]])
+    const there = play([[1, { ...AIMING, ...at(0, AIM.rest) }], [1, { ...AIMING, ...at(AIM.x / 2, AIM.rest) }]])
+
+    expect(moved.reading.aim?.x).toBeGreaterThan(0.1)
+    expect(moved.reading.aim?.x).toBeLessThan(0.4)
+    expect(there.reading.aim?.x).toBeCloseTo(0.5)
+  })
+
+  it('cocks as the thumb is drawn back, and fires once as it comes down', () => {
+    const cocked = play([[1, AIMING]])
+    const fired = play([[1, AIMING], [0.5, HAMMER_DROPPED]])
+
+    expect(cocked.reading).toMatchObject({ aim: { cocked: true }, shot: null })
+    expect(fired.reading.aim?.cocked).toBe(false)
+    expect(fired.reading.shot?.at).toBeCloseTo(1)
+  })
+
+  it('fires where the sight was, from the tip of the index', () => {
+    const fired = play([[1, { ...AIMING, ...at(AIM.x / 2, AIM.rest) }], [0.2, { ...HAMMER_DROPPED, ...at(AIM.x / 2, AIM.rest) }]])
+
+    expect(fired.reading.shot?.x).toBeCloseTo(0.5)
+    expect(fired.reading.shot?.y).toBeCloseTo(0)
+    expect(fired.reading.shot?.from[0]).toBeCloseTo(AIM.x / 2)
+  })
+
+  it('fires nothing with a thumb that was never drawn back', () => {
+    expect(play([[2, HAMMER_DROPPED]]).reading.shot).toBeNull()
+  })
+
+  it('fires again once cocked again, and no faster than a shot at a time', () => {
+    const twice = play([[1, AIMING], [0.2, HAMMER_DROPPED], [SHOT_REST, AIMING], [0.2, HAMMER_DROPPED]])
+    const hasty = play([[1, AIMING], [0.05, HAMMER_DROPPED], [0.05, AIMING], [0.05, HAMMER_DROPPED]])
+
+    expect(twice.reading.shot?.at).toBeCloseTo(1.2 + SHOT_REST)
+    expect(hasty.reading.shot?.at).toBeCloseTo(1)
+  })
+
+  it('keeps its sight and its hammer through a frame that shows another pose', () => {
+    const through = play([[1, AIMING], [0.05, FIST], [0.05, AIMING]])
+
+    expect(through.reading.aim?.cocked).toBe(true)
+    expect(through.reading.shot).toBeNull()
+  })
+
+  it('has no sight left once it opens, and asks for nothing', () => {
+    const opened = play([[1, AIMING], [0.2, HAMMER_DROPPED], [1, {}]])
+
+    expect(opened.reading.aim).toBeNull()
+    expect(opened.actions).toEqual([])
   })
 })
 

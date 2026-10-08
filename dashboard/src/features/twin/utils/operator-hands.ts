@@ -28,10 +28,34 @@ export interface SensedHand {
   charge: number
 }
 
-// Read by the Twin on every frame it draws, never held: both give what is true at that instant.
+// Where a hand that points a finger has its sight in the view, each from -1 to 1 (x to the right, y up),
+// whether its thumb is drawn back, and where the tip of its index is over the sensor.
+export interface HandAim {
+  x: number
+  y: number
+  cocked: boolean
+  from: Point
+}
+
+// A shot of that hand: where its sight was, and when, on whatever clock its sensor keeps. A new one is told
+// by its time.
+export interface HandShot {
+  at: number
+  x: number
+  y: number
+  from: Point
+}
+
+// Read by the Twin on every frame it draws, never held: all give what is true at that instant.
 export interface OperatorHands {
   // Null while no hand steers: the camera is then the mouse's, or left to its orbit.
   steer(): HandSteer | null
+  // How far apart two open hands are for how far they were as they took hold of the view: over 1 moved apart,
+  // under it brought together. Null while they hold nothing.
+  stretch(): number | null
+  // Null while no hand aims, and until one has fired.
+  aim(): HandAim | null
+  shot(): HandShot | null
   hands(): readonly SensedHand[]
 }
 
@@ -71,6 +95,16 @@ export function steered(stand: Stand, steer: HandSteer, delta: number, bounds: S
     polar: clamp(stand.polar + steer.tilt * TILT_SPEED * delta, bounds.minPolar, bounds.maxPolar),
     distance: clamp(stand.distance * Math.exp(-steer.zoom * ZOOM_SPEED * delta), bounds.minDistance, bounds.maxDistance),
   }
+}
+
+// How much closer the camera comes for hands moved twice as far apart: a little more than twice, the sensor
+// does not see them much further apart than that.
+export const STRETCH_POWER = 1.4
+
+// How far the camera stands with two hands at `stretch`, from where it stood as they took hold: closer as
+// they move apart, as two fingers do on a screen, within the bounds a drag has.
+export function stretched(held: number, stretch: number, bounds: Pick<StandBounds, 'minDistance' | 'maxDistance'>): number {
+  return clamp(held / Math.max(stretch, 1e-3) ** STRETCH_POWER, bounds.minDistance, bounds.maxDistance)
 }
 
 // The hologram rides with the camera, in the lower left of its view and clear of the Outpost, whatever the

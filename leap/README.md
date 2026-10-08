@@ -19,10 +19,16 @@ sees and what the hand does.
 | Thumb up, held 1.2 s | Silences the Alarm (the actuator panel's « Couper la sirène »). |
 | Thumb down, held 1.2 s | Sounds the Alarm (« Déclencher la sirène »). |
 | Hand on its edge, swept across | Changes screen: Operator view ↔ Digital Twin. |
+| Two open hands, moved apart or brought together | Zooms the Twin in or out, as two fingers do on a screen, from where the camera stood as they took hold. One hand's steering and the swipe wait meanwhile. |
 
 On the Twin, the hand floats in hologram in the lower left of the view: cold white while it steers, green as a
 thumb is raised, red as one is turned down. A ring fills in the top bar while a thumb is held: let go before it
 is full and nothing is sent.
+
+One more, which the top bar does not tell of: point the index at the screen, palm down, thumb out to the side.
+A sight follows the fingertip over the Twin, as a mouse would in the air, and turns red over an intruder. Bring
+the thumb down along the index and it fires: an intruder that is hit comes apart in motes of light, and is back
+a few seconds later. It is a wink for the demo and changes nothing: no Alert is cleared, no command is sent.
 
 ## Set it up (Windows or macOS)
 
@@ -54,7 +60,7 @@ to be plugged into the Operator's Windows or macOS machine, and what reads it ha
 npm run simulate
 ```
 
-plays a made-up hand through every gesture, over and over (about 35 s a round): the dashboard answers to it as to
+plays a made-up hand through the one-hand gestures (not the zoom, nor the pointed finger), over and over (about 35 s a round): the dashboard answers to it as to
 a real one. To tell a problem of the sensor from one of the dashboard, and to work on the gestures without one.
 Mind that its thumbs really send the Alarm's commands.
 
@@ -68,8 +74,8 @@ Mind that its thumbs really send the Alarm's commands.
 | « Main détectée » | A hand, in no pose the dashboard knows. |
 
 The gestures' thresholds are constants, one file each, in `dashboard/src/features/gestures/utils/`: `pose.ts`
-(what counts as a thumb up, a flat hand), `steer.ts` (the joystick's dead zone and reach), `interpret.ts` (how
-long a thumb is held, how fast a swipe is). They were set on the simulated hand: expect to tune them on a real
+(what counts as a thumb up, a flat hand, a thumb drawn back or down), `steer.ts` (the joystick's dead zone and
+reach, how far the fingertip moves the sight), `interpret.ts` (how long a thumb is held, how fast a swipe is). They were set on the simulated hand: expect to tune them on a real
 one.
 
 ## Security
