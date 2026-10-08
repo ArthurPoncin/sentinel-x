@@ -31,7 +31,7 @@ By hand, from a laptop with PlatformIO: copy `include/secrets.example.h` to `inc
 | `include/config.h` | cycle, thresholds, hysteresis, warm-ups: **calibrate here** |
 | `src/probes.*` | DHT22, MQ-2 (millivolts at IO34, 16-sample average, on the ADC's fine 0–1 V range below 0.9 V), PIR, sound share (sampled every ms on an esp_timer: a 50 ms window is loud past 2 ms of sound) |
 | `src/alerts.*` | one state machine per kind; a severity change is raised again on the same `alert_id` |
-| `src/speaker.*` | the Alarm: siren (the "Axel F" riff of Crazy Frog as a square wave, 523 to 1397 Hz, looping) while an Alert is critical; `on` (steady 2600 Hz) / `pattern` (siren) / `off` from the Operator (`off` silences until the next critical) |
+| `src/speaker.*` | the Alarm: siren (the "Axel F" riff of Crazy Frog as a square wave, 523 to 1397 Hz, looping; played on an esp_timer every 5 ms, so a TLS reconnection holding the loop does not stretch it) while an Alert is critical; `on` (steady 2600 Hz) / `pattern` (siren) / `off` from the Operator (`off` silences until the next critical) |
 | `src/uplink.*` | Wi-Fi (hostname `sentinel-01`), time from the Pi, MQTTS with the team CA, commands |
 | `src/main.cpp` | one cycle per second: read, decide, sound, publish, and a line on the serial monitor |
 

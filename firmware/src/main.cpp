@@ -133,7 +133,6 @@ void setup() {
 void loop() {
   uint32_t now = millis();
   uplink::update(now);
-  speaker::update(now);
   if (now - lastCycle >= CYCLE_MS) {
     lastCycle = now;
     cycle(now);
