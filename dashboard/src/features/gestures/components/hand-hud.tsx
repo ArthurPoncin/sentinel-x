@@ -11,6 +11,9 @@ const POSES: Readonly<Record<Pose, string>> = {
   edge: "Main sur la tranche · balayez pour changer d'écran",
   'thumb-up': 'Pouce levé · maintenez pour couper la sirène',
   'thumb-down': 'Pouce baissé · maintenez pour déclencher la sirène',
+  spread: 'Deux mains ouvertes · écartez pour zoomer, rapprochez pour dézoomer',
+  // Not said: what an index does over the Twin is for whoever finds it.
+  aim: 'Main détectée',
   none: 'Main détectée',
 }
 

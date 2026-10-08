@@ -23,7 +23,7 @@ export interface HandState {
 
 export const HANDS_OFF: HandState = { bridge: 'off', tracking: false, present: false, pose: 'none', confirming: null }
 
-const NOTHING: Reading = { steer: null, wind: null, confirming: null }
+const NOTHING: Reading = { steer: null, wind: null, confirming: null, stretch: null, aim: null, shot: null }
 const NO_HANDS: readonly Hand[] = []
 
 export interface HandStore {
@@ -95,7 +95,7 @@ export function createHandStore(): HandStore {
       // A frame that comes after the hand control was switched off is nobody's.
       if (state.bridge === 'off') return
       // A hand that comes back after a gap starts over: nothing is held across it.
-      const before = now - frameAt < STALE ? gestures : { ...NO_GESTURE, swipedAt: gestures.swipedAt }
+      const before = now - frameAt < STALE ? gestures : { ...NO_GESTURE, swipedAt: gestures.swipedAt, at: now }
       const next = interpret(before, event.hands, now)
       hands = event.hands
       gestures = next.gestures
