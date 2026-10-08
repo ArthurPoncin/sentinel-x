@@ -29,13 +29,13 @@ By hand, from a laptop with PlatformIO: copy `include/secrets.example.h` to `inc
 |---|---|
 | `include/pins.h` | GPIOs, as on the wiring diagram: [`../docs/cablage/esp32.html`](../docs/cablage/esp32.html), the Pi's in [`raspberry-pi.html`](../docs/cablage/raspberry-pi.html) |
 | `include/config.h` | cycle, thresholds, hysteresis, warm-ups: **calibrate here** |
-| `src/probes.*` | DHT22, MQ-2 (16-sample average), PIR, sound share (50 ms windows on an esp_timer, idle level read at boot) |
+| `src/probes.*` | DHT22, MQ-2 (millivolts at IO34, 16-sample average, on the ADC's fine 0–1 V range below 0.9 V), PIR, sound share (sampled every ms on an esp_timer: a 50 ms window is loud past 2 ms of sound) |
 | `src/alerts.*` | one state machine per kind; a severity change is raised again on the same `alert_id` |
 | `src/speaker.*` | the Alarm: siren (1800 and 2600 Hz in turn, 350 ms each) while an Alert is critical; `on` (steady 2600 Hz) / `pattern` (siren) / `off` from the Operator (`off` silences until the next critical) |
 | `src/uplink.*` | Wi-Fi (hostname `sentinel-01`), time from the Pi, MQTTS with the team CA, commands |
 | `src/main.cpp` | one cycle per second: read, decide, sound, publish, and a line on the serial monitor |
 
-**What to expect:** a short beep from the speaker at boot, then the Pi's HDMI screen shows the Sentinel `EN LIGNE`. Until then, the serial monitor (`pio device monitor`) says what it waits for, a line a second: `T=… H=… air=… pir=… son=… | wifi=… heure=… broker=… <problem>`, the problem being `Wi-Fi...` or `MQTT: …` (TLS/network, password) until the broker is reached. Telemetry starts once the DHT22 has answered and the Pi gave the time: the contract wants every reading and a real `ts`. The MQ-2 and the PIR raise no Alert during their first minute (warm-up). Alert transitions made while the broker is unreachable are queued (16), and every raised Alert is sent again on reconnection.
+**What to expect:** a short beep from the speaker at boot, then the Pi's HDMI screen shows the Sentinel `EN LIGNE`. Until then, the serial monitor (`pio device monitor`) says what it waits for, a line a second: `T=… H=… air=… pir=… son=… | wifi=… heure=… broker=… <problem>`, the problem being `Wi-Fi...` or `MQTT: …` (TLS/network, password) until the broker is reached. Telemetry starts once the DHT22 has answered and the Pi gave the time: the contract wants every reading and a real `ts`. The MQ-2 and the PIR raise no Alert during their first minute (warm-up). If the sound sensor already hears sound at boot, the serial monitor says so: its screw is set too sensitive. The settings of the three probes (screws, jumper, the MQ-2 test with a lighter) are under « Réglages » in [`../docs/cablage/esp32.html`](../docs/cablage/esp32.html). Alert transitions made while the broker is unreachable are queued (16), and every raised Alert is sent again on reconnection.
 
 ## Contract
 Telemetry, Alert and command schemas + topics: [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#json-schemas-the-contract--lock-monday-change-only-by-team-agreement). Lock Monday.

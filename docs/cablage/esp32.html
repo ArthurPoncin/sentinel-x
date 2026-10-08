@@ -548,7 +548,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         <tbody>
           <tr><td><span class="k" style="background:var(--c-mq2)"></span>MQ-2</td><td class="mono">VCC · GND</td><td class="mono">5V · GND</td><td>La chauffe consomme environ 150 mA.</td></tr>
           <tr><td><span class="k" style="background:var(--c-mq2)"></span>MQ-2</td><td class="mono">AO</td><td class="mono">IO34 via 10 kΩ / 20 kΩ</td><td>Jamais en direct : la sortie monte jusqu'à 5 V. DO reste débranché.</td></tr>
-          <tr><td><span class="k" style="background:var(--c-sound)"></span>Son CZN-15E</td><td class="mono">OUT · GND · VCC</td><td class="mono">IO26 · GND · 3V3</td><td>Le plus souvent LOW quand un son est détecté.</td></tr>
+          <tr><td><span class="k" style="background:var(--c-sound)"></span>Son CZN-15E</td><td class="mono">OUT · GND · VCC</td><td class="mono">IO26 · GND · 3V3</td><td>LOW quand il entend un son : sa LED s'allume.</td></tr>
           <tr><td><span class="k" style="background:var(--c-pir)"></span>PIR HC-SR501</td><td class="mono">VCC · OUT · GND</td><td class="mono">5V · IO27 · GND</td><td>Sa sortie est déjà en 3,3 V. Les noms des broches sont sous le dôme blanc.</td></tr>
           <tr><td><span class="k" style="background:var(--c-dht)"></span>AM2302 / DHT22</td><td class="mono">1 VCC · 2 DATA · 3 NC · 4 GND</td><td class="mono">3V3 · IO4 · rien · GND</td><td>Résistance de 10 kΩ entre DATA et 3V3, obligatoire. Broches comptées de gauche à droite, grille face à toi.</td></tr>
           <tr><td><span class="k" style="background:var(--c-spk)"></span>Enceinte</td><td class="mono">rouge · noir</td><td class="mono">IO25 via 100 Ω · GND</td><td>Passive, 4 à 8 Ω. Jamais sur le 5V : entre le 5V et IO25, elle court-circuite le rail 5V et tout ce qui est dessus.</td></tr>
@@ -576,9 +576,9 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       <div class="tag">Réglages</div>
       <h2>Au premier démarrage</h2>
       <ul>
-        <li><b>PIR</b> : cavalier sur H, potentiomètre de durée au minimum. Compte environ 60 s de chauffe pendant lesquelles il peut y avoir de fausses détections.</li>
-        <li><b>MQ-2</b> : 1 à 2 min de chauffe à chaque démarrage. La toute première fois, laisse-le alimenté quelques heures.</li>
-        <li><b>Son</b> : tourne la vis bleue jusqu'à ce que la LED du module s'allume quand tu claques des doigts.</li>
+        <li><b>PIR</b> : déclipse le dôme blanc pour lire VCC, OUT et GND sur la carte. OUT est au milieu ; VCC et GND inversés, il ne détecte jamais rien. Cavalier sur H (ajoutes-en un s'il manque), durée au minimum, sensibilité au maximum pour le premier essai. Il ne voit pas à travers le plastique ni une vitre : le dôme doit sortir du boîtier. Compte environ 60 s de chauffe pendant lesquelles il peut y avoir de fausses détections.</li>
+        <li><b>MQ-2</b> : sa LED est allumée et il est chaud au toucher après une minute. 1 à 2 min de chauffe à chaque démarrage. La toute première fois, laisse-le alimenté quelques heures. En air propre, <span class="mono">air</span> reste bas, parfois 0 : c'est normal. Pour le tester, approche un briquet éteint et libère le gaz deux secondes, sans flamme : <span class="mono">air</span> doit monter nettement en quelques secondes.</li>
+        <li><b>Son</b> : en silence, la LED du module doit être éteinte. Allumée ou clignotante, il est trop sensible : tourne la vis bleue jusqu'à ce qu'elle s'éteigne (il faut parfois plusieurs tours), puis encore un quart de tour. Un clap de mains doit alors la faire clignoter. Au démarrage, le moniteur série prévient s'il entend en continu.</li>
         <li><b>Enceinte</b> : un bip court au démarrage. Trop faible : le buzzer à sa place, ou un transistor (encadré « Option »). Jamais moins de 100 Ω en direct sur IO25.</li>
       </ul>
     </section>
