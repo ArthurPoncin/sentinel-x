@@ -19,6 +19,11 @@ export function pageAfter(pathname: string, action: 'page-left' | 'page-right'):
   return surfaces[(Math.max(at, 0) + step + surfaces.length) % surfaces.length]?.to ?? '/'
 }
 
+// Whether the screen at `pathname` is the tutorial, a slash at its end or not: the router shows it for both.
+export function inTutorial(pathname: string): boolean {
+  return pathname.replace(/\/+$/, '') === TUTORIAL
+}
+
 interface Props {
   navigate(to: string): void
   // Where the app is, as the gesture is made.
@@ -34,7 +39,7 @@ export function HandControl({ navigate, pathname, children }: Props) {
 
   const act = async (action: Action) => {
     // In the tutorial a gesture is tried, not meant: the page shows it was made, and nothing is done about it.
-    if (pathname() === TUTORIAL) return
+    if (inTutorial(pathname())) return
     if (action === 'page-left' || action === 'page-right') return navigate(pageAfter(pathname(), action))
     const preset = PRESET_OF[action]
     if (!preset) return

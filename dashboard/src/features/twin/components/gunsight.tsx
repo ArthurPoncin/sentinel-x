@@ -51,8 +51,7 @@ const additive = () => new MeshBasicMaterial({ transparent: true, blending: Addi
 
 // What the sight is on, in words: a title and a few lines on a dark card edged in the color of what it tells.
 // A sprite by the sight, on the side `side` says (across 1: its right; up 1: above its level, -1: below),
-// drawn over everything. It keeps its last
-// words while it fades out.
+// drawn over everything. It keeps its last words while it fades out.
 function SightCard({ card, side }: { card: Card | null; side: () => { across: 1 | -1; up: 1 | 0 | -1 } }) {
   const sprite = useRef<Sprite>(null)
   const material = useRef<SpriteMaterial>(null)
@@ -101,9 +100,10 @@ function SightCard({ card, side }: { card: Card | null; side: () => { across: 1 
 // An extra, and no signal: with a finger pointed over the sensor the Operator has a sight over the Twin, which
 // follows the tip of their index, closes as their thumb is drawn back and turns to the intrusion's red over an
 // intruder. A card by the sight says what it is on: what the vision model tells of an intruder, what its Probe
-// reads of the gas tank or of the generator hall, how the Enclosure and its link are (`intel`). The thumb brought down fires: a trace of light from the hologram's index to where the sight was,
-// and motes of light where it ends. An intruder's figurine that is hit comes apart in them, and `range` is told
-// so: whoever draws it leaves it out for a few seconds. Nothing of it is there without a hand that aims.
+// reads of the gas tank or of the generator hall, how the Enclosure and its link are (`intel`). The thumb
+// brought down fires: a trace of light from the hologram's index to where the sight was, and motes of light
+// where it ends. An intruder's figurine that is hit comes apart in them, and `range` is told so: whoever draws
+// it leaves it out for a few seconds. Nothing of it is there without a hand that aims.
 export function Gunsight({ operator, range, intel }: { operator: OperatorHands; range: Range; intel: Intel }) {
   const sight = useRef<Group>(null)
   const trace = useRef<Mesh>(null)

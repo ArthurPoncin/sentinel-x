@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { handLine } from '@/features/gestures/components/hand-hud'
 import { HANDS_OFF } from '@/features/gestures/stores/hand-store'
 import { screens, TUTORIAL } from './app-sidebar'
-import { pageAfter } from './hand-control'
+import { inTutorial, pageAfter } from './hand-control'
 
 describe('pageAfter', () => {
   it('goes to the other screen, whichever way the hand sweeps', () => {
@@ -21,6 +21,15 @@ describe('pageAfter', () => {
       expect(pageAfter(from, 'page-left')).not.toBe(TUTORIAL)
       expect(pageAfter(from, 'page-right')).not.toBe(TUTORIAL)
     }
+  })
+})
+
+describe('inTutorial', () => {
+  it('is the tutorial with a slash at its end too, and no other screen', () => {
+    expect(inTutorial(TUTORIAL)).toBe(true)
+    expect(inTutorial(`${TUTORIAL}/`)).toBe(true)
+    expect(inTutorial('/')).toBe(false)
+    expect(inTutorial('/twin')).toBe(false)
   })
 })
 

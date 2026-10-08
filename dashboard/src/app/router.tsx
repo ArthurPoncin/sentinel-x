@@ -1,7 +1,7 @@
 import { createBrowserRouter } from 'react-router'
+import { TUTORIAL } from './app-sidebar'
 import { Layout } from './layout'
 import type { RouteHandle } from './layout-mode'
-import { TUTORIAL } from './app-sidebar'
 import { OperatorRoute } from './routes/operator'
 import { TutorialRoute } from './routes/tutorial'
 

@@ -79,7 +79,8 @@ export interface SceneProps {
   // camera's sight line, as far along it as it is short in the image. The Alert's id and the person's `key` in
   // it tell the same intruder moving from a new one: the first walks, the second appears. With it, how sure
   // the vision model is of what it sees, 0–1, and the label that says so. `x_norm`, `h_norm` and `pan` place
-  // it: the Alert's `bbox` is not read. `others` are the other people that Alert sees, a figurine each, and what the model tells of each.
+  // it: the Alert's `bbox` is not read. `others` are the other people that Alert sees, a figurine each, and
+  // what the model tells of each.
   intruder: {
     alertId: string
     key: string

@@ -30,9 +30,9 @@ export function screens(handsOn: boolean) {
 }
 
 // The side navigation, under the top bar: the two surfaces, the hand control's tutorial while it is on, and
-// the way out. Words, no icons. The top bar's
-// ☰ (or Ctrl+B) folds it away on a wide screen; on a phone it is a drawer that a choice closes. At its foot,
-// the hand control's switch: off until the Operator has a hand sensor on their desk.
+// the way out. Words, no icons. The top bar's ☰ (or Ctrl+B) folds it away on a wide screen; on a phone it is a
+// drawer that a choice closes. At its foot, the hand control's switch: off until the Operator has a hand
+// sensor on their desk.
 export function AppSidebar() {
   const { pathname } = useLocation()
   const signOut = useSignOut()
