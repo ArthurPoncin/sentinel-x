@@ -63,8 +63,9 @@ certificate() {
 # The ESP32 reaches the broker by IP, the api and predictive by its Compose name. The IP is also
 # a DNS entry: the ESP32's TLS stack (mbedTLS 2.x) only matches the name against DNS entries.
 certificate "$secrets/mosquitto" broker "IP:$pi_ip,DNS:$pi_ip,DNS:mosquitto"
-# 127.0.0.1 and localhost: to check the stack from the Pi itself.
-certificate "$secrets/caddy" proxy "IP:$pi_ip,IP:127.0.0.1,DNS:localhost${EXTRA_SAN:+,$EXTRA_SAN}"
+# 127.0.0.1 and localhost: to check the stack from the Pi itself. sentinel-x.local: the dashboard
+# by its name, which the Operator laptop resolves from its hosts file (the table Wi-Fi has no DNS).
+certificate "$secrets/caddy" proxy "IP:$pi_ip,IP:127.0.0.1,DNS:localhost,DNS:sentinel-x.local${EXTRA_SAN:+,$EXTRA_SAN}"
 
 echo "Credentials: MQTT accounts, service tokens, Operator password"
 # The api's MQTT password goes in both files: they are made together or not at all.
@@ -199,5 +200,6 @@ if $broker_reload; then
   echo "The broker's passwd changed: docker compose restart mosquitto first, if it runs already."
 fi
 echo "Done. Next: docker compose up -d --build   (from the repo root)"
-echo "Then open https://$pi_ip/ from the Operator laptop, after importing infra/secrets/ca.crt as a trusted CA."
+echo "Then, on the Operator laptop: infra/operator.sh $table $USER (infra/operator.ps1 on Windows) trusts"
+echo "infra/secrets/ca.crt and names the Pi. After it, open https://sentinel-x.local/ (or https://$pi_ip/)."
 echo "Hand over infra/secrets/handover.txt to the firmware and AI teams, out of band."

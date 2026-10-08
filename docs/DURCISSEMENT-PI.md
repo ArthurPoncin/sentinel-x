@@ -18,7 +18,7 @@ Dans cette page, la table est la n° **4** et le Pi est `192.168.4.1`. Remplace 
 
 Deux conséquences à connaître :
 
-- **`sentinel-x.local` ne répond plus** (c'était `avahi-daemon`). On joint le Pi par son adresse : `192.168.4.1`.
+- **`sentinel-x.local` ne répond plus** (c'était `avahi-daemon`). On joint le Pi par son adresse, `192.168.4.1`. Le dashboard reste à `https://sentinel-x.local/` sur un PC Opérateur préparé par `infra/operator.sh` ([installation, étape 8](INSTALLATION-PI.md#8-connecter-le-pc-opérateur)) : c'est son fichier hosts qui donne le nom.
 - **SSH ne répond plus qu'au PC Opérateur, sur le Wi-Fi de la table.** Plus par l'Ethernet, plus depuis un autre PC.
 
 ## 0. Ce qu'il te faut

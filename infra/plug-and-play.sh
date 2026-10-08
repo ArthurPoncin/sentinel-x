@@ -281,8 +281,17 @@ if [[ -f "$broker_crt" ]] && ! openssl x509 -in "$broker_crt" -noout -text 2>/de
   sudo rm -f "$broker_crt" "$secrets/mosquitto/broker.key"
   broker_remade=true
 fi
-if [[ -f "$secrets/caddy/proxy.crt" ]] && ! openssl x509 -in "$secrets/caddy/proxy.crt" -noout -text 2>/dev/null | grep -q "IP Address:$pi_ip"; then
-  ui_note "le certificat HTTPS est celui d'une autre table : sudo rm infra/secrets/caddy/proxy.*, puis relance."
+# A proxy certificate made before the dashboard had a name: made again, by the same CA, so the
+# Operator laptop has nothing to import again.
+proxy_remade=false
+if [[ -f "$secrets/caddy/proxy.crt" ]]; then
+  proxy_text="$(openssl x509 -in "$secrets/caddy/proxy.crt" -noout -text 2>/dev/null || true)"
+  if ! grep -q "IP Address:$pi_ip" <<<"$proxy_text"; then
+    ui_note "le certificat HTTPS est celui d'une autre table : sudo rm infra/secrets/caddy/proxy.*, puis relance."
+  elif ! grep -q "DNS:sentinel-x.local" <<<"$proxy_text"; then
+    sudo rm -f "$secrets/caddy/proxy.crt" "$secrets/caddy/proxy.key"
+    proxy_remade=true
+  fi
 fi
 # The screen's MQTT account, new to a running broker: it must read passwd and the ACL again.
 screen_account_new=false
@@ -342,6 +351,9 @@ ui_task "démarrage des conteneurs" with_group docker docker compose up -d
 ((UI_RC == 0)) || ui_fail "la stack ne démarre pas : la fin du journal dit pourquoi."
 if $broker_remade || $screen_account_new; then
   ui_run "redémarrage du broker" with_group docker docker compose restart mosquitto
+fi
+if $proxy_remade; then
+  ui_run "redémarrage du proxy, son certificat porte maintenant sentinel-x.local" with_group docker docker compose restart reverse-proxy
 fi
 ui_detail "en marche : $(with_group docker docker compose ps --format '{{.Service}}' | tr '\n' ' ')"
 ui_done
@@ -463,14 +475,17 @@ else
   ui_box "$C_GREEN" "Command Post prêt" "${summary[@]}"
 fi
 
-# The Pi by its name while avahi answers for it, by its address once cyber/harden.sh turned it off.
-if systemctl is-active --quiet avahi-daemon; then pi_host="$(hostname).local"; else pi_host=$pi_ip; fi
+# infra/operator.sh looks for the repo in ~/sentinel-x on the Pi: told where it is when elsewhere.
+operator_args="$table $USER"
+[[ "$PWD" == "$HOME/sentinel-x" ]] || operator_args+=" $PWD"
 # Each thing to do, and the command that does it ("" when there is none): a command on its own line,
 # whole, to copy as it is.
 next=(
-  "Sur le PC Opérateur, récupère le certificat, puis importe-le comme autorité de confiance :"
-  "scp $USER@$pi_host:$PWD/$secrets/ca.crt ."
-  "Connecte le PC au Wi-Fi $ssid, puis ouvre https://$pi_ip/"
+  "Connecte le PC Opérateur au Wi-Fi $ssid. Puis, dans le dépôt cloné sur ce PC, une seule commande installe le certificat et donne son nom au Pi (Mac, Linux) :"
+  "infra/operator.sh $operator_args"
+  "Sur Windows, la même dans un PowerShell ouvert en administrateur :"
+  "powershell -ExecutionPolicy Bypass -File infra\\operator.ps1 $operator_args"
+  "Ferme et rouvre le navigateur, puis ouvre https://sentinel-x.local/ (ou https://$pi_ip/)"
   ""
 )
 if $joined_docker; then

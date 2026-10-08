@@ -137,16 +137,31 @@ L'écran occupe la première console du Pi : pour se connecter avec un clavier, 
 
 ## 8. Connecter le PC Opérateur
 
-1. **Récupère le certificat** du Pi, depuis un terminal de ton PC :
+1. Connecte le PC au Wi-Fi **`SentinelX-4`** avec la phrase de passe de l'étape 7.
+2. Dans le dépôt cloné sur le PC, **une commande** fait le reste (elle est aussi affichée à la fin du script du Pi) :
    ```bash
-   scp ton-utilisateur@sentinel-x.local:sentinel-x/infra/secrets/ca.crt .
+   infra/operator.sh 4 ton-utilisateur          # Mac, Linux
    ```
-2. **Installe-le comme autorité de confiance** :
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File infra\operator.ps1 4 ton-utilisateur     # Windows, PowerShell ouvert en administrateur
+   ```
+   Elle prend le certificat de l'équipe sur le Pi, l'installe comme autorité de confiance (système et navigateurs) et écrit `192.168.4.1 sentinel-x.local` dans le fichier hosts du PC : le Wi-Fi de la table n'a pas de DNS, c'est le PC qui sait où est `sentinel-x.local`. Elle demande le mot de passe du Pi, puis celui du PC.
+3. Ferme et rouvre le navigateur, ouvre **`https://sentinel-x.local/`** (ou `https://192.168.4.1/`) et connecte-toi avec le mot de passe Opérateur.
+
+Tant que la commande n'est pas passée, le navigateur affiche « Non sécurisé » et raye le `https` : la connexion est chiffrée, mais il ne connaît pas l'autorité qui a signé le certificat.
+
+<details>
+<summary>À la main, si la commande ne passe pas</summary>
+
+1. Récupère le certificat : `scp ton-utilisateur@192.168.4.1:sentinel-x/infra/secrets/ca.crt .`
+2. Installe-le comme autorité de confiance :
    - **Mac** : double-clic sur `ca.crt`, trousseau *Système*. Double-clic ensuite sur « Sentinel-X Team CA », puis *Se fier* → *Toujours approuver*.
    - **Windows** : double-clic, *Installer le certificat* → *Ordinateur local* → magasin *Autorités de certification racines de confiance*.
-   - **Firefox** a sa propre liste : *Paramètres → Certificats → Importer*.
-3. Connecte le PC au Wi-Fi **`SentinelX-4`** avec la phrase de passe de l'étape 7.
-4. Ouvre **`https://192.168.4.1/`** et connecte-toi avec le mot de passe Opérateur.
+   - **Linux** : `sudo trust anchor ca.crt` (Arch, Fedora) ou `sudo cp ca.crt /usr/local/share/ca-certificates/sentinel-x.crt && sudo update-ca-certificates` (Debian, Ubuntu). Chrome et Chromium ont leur propre liste : `chrome://certificate-manager`, puis importer dans les autorités de confiance.
+   - **Firefox** a sa propre liste : *Paramètres → Certificats → Importer*, en cochant *Confirmer cette AC pour identifier des sites web*.
+3. Ajoute `192.168.4.1 sentinel-x.local` au fichier hosts du PC (`/etc/hosts` sur Mac et Linux, `C:\Windows\System32\drivers\etc\hosts` sur Windows, en administrateur).
+
+</details>
 
 ## 9. Tester
 

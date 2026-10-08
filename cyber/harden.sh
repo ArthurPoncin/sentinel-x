@@ -353,7 +353,7 @@ for unit in "${unused_units[@]}"; do
 done
 command -v rfkill >/dev/null && change rfkill block bluetooth
 ok "off: ${turned_off[*]:-none of them is installed}"
-warn "sentinel-x.local no longer answers (avahi is off): reach the Pi at $pi_ip."
+warn "sentinel-x.local no longer answers (avahi is off): reach the Pi at $pi_ip. The dashboard keeps its name on a laptop readied by infra/operator.sh."
 
 # --- 4. Docker's published ports ----------------------------------------------------------------
 step "Docker's published ports (${published_ports[*]}): the table Wi-Fi only"
