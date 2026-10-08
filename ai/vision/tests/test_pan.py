@@ -1,8 +1,10 @@
 import logging
+import sys
 
 import pytest
 
 from sentinel_common.config import ConfigError
+from vision import pan
 from vision.pan import HALF_STEPS, GpioStepper, PanFollower, SysfsPwmServo, make_pan
 
 
@@ -339,6 +341,34 @@ def test_a_chip_that_is_not_there_stops_nothing_and_is_tried_again_later(caplog)
     assert len(board.steps()) == drive.steps_for(20.0)
 
 
+def test_remembers_how_far_it_had_turned_the_camera_when_an_image_was_taken():
+    # A clock that only the motor's own pauses move: its half-step k is counted at k times 2 ms.
+    now = [0.0]
+
+    def pause(seconds: float) -> None:
+        now[0] += seconds
+
+    def turned(**settings) -> GpioStepper:
+        now[0] = 0.0
+        drive = stepper(Board(), clock=lambda: now[0], sleep=pause, **settings)
+        drive.open()
+        drive.turn(100 * 360 / 4096)
+        drive.close()
+        return drive
+
+    drive = turned()
+    assert [drive.angle_at(moment) for moment in (0.0, 0.001)] == [0, 0]
+    assert drive.angle_at(0.101) == pytest.approx(50 * 360 / 4096)
+    assert drive.angle_at(0.151) == pytest.approx(75 * 360 / 4096)
+    assert drive.angle_at(60.0) == pytest.approx(100 * 360 / 4096)
+    # The angle it was told, whichever way it is mounted.
+    assert turned(invert=True).angle_at(0.101) == pytest.approx(50 * 360 / 4096)
+    # Further back than its memory, 25 of these half-steps: where the oldest it remembers started from.
+    assert 70 <= turned(memory=0.05).angle_at(0.0) / (360 / 4096) <= 80
+    # And one that never turned was where it rests.
+    assert stepper(Board()).angle_at(5.0) == 0
+
+
 def test_closed_twice_or_never_opened_does_nothing():
     board = Board()
     drive = stepper(board)
@@ -359,6 +389,7 @@ def test_closed_twice_or_never_opened_does_nothing():
         ((6, 13, 19, 26), {"chip": ""}),
         ((6, 13, 19, 26), {"steps_per_turn": 0}),
         ((6, 13, 19, 26), {"step_s": 0}),
+        ((6, 13, 19, 26), {"memory": 0}),
     ],
 )
 def test_the_stepper_refuses_invalid_settings(pins, settings):
@@ -428,3 +459,63 @@ def test_refuses_a_drive_or_a_setting_that_is_not_one(name, variables, monkeypat
         monkeypatch.setenv(variable, value)
     with pytest.raises(ConfigError):
         make_pan(name)
+
+
+# --- python -m vision.pan -----------------------------------------------------------------------------
+
+
+@pytest.fixture
+def wired(monkeypatch):
+    """The stack's stepper on a board of the tests, in place of the Pi's GPIO."""
+    board = Board()
+    monkeypatch.setattr(pan, "_gpiod_lines", lambda chip, pins: board)
+    monkeypatch.setenv("PAN_DRIVE", "stepper")
+    monkeypatch.setenv("PAN_STEP_MS", "0.5")
+    return board
+
+
+def test_the_command_turns_the_camera_by_as_much_as_asked_and_leaves_it_there(wired, monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["vision.pan", "-10"])
+    pan.main()
+    steps = wired.steps()
+    assert len(steps) == 114 and steps[0] == HALF_STEPS[-1] and wired.written[-1] == (0, 0, 0, 0)
+    assert wired.released
+    assert "Turned by -10.0 degrees" in capsys.readouterr().out
+
+
+def test_the_command_turns_the_camera_no_further_than_its_travel(wired, monkeypatch, capsys):
+    monkeypatch.setenv("PAN_MAX_DEG", "5")
+    monkeypatch.setattr(sys, "argv", ["vision.pan", "400"])
+    pan.main()
+    assert len(wired.steps()) == 57
+    assert "Turned by +5.0 degrees" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "arguments, variables, message",
+    [
+        ([], {}, "Usage"),
+        (["left"], {}, "Usage"),
+        (["10", "20"], {}, "Usage"),
+        (["10"], {"PAN_DRIVE": ""}, "PAN_DRIVE=none"),
+        (["10"], {"PAN_STEPPER_PINS": "6,13"}, "PAN_STEPPER_PINS"),
+    ],
+)
+def test_the_command_says_what_it_cannot_do(wired, monkeypatch, arguments, variables, message):
+    for variable, value in variables.items():
+        monkeypatch.setenv(variable, value)
+    monkeypatch.setattr(sys, "argv", ["vision.pan", *arguments])
+    with pytest.raises(SystemExit, match=message):
+        pan.main()
+    assert wired.written == []
+
+
+def test_the_command_says_so_when_the_motor_is_not_there(monkeypatch):
+    def no_chip(chip, pins):
+        raise FileNotFoundError(2, "No such file or directory", chip)
+
+    monkeypatch.setattr(pan, "_gpiod_lines", no_chip)
+    monkeypatch.setenv("PAN_DRIVE", "stepper")
+    monkeypatch.setattr(sys, "argv", ["vision.pan", "10"])
+    with pytest.raises(SystemExit, match="did not turn"):
+        pan.main()

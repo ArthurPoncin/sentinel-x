@@ -530,8 +530,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       <h2>Sur le Pi, une fois</h2>
       <ol>
         <li><code>git pull</code></li>
-        <li><code>infra/stepper.sh</code> : retire le servo s'il y en avait un, déclare le moteur.</li>
-        <li><code>infra/plug-and-play.sh &lt;table&gt; --no-flash</code> : le récapitulatif affiche <code>Moteur ✓ moteur pas à pas</code>.</li>
+        <li><code>infra/plug-and-play.sh &lt;table&gt; --no-flash</code> : il donne le moteur à vision et retire le servo s'il y en avait un. Le récapitulatif affiche <code>Moteur ✓ moteur pas à pas</code>.</li>
         <li><code>docker compose logs vision | grep Stepper</code> doit dire <code>ready</code>. Les LED de la carte clignotent quand la caméra tourne.</li>
       </ol>
     </section>

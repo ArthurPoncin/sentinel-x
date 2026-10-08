@@ -7,6 +7,9 @@
   camera is fixed: nothing here runs). Another one plugs in the same way: a class with `open()`, `turn()`
   and `close()`, and a line in `DRIVES`.
 
+- `python -m vision.pan <degrees>`, the service stopped: turns the camera by that much and leaves it
+  there. Says whether the motor is wired and which way it turns, and puts a camera back to where it rests.
+
 Angles are in degrees from where the camera rests, positive toward the right of its image: the `pan` of an
 `intrusion` Alert.
 """
@@ -14,6 +17,7 @@ Angles are in degrees from where the camera rests, positive toward the right of 
 import logging
 import math
 import os
+import sys
 import threading
 import time
 from collections import deque
@@ -134,6 +138,10 @@ class PanFollower:
 
 
 class PanDrive(Protocol):
+    """What turns the camera. One that counts how far it really turned it also has `angle_at(moment)`, on
+    the monotonic clock: the service then takes its word rather than the follower's, which only supposes
+    that the motor kept up."""
+
     name: str
 
     def open(self) -> None:
@@ -306,6 +314,10 @@ class GpioStepper:
     its own steps toward where it was last told to turn, and lets the coils go once there: the gears hold
     the camera, and the motor does not heat up.
 
+    The loop tells it where to turn once an inference: it is always that far behind where it was told to
+    be, and further when it is told to turn faster than it steps. So it says where it really was
+    (`angle_at`), for the `memory` seconds it remembers: an image is seen from there.
+
     `invert` is for a motor mounted the other way: it turns the other way for the same angle. A chip, a
     line or a right that is missing stops nothing, as for the servo: logged, tried again every `retry`
     seconds, the camera fixed meanwhile.
@@ -322,6 +334,7 @@ class GpioStepper:
         step_s: float = 0.002,
         invert: bool = False,
         retry: float = 5.0,
+        memory: float = 2.0,
         open_lines: Callable[[str, tuple[int, ...]], Lines] | None = None,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
@@ -335,15 +348,18 @@ class GpioStepper:
             raise ValueError(f"steps_per_turn: a number > 0 expected, got {steps_per_turn!r}")
         if not (_is_number(step_s) and step_s > 0):
             raise ValueError(f"step_s: a number > 0 expected, got {step_s!r}")
+        if not (_is_number(memory) and memory > 0):
+            raise ValueError(f"memory: a number > 0 expected, got {memory!r}")
         self._pins, self._chip = pins, chip
         self._steps_per_turn, self._step_s, self._invert = steps_per_turn, step_s, invert
-        self._retry, self._clock, self._sleep = retry, clock, sleep
+        self._retry, self._memory, self._clock, self._sleep = retry, memory, clock, sleep
         self._open_lines = open_lines or _gpiod_lines
         self._lines: Lines | None = None
         self._thread: threading.Thread | None = None
         self._moved = threading.Condition()
         self._position = 0  # half-steps made from where it started
         self._target = 0  # and where it is stepping to
+        self._trail: deque[tuple[float, int, int]] = deque()  # (when, the half-step it got to, which way), oldest first
         self._closing = False
         self._tried_at: float | None = None
         self._problem: str | None = None
@@ -362,6 +378,19 @@ class GpioStepper:
         """The half-steps from where it rests to `angle`."""
         steps = round(angle / 360 * self._steps_per_turn)
         return -steps if self._invert else steps
+
+    def angle_at(self, moment: float) -> float:
+        """How far it had turned the camera at `moment`, on its clock, as it counted it. Before the oldest
+        half-step it remembers, where that one started from."""
+        with self._moved:
+            steps = self._position
+            for at, reached, way in reversed(self._trail):
+                if at <= moment:
+                    steps = reached
+                    break
+                steps = reached - way
+        angle = steps / self._steps_per_turn * 360
+        return (-angle if self._invert else angle) or 0.0
 
     def open(self) -> None:
         self._start()
@@ -420,6 +449,10 @@ class GpioStepper:
                 with self._moved:
                     self._position += way
                     there = self._position == self._target
+                    now = self._clock()
+                    self._trail.append((now, self._position, way))
+                    while len(self._trail) > 1 and now - self._trail[1][0] >= self._memory:
+                        self._trail.popleft()
                 if there:
                     lines.put(_COILS_OFF)
             except OSError as error:
@@ -530,3 +563,34 @@ def make_pan(name: str) -> tuple[PanFollower, PanDrive] | None:
         deadband=env_float("PAN_DEADBAND_DEG", 4, min=0, max=45),
     )
     return follower, factory()
+
+
+def main() -> None:
+    """python -m vision.pan <degrees>: turns the camera by that much from where it is, positive toward the
+    right of its image and no further than its travel, and leaves it there: where it then points is where
+    it rests. With the service stopped, which holds the motor otherwise."""
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    try:
+        (by,) = (float(arg) for arg in sys.argv[1:])
+    except ValueError:
+        sys.exit("Usage: python -m vision.pan <degrees>, positive toward the right of the camera's image")
+    try:
+        pan = make_pan(env_str("PAN_DRIVE", NO_DRIVE))
+        low, high = _env_travel()
+    except ConfigError as error:
+        sys.exit(f"Invalid configuration: {error}")
+    if pan is None:
+        sys.exit("PAN_DRIVE=none: this camera is fixed")
+    drive = pan[1]
+    by = min(max(by, low), high)
+    drive.open()
+    drive.turn(by)
+    drive.close()
+    turned = drive.angle_at(time.monotonic()) if hasattr(drive, "angle_at") else by
+    if by and not turned:
+        sys.exit("The camera did not turn")
+    print(f"Turned by {turned:+.1f} degrees")
+
+
+if __name__ == "__main__":
+    main()

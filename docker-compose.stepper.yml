@@ -1,8 +1,8 @@
 # The stepper motor that turns the webcam (a 28BYJ-48 on its ULN2003 board), for the vision service, on
 # top of docker-compose.yml, in place of docker-compose.pan.yml's servo. Apart for the same reason: Docker
 # refuses to create a container whose device node is missing on the host, and a laptop has no GPIO chip.
-# On the Pi, infra/stepper.sh puts PAN_STEPPER=true in .env once, and infra/plug-and-play.sh then takes
-# this file, through these lines in .env:
+# On the Pi, infra/plug-and-play.sh takes this file whenever the GPIO chip is there (PAN_DRIVE=none in
+# .env: a camera left fixed), through these lines in .env:
 #   COMPOSE_FILE=docker-compose.yml:docker-compose.camera.yml:docker-compose.stepper.yml
 #   PAN_GPIO_GID=<the group that owns /dev/gpiochip0: gpio>
 # The chip's device node only, never `privileged` and no capability: the container sets the four lines
