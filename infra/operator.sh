@@ -80,7 +80,7 @@ else
 fi
 
 step "3. Le nom du Pi dans /etc/hosts"
-if grep -qE "^$pi_ip[[:space:]]+$pi_name\$" /etc/hosts; then
+if grep -qE "^${pi_ip}[[:space:]]+${pi_name}\$" /etc/hosts; then
   ok "$pi_ip $pi_name (déjà là)"
 else
   # Without the line of another table, if there is one.
