@@ -282,11 +282,19 @@ describe('two open hands', () => {
   })
 
   it('hold nothing once one of them closes or leaves, and take hold anew from where they then are', () => {
-    expect(playHands([[1, [right(100), left(100)]], [0.1, [right(100), { ...left(100), ...FIST }]]]).reading.stretch).toBeNull()
+    expect(playHands([[1, [right(100), left(100)]], [SETTLE + 0.1, [right(100), { ...left(100), ...FIST }]]]).reading.stretch).toBeNull()
     expect(playHands([[1, [right(100), left(100)]], [1, [right(100)]]]).reading).toMatchObject({ stretch: null, steer: { tilt: 0, zoom: 0 } })
 
     const again = playHands([[1, [right(100), left(100)]], [0.5, [right(100)]], [1, [right(200), left(200)]]])
     expect(again.reading.stretch).toBe(1)
+  })
+
+  it('keep their hold through a frame that loses one of them, the view where they last held it', () => {
+    const lost = playHands([[1, [right(100), left(100)]], [0.5, [right(200), left(200)]], [0.05, [right(200)]]])
+    const back = playHands([[1, [right(100), left(100)]], [0.5, [right(200), left(200)]], [0.05, [right(200), { ...left(200), ...FIST }]], [0.05, [right(150), left(150)]]])
+
+    expect(lost.reading.stretch).toBeCloseTo(2)
+    expect(back.reading.stretch).toBeCloseTo(1.5)
   })
 
   it('are never closer than touching', () => {

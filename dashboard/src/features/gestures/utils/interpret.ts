@@ -46,8 +46,10 @@ export interface Gestures {
   swipedAt: number
   // When the last frame came: what is eased goes by the time since.
   at: number
-  // How far apart the two hands were as they took hold of the view, in millimetres.
+  // How far apart the two hands were as they took hold of the view, and how far they were last seen, in
+  // millimetres.
   grip: number | null
+  apart: number | null
   // Where the sight is, eased, and whether the thumb is drawn back: it has to be, to come down.
   aim: { x: number; y: number; cocked: boolean } | null
   // The last shot of the hand followed.
@@ -63,6 +65,7 @@ export const NO_GESTURE: Gestures = {
   swipedAt: -Infinity,
   at: 0,
   grip: null,
+  apart: null,
   aim: null,
   shot: null,
 }
@@ -143,26 +146,27 @@ export function interpret(before: Gestures, hands: readonly Hand[], now: number)
     swipedAt = now
     action = hand.velocity[0] < 0 ? 'page-left' : 'page-right'
   }
-  // The two hands take hold of the view as they settle, at the gap they then have.
-  const grip = pose === 'spread' && gap !== null ? (same && before.pose === 'spread' && before.grip ? before.grip : gap) : null
+  // The two hands take hold of the view as they settle, at the gap they then have. A frame that loses one of
+  // them on the way lets go of nothing: the view stays where they last held it.
+  const grip = pose === 'spread' ? (same && before.pose === 'spread' && before.grip ? before.grip : gap) : null
+  const apart = grip !== null ? (gap ?? before.apart) : null
   // A frame that shows another pose on the way moves neither the sight nor the hammer.
   const kept = same && before.pose === 'aim' ? before : { ...before, aim: null, shot: same ? before.shot : null }
   const { aim, shot } = pose !== 'aim' ? { aim: null, shot: kept.shot } : showing === 'aim' ? aimed(kept, hand, now) : kept
 
-  return { gestures: { hand: hand.id, pose, showing, since, held, swipedAt, at: now, grip, aim, shot }, action }
+  return { gestures: { hand: hand.id, pose, showing, since, held, swipedAt, at: now, grip, apart, aim, shot }, action }
 }
 
 // What the settled gestures do at `now`, for as long as they last.
 export function read(gestures: Gestures, hands: readonly Hand[], now: number): Reading {
   const hand = hands.find(({ id }) => id === gestures.hand)
-  const { pose, held, grip, aim, shot } = gestures
-  const gap = spread(hands)
+  const { pose, held, grip, apart, aim, shot } = gestures
   return {
     steer: hand && pose === 'flat' ? steerOf(hand.palm) : null,
     wind: hand && pose === 'fist' ? windOf(hand.palm) : null,
     confirming:
       held && isThumb(pose) ? { pose, progress: held.fired ? 1 : Math.min(1, Math.max(0, (now - held.since) / HOLD)) } : null,
-    stretch: grip !== null && gap !== null ? gap / grip : null,
+    stretch: grip !== null && apart !== null ? apart / grip : null,
     aim: hand && aim ? { ...aim, from: hand.fingers[1].joints[4] } : null,
     shot,
   }
