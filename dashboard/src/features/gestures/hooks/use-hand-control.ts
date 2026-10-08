@@ -2,7 +2,7 @@ import { useContext, useEffect, useMemo, useRef, useSyncExternalStore } from 're
 import type { Hand } from '../api/hand-frame'
 import type { HandState } from '../stores/hand-store'
 import { type HandControl, HandControlContext } from '../stores/hand-store-context'
-import type { Reading } from '../utils/interpret'
+import type { Action, Reading } from '../utils/interpret'
 import type { Steer } from '../utils/steer'
 
 const seconds = () => performance.now() / 1000
@@ -82,4 +82,19 @@ export function useHandWind(active: boolean, wind: (seconds: number) => void): v
     })
     return () => cancelAnimationFrame(frame)
   }, [store, enabled, active])
+}
+
+// Tells `listener` of each action a gesture asks for, once, while the hand control is on: for whoever shows
+// that a gesture was made. What the action does is the app's.
+export function useHandActions(listener: (action: Action) => void): void {
+  const { store, enabled } = useControl()
+  const latest = useRef(listener)
+  useEffect(() => {
+    latest.current = listener
+  })
+
+  useEffect(() => {
+    if (!enabled) return
+    return store.onAction((action) => latest.current(action))
+  }, [store, enabled])
 }

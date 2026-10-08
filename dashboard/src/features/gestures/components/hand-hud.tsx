@@ -12,8 +12,8 @@ const POSES: Readonly<Record<Pose, string>> = {
   'thumb-up': 'Pouce levé · maintenez pour couper la sirène',
   'thumb-down': 'Pouce baissé · maintenez pour déclencher la sirène',
   spread: 'Deux mains ouvertes · écartez pour zoomer, rapprochez pour dézoomer',
-  // Not said: what an index does over the Twin is for whoever finds it.
-  aim: 'Main détectée',
+  // What the thumb then does is not said: that is for whoever finds it.
+  aim: 'Index pointé · visez un élément du Twin pour lire sa fiche',
   none: 'Main détectée',
 }
 

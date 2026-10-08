@@ -600,7 +600,7 @@ export const Intruder = memo(function Intruder({ intruder, range }: IntruderProp
       // Who they are, to whoever aims at them, and what a shot left of their figurine.
       const id = `${track.alertId}/${track.key}`
       const hit = struckFigurine(range?.struck.get(id))
-      if (range && track.seen && hit.level === 1) range.standing.push({ id, at: track.at })
+      if (range && track.seen && hit.level === 1) range.standing.push({ id, key: track.key, at: track.at, followed: track.followed, age: track.age })
       // Its shade leaves its depth even where it shows nothing: taken apart, it is not drawn at all.
       if (figurine.posed.skeleton.body) figurine.posed.skeleton.body.visible = hit.level === 1
       // While it is seen the figurine is whole, its sweep brings it in: it only fades out, and its outline

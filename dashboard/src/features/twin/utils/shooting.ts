@@ -17,8 +17,9 @@ export const SHOT = { reach: 30, trace: 0.22 } as const
 
 // What the sight and the figurines tell each other, from one frame to the next: neither knows the other.
 export interface Range {
-  // The figurines that can be hit as this frame is drawn, told by whoever draws them.
-  standing: { id: string; at: GroundPoint }[]
+  // The figurines that can be pointed at and hit as this frame is drawn, told by whoever draws them: who each
+  // is in their Alert, whether the camera follows them, and for how many seconds they have been shown.
+  standing: { id: string; key: string; at: GroundPoint; followed: boolean; age: number }[]
   // Those a shot took apart, and for how many seconds.
   struck: Map<string, number>
 }
