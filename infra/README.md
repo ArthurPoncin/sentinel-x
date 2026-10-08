@@ -54,6 +54,7 @@ infra/setup.sh X
 - It asks for the Operator's password (12 characters or more) and makes the team CA, the broker and proxy certificates, one MQTT account per client (`sentinel-01`, `api`, `predictive`), the AI services' tokens and the Operator's password hash.
 - Each service gets its own file, read by Compose on the Pi (`env_file`, mode 600): `api.env` (its MQTT password, the Operator's hash, both AI tokens), `vision.env` (`VISION_TOKEN`), `predictive.env` (the `predictive` MQTT password, `PREDICTIVE_TOKEN`) — the same values on both sides, so the api takes the AI services' Alerts and the broker their login.
 - What exists is kept: run it again after a `git pull` to pick up a new ACL. An install made before `vision.env` and `predictive.env` gets them on the next run, from `api.env` and `handover.txt`, nothing else made again; only if `handover.txt` no longer holds the `predictive` password is a new one made, in place of the old one in the broker's `passwd`: then `docker compose restart mosquitto`, as the script says. To start over: `sudo rm -rf infra/secrets` (some files belong to the containers' users).
+- The proxy certificate is for `192.168.X.1` and for `sentinel-x.local`. The table Wi-Fi has no DNS, and avahi is off once the Pi is hardened: the Operator laptop gets the name from its hosts file (`192.168.X.1 sentinel-x.local`), written by [`operator.sh`](operator.sh). A certificate made before the name is made again by `infra/plug-and-play.sh`, by the same CA.
 - `EXTRA_SAN=IP:<ethernet ip> infra/setup.sh X` also puts the Pi's Ethernet address in the HTTPS certificate, to test from the school network.
 - **`infra/secrets/handover.txt`** holds what the other teams need: the ESP32's MQTT password, the AI services' tokens. Hand it over out of band (USB key, in person), never in a chat or in git. The firmware also needs `infra/secrets/ca.crt` to verify the broker.
 
@@ -69,7 +70,7 @@ docker compose up -d api                        # back to the real feed
 infra/update.sh                                 # update: git pull, the new images, the containers that changed
 ```
 
-**4. Open it** from the Operator laptop, on the table Wi-Fi: import `infra/secrets/ca.crt` as a trusted authority in the browser (or the OS), then `https://192.168.X.1/` and log in. From the Pi itself: `curl --cacert infra/secrets/ca.crt https://127.0.0.1/api/v1/auth/check` → `401` until logged in; `https://127.0.0.1/camera` too, the camera feed being for the Operator only.
+**4. Open it** from the Operator laptop, on the table Wi-Fi and from its clone of the repo: `infra/operator.sh X <your user on the Pi>` ([`operator.sh`](operator.sh), Linux and macOS; [`operator.ps1`](operator.ps1) on Windows, as administrator) fetches `infra/secrets/ca.crt` over scp, trusts it (the system's store, and Chrome's and Firefox's own lists on Linux) and writes `192.168.X.1 sentinel-x.local` in the hosts file. Then `https://sentinel-x.local/` (or `https://192.168.X.1/`) and log in. From the Pi itself: `curl --cacert infra/secrets/ca.crt https://127.0.0.1/api/v1/auth/check` → `401` until logged in; `https://127.0.0.1/camera` too, the camera feed being for the Operator only.
 
 | Service | Image | Reached at | Runs as |
 |---|---|---|---|
