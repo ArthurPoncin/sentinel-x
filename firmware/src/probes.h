@@ -5,7 +5,7 @@
 struct Readings {
   float temp = NAN;      // °C, NAN until the DHT22 answers once
   float humidity = NAN;  // %
-  int air = 0;           // MQ-2, raw ADC 0–4095
+  int air = 0;           // MQ-2, millivolts at IO34 (0–3300), 0 under the ADC's floor (~75 mV)
   bool pir = false;
   float sound = 0;       // share of the last cycle that was loud, 0–1
 };
