@@ -19,16 +19,20 @@ sees and what the hand does.
 | Thumb up, held 1.2 s | Silences the Alarm (the actuator panel's « Couper la sirène »). |
 | Thumb down, held 1.2 s | Sounds the Alarm (« Déclencher la sirène »). |
 | Hand on its edge, swept across | Changes screen: Operator view ↔ Digital Twin. |
+| Index pointed at the screen, palm down | On the Twin, a sight follows the fingertip as a mouse would in the air. On the gas tank, the generator hall, the Enclosure or an intruder, a card by the sight says what the system knows of it: the Probe's reading, the Status and the link, or what the vision model tells of that person (its confidence, where they are in the image, since when). Nothing about who they are: the model does not know. |
 | Two open hands, moved apart or brought together | Zooms the Twin in or out, as two fingers do on a screen, from where the camera stood as they took hold. One hand's steering and the swipe wait meanwhile. |
 
 On the Twin, the hand floats in hologram in the lower left of the view: cold white while it steers, green as a
 thumb is raised, red as one is turned down. A ring fills in the top bar while a thumb is held: let go before it
 is full and nothing is sent.
 
-One more, which the top bar does not tell of: point the index at the screen, palm down, thumb out to the side.
-A sight follows the fingertip over the Twin, as a mouse would in the air, and turns red over an intruder. Bring
-the thumb down along the index and it fires: an intruder that is hit comes apart in motes of light, and is back
+One more, which the top bar does not tell of: while pointing, hold the thumb out to the side, then bring it
+down along the index. It fires where the sight is: an intruder that is hit comes apart in motes of light, and is back
 a few seconds later. It is a wink for the demo and changes nothing: no Alert is cleared, no command is sent.
+
+While the hand control is on, the menu has a third screen, **Tutoriel des gestes**: the hands as the sensor
+sees them, from above and from the front, what they do at that instant, and every gesture with the hand to
+make. A gesture made is marked. Nothing is sent from there: neither the Alarm nor the screen changes.
 
 ## Set it up (Windows or macOS)
 

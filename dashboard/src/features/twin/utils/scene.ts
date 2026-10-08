@@ -79,7 +79,7 @@ export interface SceneProps {
   // camera's sight line, as far along it as it is short in the image. The Alert's id and the person's `key` in
   // it tell the same intruder moving from a new one: the first walks, the second appears. With it, how sure
   // the vision model is of what it sees, 0–1, and the label that says so. `x_norm`, `h_norm` and `pan` place
-  // it: the Alert's `bbox` is not read. `others` are the other people that Alert sees, a figurine each.
+  // it: the Alert's `bbox` is not read. `others` are the other people that Alert sees, a figurine each, and what the model tells of each.
   intruder: {
     alertId: string
     key: string
@@ -87,7 +87,7 @@ export interface SceneProps {
     confidence: number
     label: string
     at: GroundPoint
-    others: readonly { key: string; at: GroundPoint }[]
+    others: readonly { key: string; at: GroundPoint; x_norm: number; confidence: number }[]
   } | null
   // Someone is near the site: a `presence` Alert is active. The Enclosure's PIR dome blinks and an amber
   // sweep goes round the fence for as long.
@@ -108,6 +108,8 @@ export interface SceneProps {
   }
   // The feed was open and no longer is: the scene shows what it last knew, not the Outpost as it is now.
   signalLost: boolean
+  // What the Probes last read, as the feed gave it: for whoever points at a part of the site. Null before any.
+  readings: Telemetry['readings'] | null
 }
 
 // Dark anodized metal: the Enclosure's body when the air is calm.
@@ -216,7 +218,12 @@ function peopleOf(alert: Intrusion) {
 
   return {
     followed: { key: String(id ?? 0), at: standingPoint(x_norm, pan, h_norm) },
-    others: others.map((other) => ({ key: String(other.id), at: standingPoint(other.x_norm, pan, other.h_norm) })),
+    others: others.map((other) => ({
+      key: String(other.id),
+      at: standingPoint(other.x_norm, pan, other.h_norm),
+      x_norm: other.x_norm,
+      confidence: other.confidence,
+    })),
   }
 }
 
@@ -305,5 +312,6 @@ export function toScene(state: TwinState, feed: TwinFeed = { encrypted: false })
     // Not open is not enough: before the first connection, and while that one is still being tried,
     // there is no signal to have lost. After it, a retry in progress is still a signal lost.
     signalLost: state.connectedOnce && state.connection !== 'open',
+    readings: state.latestTelemetry?.readings ?? null,
   }
 }

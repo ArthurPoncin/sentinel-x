@@ -120,6 +120,7 @@ describe('toScene', () => {
       anchor: null,
       link: { encrypted: false },
       signalLost: false,
+      readings: null,
     })
   })
 
@@ -545,8 +546,8 @@ describe('toScene', () => {
     expect(intruder?.key).toBe('3')
     expect(intruder?.at).toEqual(standingPoint(0.5, pan, 0.5))
     expect(intruder?.others).toEqual([
-      { key: '4', at: standingPoint(0.8, pan, 0.35) },
-      { key: '7', at: standingPoint(0.2, pan, 0.6) },
+      { key: '4', at: standingPoint(0.8, pan, 0.35), x_norm: 0.8, confidence: 0.7 },
+      { key: '7', at: standingPoint(0.2, pan, 0.6), x_norm: 0.2, confidence: 0.9 },
     ])
     expect(sceneOf(0.5).intruder?.others).toEqual([])
   })

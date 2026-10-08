@@ -189,7 +189,7 @@ export function OutpostTwin({ scene, frames, wholeStage = false, operator }: Out
         </group>
         <OrbitCamera anchor={scene.anchor} frames={frames} wholeStage={wholeStage} operator={operator} />
         {operator && <HandHologram operator={operator} />}
-        {operator && <Gunsight operator={operator} range={range} />}
+        {operator && <Gunsight operator={operator} range={range} intel={scene} />}
         <Halo signal={scene.signalLost ? 0 : 1} />
       </Canvas>
       {/* Next to the image, not in it: a screen reader skips what an image holds. */}

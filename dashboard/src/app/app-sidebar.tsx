@@ -15,12 +15,22 @@ import {
   useSidebar,
 } from '@/shared/ui/sidebar'
 
+// Where the hand control's tutorial is: a screen of its own, there only while the hand control is on.
+export const TUTORIAL = '/gestes'
+
 export const NAV = [
-  { to: '/', title: 'Operator view' },
-  { to: '/twin', title: 'Digital Twin' },
+  { to: '/', title: 'Operator view', hands: false },
+  { to: '/twin', title: 'Digital Twin', hands: false },
+  { to: TUTORIAL, title: 'Tutoriel des gestes', hands: true },
 ] as const
 
-// The side navigation, under the top bar: the two surfaces, and the way out. Words, no icons. The top bar's
+// The screens the menu shows: those of the hand control only while it is on.
+export function screens(handsOn: boolean) {
+  return NAV.filter(({ hands }) => handsOn || !hands)
+}
+
+// The side navigation, under the top bar: the two surfaces, the hand control's tutorial while it is on, and
+// the way out. Words, no icons. The top bar's
 // ☰ (or Ctrl+B) folds it away on a wide screen; on a phone it is a drawer that a choice closes. At its foot,
 // the hand control's switch: off until the Operator has a hand sensor on their desk.
 export function AppSidebar() {
@@ -37,7 +47,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Supervision</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {NAV.map(({ to, title }) => (
+              {screens(hands.enabled).map(({ to, title }) => (
                 <SidebarMenuItem key={to}>
                   <SidebarMenuButton asChild isActive={pathname === to}>
                     <NavLink to={to} end onClick={close}>

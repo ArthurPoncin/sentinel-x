@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { handLine } from '@/features/gestures/components/hand-hud'
 import { HANDS_OFF } from '@/features/gestures/stores/hand-store'
+import { screens, TUTORIAL } from './app-sidebar'
 import { pageAfter } from './hand-control'
 
 describe('pageAfter', () => {
@@ -13,6 +14,20 @@ describe('pageAfter', () => {
 
   it('starts from the first screen when the app is on none of them', () => {
     expect(pageAfter('/nowhere', 'page-left')).toBe('/twin')
+  })
+
+  it('never leads to the tutorial', () => {
+    for (const from of ['/', '/twin']) {
+      expect(pageAfter(from, 'page-left')).not.toBe(TUTORIAL)
+      expect(pageAfter(from, 'page-right')).not.toBe(TUTORIAL)
+    }
+  })
+})
+
+describe('screens', () => {
+  it('has the tutorial in the menu only while the hand control is on', () => {
+    expect(screens(false).map(({ to }) => to)).toEqual(['/', '/twin'])
+    expect(screens(true).map(({ to }) => to)).toEqual(['/', '/twin', TUTORIAL])
   })
 })
 

@@ -1,17 +1,18 @@
 import { NavLink, Outlet, useLocation, useMatches } from 'react-router'
-import { HandHud } from '@/features/gestures'
+import { HandHud, useHandSwitch } from '@/features/gestures'
 import { ConnectionIndicator } from '@/features/live-feed'
 import { SidebarInset, SidebarProvider, useSidebar } from '@/shared/ui/sidebar'
-import { AppSidebar } from './app-sidebar'
+import { AppSidebar, TUTORIAL } from './app-sidebar'
 import { layoutMode, sidebarOpenFrom } from './layout-mode'
 
 // The bar the app was born with, across the whole window: the menu button, the brand, the two surfaces, and
 // whether the feed is live. Its words stay in English, as they were. On a phone the two surfaces are in the
 // menu only: the bar keeps the brand and the feed. While the hand control is on, it also says what the hand
-// sensor sees, next to the feed.
+// sensor sees, next to the feed, and has the way to its tutorial.
 function TopBar() {
   const { toggleSidebar, open, openMobile, isMobile } = useSidebar()
   const expanded = isMobile ? openMobile : open
+  const hands = useHandSwitch()
 
   return (
     <header className="flex shrink-0 items-center gap-3 border-b bg-card px-3 py-3 sm:gap-6 sm:px-5">
@@ -33,6 +34,11 @@ function TopBar() {
         <NavLink to="/twin" className={({ isActive }) => (isActive ? 'text-foreground' : 'text-muted-foreground')}>
           Digital Twin
         </NavLink>
+        {hands.enabled && (
+          <NavLink to={TUTORIAL} className={({ isActive }) => (isActive ? 'text-foreground' : 'text-muted-foreground')}>
+            Gestes
+          </NavLink>
+        )}
       </nav>
       <span className="ml-auto md:ml-0">
         <HandHud />
