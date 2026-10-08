@@ -143,7 +143,11 @@ Ces trois fichiers ne contiennent aucun secret.
 - **Se connecter au Pi** : depuis le PC Opérateur, sur le Wi-Fi de la table, `ssh ton-utilisateur@192.168.4.1`.
 - **Mettre à jour** : branche l'Ethernet, puis
   ```bash
-  cd ~/sentinel-x && git pull && infra/plug-and-play.sh 4 --no-flash && cyber/harden.sh 4
+  cd ~/sentinel-x && infra/update.sh
+  ```
+  Il ne touche ni au Wi-Fi ni au pare-feu : ta session SSH tient, et le durcissement reste en place. S'il dit à la fin que l'installation du Pi ou le durcissement a changé :
+  ```bash
+  infra/plug-and-play.sh 4 --no-flash && cyber/harden.sh 4
   ```
   `plug-and-play.sh` relance le Wi-Fi de la table : ta session SSH se fige quelques secondes, puis reprend. Si elle tombe, reconnecte-toi et relance la même commande : les deux scripts reprennent sans rien casser.
 - **Changer de PC Opérateur** : depuis l'ancien, donne la clé du nouveau au Pi (étape 1, en ajoutant sa clé publique à `~/.ssh/authorized_keys`), connecte le nouveau au Wi-Fi de la table, regarde son adresse, puis :

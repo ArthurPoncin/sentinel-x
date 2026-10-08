@@ -28,6 +28,8 @@ It talks French, through [`ui.sh`](ui.sh): sudo and the Operator password asked 
 
 Everything comes back by itself when the Pi reboots. The manual steps follow, for reference.
 
+Once installed, an update is [`update.sh`](update.sh), with Ethernet plugged in: `git pull`, the images of the new code (pulled or built as above, through [`pull.sh`](pull.sh), which both scripts share), then `docker compose up -d`, which makes again only the containers whose image or settings changed, and a restart of the broker when `mosquitto.conf` changed. No sudo, no table number: the Wi-Fi, the secrets, the status screen and the ESP32 stay as they are, so an SSH session over the table Wi-Fi holds and the hardening stays in place. It does not apply a new firmware, a new broker account or ACL, nor a change to the Pi's own setup or to its hardening: when the pull brought one, it says so at the end, with the command to run (`plug-and-play.sh`, `harden.sh`).
+
 Before the pentest, [`../cyber/harden.sh`](../cyber/harden.sh) closes the Pi down to what the table needs (SSH by key from the Operator laptop only, UFW, Docker's published ports kept to the table Wi-Fi) — [`../cyber/README.md`](../cyber/README.md#hardensh). Run it again after each `plug-and-play.sh`.
 
 ## Run the Command Post on the Pi
@@ -64,7 +66,7 @@ docker compose logs -f api                      # follow one service
 docker compose logs -f vision predictive        # the AI services
 MOCK_FEED=true docker compose up -d api         # the scripted scenario, until the Sentinel is there
 docker compose up -d api                        # back to the real feed
-git pull && docker compose up -d --build        # update
+infra/update.sh                                 # update: git pull, the new images, the containers that changed
 ```
 
 **4. Open it** from the Operator laptop, on the table Wi-Fi: import `infra/secrets/ca.crt` as a trusted authority in the browser (or the OS), then `https://192.168.X.1/` and log in. From the Pi itself: `curl --cacert infra/secrets/ca.crt https://127.0.0.1/api/v1/auth/check` → `401` until logged in; `https://127.0.0.1/camera` too, the camera feed being for the Operator only.
