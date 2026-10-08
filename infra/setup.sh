@@ -32,6 +32,10 @@ MOSQUITTO_IMAGE=eclipse-mosquitto:2.0
 in_container() {
   docker run --rm -v "$secrets:/secrets" -v "$PWD/mosquitto/acl:/acl:ro" "$MOSQUITTO_IMAGE" sh -c "$1"
 }
+# The end of this script hands mosquitto/ and caddy/ to the users the containers run as: a later run
+# that makes a certificate again (infra/plug-and-play.sh deletes one that is outdated) could no
+# longer write there. Back to us while this runs, handed over again at the end.
+in_container "chown $(id -u):$(id -g) /secrets/mosquitto /secrets/caddy"
 made() { echo "  made $1"; }
 kept() { echo "  kept $1 (already there)"; }
 
