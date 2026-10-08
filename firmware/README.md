@@ -8,7 +8,7 @@ Firmware for the Sentinel: reads the probes, drives the Alarm, **decides its own
 - **MCU:** ESP32 DevKitC V4 by AZ-Delivery (ESP32-WROOM-32, 38 pins; Wi-Fi 2.4 GHz to the Pi's access point) — ESP8266 deviation justified in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#deviations-to-validate-with-the-coach-monday)
 - **Probes:** DHT22 (temp/humidity), MQ-2 (gas — 5 V heater; its analog output needs a divider to stay under 3.3 V), PIR HC-SR501 (presence), CZN-15E sound sensor (digital output only: HIGH/LOW against the threshold set by its potentiometer; the firmware samples it fast and reports the share of the cycle that was loud). Analog probes go on ADC1 pins: ADC2 is unusable while Wi-Fi is on.
 - **Display:** none on the ESP32. The status screen is the Pi's HDMI screen ([`../infra/README.md`](../infra/README.md#the-status-screen)): it shows whether the Sentinel is online, its readings and its raised Alerts. Why it is not online, the serial monitor says
-- **Alarm:** a passive speaker (4–8 Ω) between IO25 and GND, through **100 Ω or more**: about 30 mA, what a pin may give. Or the buzzer, straight between IO25 and GND, louder for the same current. The firmware plays a square wave on it: the 1800/2600 Hz siren. **Never the speaker on 5V**: through IO25 it is a short circuit of the 5 V rail, which then fails everything on it, and the pin with it. Louder still through an NPN transistor (2N2222, BC547): IO25 → 1 kΩ → base, emitter → GND, collector → the speaker's black wire, its red wire → 47 Ω → 5 V
+- **Alarm:** a passive speaker (4–8 Ω) between IO25 and GND, through **100 Ω or more**: about 30 mA, what a pin may give. Or the buzzer, straight between IO25 and GND, louder for the same current. The firmware plays a square wave on it: the siren, a tune of 523 to 1397 Hz. **Never the speaker on 5V**: through IO25 it is a short circuit of the 5 V rail, which then fails everything on it, and the pin with it. Louder still through an NPN transistor (2N2222, BC547): IO25 → 1 kΩ → base, emitter → GND, collector → the speaker's black wire, its red wire → 47 Ω → 5 V
 
 ## Responsibilities
 - Cadenced probe sampling → one **telemetry snapshot** per cycle, published over **MQTTS**.
@@ -31,7 +31,7 @@ By hand, from a laptop with PlatformIO: copy `include/secrets.example.h` to `inc
 | `include/config.h` | cycle, thresholds, hysteresis, warm-ups: **calibrate here** |
 | `src/probes.*` | DHT22, MQ-2 (millivolts at IO34, 16-sample average, on the ADC's fine 0–1 V range below 0.9 V), PIR, sound share (sampled every ms on an esp_timer: a 50 ms window is loud past 2 ms of sound) |
 | `src/alerts.*` | one state machine per kind; a severity change is raised again on the same `alert_id` |
-| `src/speaker.*` | the Alarm: siren (1800 and 2600 Hz in turn, 350 ms each) while an Alert is critical; `on` (steady 2600 Hz) / `pattern` (siren) / `off` from the Operator (`off` silences until the next critical) |
+| `src/speaker.*` | the Alarm: siren (the "Axel F" riff of Crazy Frog as a square wave, 523 to 1397 Hz, looping) while an Alert is critical; `on` (steady 2600 Hz) / `pattern` (siren) / `off` from the Operator (`off` silences until the next critical) |
 | `src/uplink.*` | Wi-Fi (hostname `sentinel-01`), time from the Pi, MQTTS with the team CA, commands |
 | `src/main.cpp` | one cycle per second: read, decide, sound, publish, and a line on the serial monitor |
 
