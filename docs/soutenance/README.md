@@ -27,7 +27,7 @@ Le chrono du sujet, à la seconde. La barre du bas découpe les dix minutes en l
 |---|---|---|
 | 0:00 à 1:00 | 1 à 3 | le titre, les trois menaces, l'équipe et la solution |
 | 1:00 à 2:00 | aucune | le teaser « Sentinel Drop », projeté hors de la page |
-| 2:00 à 6:55 | 4 à 12 | le cahier des charges, l'architecture, le Sentinel, l'IA, le jumeau numérique, la sécurité, la commande gestuelle, la gestion de projet, les évolutions |
+| 2:00 à 6:55 | 4 à 12 | le cahier des charges, l'architecture, le Sentinel, la sécurité, l'IA, le jumeau numérique, la commande gestuelle, la gestion de projet, les évolutions |
 | 6:55 à 10:00 | 13 et 14 | la démo live et ses six temps, puis les questions |
 
 - **Le teaser** : il n'a plus de diapositive. Le lancer depuis `../livrables/sentinel-x-teaser.mp4` après la diapositive 3 ; sa minute reste comptée dans la barre du bas (`data-gap="60"` sur la diapositive 4, la première après lui).
