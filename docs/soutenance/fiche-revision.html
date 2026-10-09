@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sentinel-X · Fiche de révision</title>
+<style>
+  /* Two A4 sheets, no network, nothing that moves. The colours are the dashboard's Status colours,
+     darkened where they are read as text on paper. */
+  :root {
+    --paper: #fbfaf7;
+    --wash: #f3f0e9;
+    --line: #dcd7cc;
+    --ink: #131a22;
+    --soft: #3a4653;
+    --muted: #6a7682;
+    --night: #0b0f14;
+    --night-line: #233040;
+    --night-text: #d8e1ea;
+    --night-muted: #7d8b99;
+    --nominal: #3ecf8e;
+    --elevated: #f5a623;
+    --critical: #ff4d4f;
+    --replay: #b48cff;
+    --nominal-ink: #13805a;
+    --elevated-ink: #a86500;
+    --critical-ink: #cc342f;
+    --replay-ink: #6a4bd6;
+    --accent: var(--nominal-ink);
+    --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', 'P052', 'URW Palladio L', Georgia, 'Noto Serif', serif;
+    --sans: 'Inter', 'Avenir Next', 'Segoe UI', 'Noto Sans', system-ui, Roboto, sans-serif;
+    --mono: ui-monospace, 'JetBrains Mono', 'Cascadia Code', 'DejaVu Sans Mono', Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body {
+    margin: 0;
+    background: #e7e3da;
+    color: var(--ink);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .hint {
+    margin: 18px auto 0;
+    text-align: center;
+    font: 500 11px/1 var(--mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .sheet {
+    width: 210mm;
+    height: 297mm;
+    margin: 14px auto 26px;
+    padding: 0 12mm 9mm;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: var(--paper);
+    box-shadow: 0 1px 2px rgb(19 26 34 / 0.08), 0 18px 50px -18px rgb(19 26 34 / 0.35);
+    font-size: 8.4pt;
+    line-height: 1.4;
+  }
+
+  p, ul, ol, h1, h2, h3, table { margin: 0; }
+  ul, ol { padding: 0; list-style: none; }
+  strong, b { font-weight: 650; }
+
+  code {
+    font: 0.92em/1 var(--mono);
+    padding: 0.08em 0.32em;
+    border-radius: 3px;
+    background: var(--wash);
+    white-space: nowrap;
+  }
+
+  /* ---- masthead ---- */
+  .mast {
+    margin: 0 -12mm;
+    padding: 6.5mm 12mm 0;
+    background: var(--night);
+    color: var(--night-text);
+  }
+  .mast .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 8mm;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 0.7em;
+    font: 650 7.4pt/1 var(--sans);
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+  }
+  .brand i {
+    width: 0.8em;
+    height: 0.8em;
+    border-radius: 50%;
+    background: var(--nominal);
+    box-shadow: 0 0 0 0.3em rgb(62 207 142 / 0.18);
+  }
+  .brand span { color: var(--nominal); }
+  .mast h1 {
+    margin-top: 2.8mm;
+    font: 400 23pt/1 var(--serif);
+    letter-spacing: -0.01em;
+  }
+  .mast h1 em { color: var(--nominal); }
+  .mast .lead {
+    margin-top: 1.8mm;
+    font-size: 8.6pt;
+    color: var(--night-muted);
+  }
+  .when {
+    text-align: right;
+    font: 500 7pt/1.7 var(--mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--night-muted);
+    white-space: nowrap;
+  }
+  .when b { display: block; color: var(--night-text); font-weight: 600; }
+
+  /* The ten minutes of the defense, to scale: 1 + 1 + 3 + 5. */
+  .minutes {
+    display: flex;
+    gap: 1mm;
+    margin-top: 4.4mm;
+  }
+  .minutes div {
+    padding: 1.4mm 0 2.2mm;
+    border-top: 0.8mm solid var(--c);
+    font: 500 6.4pt/1.35 var(--mono);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--night-muted);
+    white-space: nowrap;
+  }
+  .minutes b { display: block; color: var(--night-text); font-weight: 600; }
+
+  .mast.slim { padding: 3.8mm 12mm; }
+  .mast.slim .row { align-items: center; }
+  .mast.slim .when { line-height: 1; }
+
+  /* ---- sections ---- */
+  section { margin-top: 4.3mm; }
+  .n-nominal { --accent: var(--nominal-ink); }
+  .n-elevated { --accent: var(--elevated-ink); }
+  .n-critical { --accent: var(--critical-ink); }
+  .n-replay { --accent: var(--replay-ink); }
+
+  h2 {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6em;
+    margin-bottom: 2.1mm;
+    padding-bottom: 1.3mm;
+    border-bottom: 1px solid var(--line);
+    font: 600 12pt/1.15 var(--serif);
+  }
+  h2 b {
+    font: 600 6.6pt/1 var(--mono);
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    transform: translateY(-0.2em);
+  }
+  h2 em { color: var(--accent); font-weight: 400; }
+  h2 small {
+    margin-left: auto;
+    font: 500 6.4pt/1 var(--mono);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  h2 small i {
+    display: inline-block;
+    width: 1.8em;
+    margin: 0 0.4em 0 1em;
+    vertical-align: middle;
+    border-top: 1.6px solid var(--nominal-ink);
+  }
+  h2 small i.cmd { border-top: 1.6px dashed var(--replay-ink); }
+
+  .pitch {
+    font: 400 12.2pt/1.32 var(--serif);
+    letter-spacing: -0.005em;
+  }
+  .pitch em { color: var(--critical-ink); }
+
+  .cols { display: grid; gap: 3mm; }
+  .c2 { grid-template-columns: 1fr 1fr; }
+  .c3 { grid-template-columns: repeat(3, 1fr); }
+  .c4 { grid-template-columns: repeat(4, 1fr); }
+  .c5 { grid-template-columns: repeat(5, 1fr); }
+  .c6 { grid-template-columns: repeat(6, 1fr); }
+
+  .card {
+    padding: 2mm 2.6mm 2.2mm;
+    border: 1px solid var(--line);
+    border-radius: 1.6mm;
+    background: #fff;
+  }
+  .card h3 {
+    margin-bottom: 0.5mm;
+    font: 650 8.6pt/1.25 var(--sans);
+  }
+  .card p { color: var(--soft); }
+  .tag {
+    display: block;
+    margin-bottom: 1.2mm;
+    font: 600 6.2pt/1 var(--mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .threat { border-top: 0.7mm solid var(--accent); }
+  .threat h3 { color: var(--accent); }
+  .card p b, .card li b { color: var(--ink); }
+
+  /* ---- the diagram ---- */
+  .flow svg { display: block; width: 100%; height: auto; }
+  .flow text { font-family: var(--sans); fill: var(--ink); }
+  .flow .t { font-size: 12px; font-weight: 650; }
+  .flow .s { font-size: 9.4px; fill: var(--muted); }
+  .flow .l { font: 600 8px var(--mono); letter-spacing: 0.08em; fill: var(--muted); }
+  .flow .m { font: 500 8.4px var(--mono); fill: var(--soft); }
+  .flow .zone { fill: none; stroke: var(--line); stroke-width: 1.2; stroke-dasharray: 4 4; }
+  .flow .post { fill: var(--wash); stroke: var(--line); stroke-width: 1; }
+  .flow .node { fill: #fff; stroke: #c9c3b6; stroke-width: 1; }
+  .flow .hot { stroke: var(--nominal-ink); stroke-width: 1.4; }
+  .flow .alarm { fill: #fff; stroke: var(--critical-ink); stroke-width: 1.4; }
+  .flow .w { fill: none; stroke: var(--muted); stroke-width: 1.3; marker-end: url(#a); }
+  .flow .tls { stroke: var(--nominal-ink); stroke-width: 2.2; marker-end: url(#a-tls); }
+  .flow .cmd { stroke: var(--replay-ink); stroke-width: 1.4; stroke-dasharray: 5 4; marker-end: url(#a-cmd); }
+  .flow .num circle { fill: var(--ink); }
+  .flow .num text { fill: #fff; font: 700 8.6px var(--sans); text-anchor: middle; }
+
+  .steps { margin-top: 2.2mm; counter-reset: step; }
+  .steps li {
+    position: relative;
+    padding-left: 5.6mm;
+    color: var(--soft);
+  }
+  .steps li::before {
+    counter-increment: step;
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 0.1mm;
+    width: 4mm;
+    height: 4mm;
+    border-radius: 50%;
+    background: var(--ink);
+    color: #fff;
+    font: 700 6.6pt/4mm var(--sans);
+    text-align: center;
+  }
+  .steps b { display: block; color: var(--ink); }
+
+  /* ---- tables ---- */
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    padding: 0 2mm 1.1mm 0;
+    text-align: left;
+    white-space: nowrap;
+    font: 600 6.2pt/1 var(--mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  td {
+    padding: 1.05mm 3mm 1.05mm 0;
+    border-top: 1px solid var(--line);
+    vertical-align: top;
+    color: var(--soft);
+  }
+  td:last-child, th:last-child { padding-right: 0; }
+  td:first-child { color: var(--ink); font-weight: 650; white-space: nowrap; }
+  td.where { white-space: nowrap; font: 500 7.4pt/1.6 var(--mono); color: var(--muted); }
+  td.tech { color: var(--ink); white-space: nowrap; }
+
+  .who { color: var(--accent); font-weight: 650; white-space: nowrap; }
+
+  .terms div { padding-left: 2.4mm; border-left: 0.6mm solid var(--accent); color: var(--soft); }
+  .terms dt { color: var(--ink); font: 600 10pt/1.3 var(--serif); }
+  .terms dd { margin: 0; }
+  dl { margin: 0; }
+
+  .facts li {
+    padding: 1.2mm 0 1.3mm;
+    border-top: 1px solid var(--line);
+    color: var(--soft);
+  }
+  .facts li:first-child { border-top: 0; padding-top: 0; }
+  .facts li:last-child { padding-bottom: 0; }
+  .facts b { color: var(--ink); }
+
+  .kv li {
+    display: grid;
+    grid-template-columns: 15mm 1fr;
+    gap: 2mm;
+    padding: 0.9mm 0;
+    border-top: 1px solid var(--line);
+    color: var(--soft);
+  }
+  .kv li:first-child { border-top: 0; }
+  .kv li > span:first-child {
+    padding-top: 0.25mm;
+    font: 600 6.2pt/1.6 var(--mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .kv b { color: var(--ink); }
+
+  .beats li {
+    padding-top: 1.2mm;
+    border-top: 0.7mm solid var(--c);
+    color: var(--soft);
+  }
+  .beats time {
+    display: block;
+    font: 600 6.2pt/1.5 var(--mono);
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+  .beats b { display: block; color: var(--ink); }
+
+  .qa { display: grid; grid-template-columns: 1fr 1fr; gap: 2.6mm 6mm; }
+  .qa li {
+    padding-left: 2.6mm;
+    border-left: 0.6mm solid var(--line);
+    color: var(--soft);
+  }
+  .qa b { display: block; color: var(--ink); font: 600 9.6pt/1.25 var(--serif); margin-bottom: 0.4mm; }
+
+  .team {
+    margin-top: auto;
+    padding-top: 2mm;
+    border-top: 1px solid var(--line);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6mm 4.4mm;
+    font-size: 7.8pt;
+    color: var(--muted);
+  }
+  .team b { color: var(--ink); }
+  .team .tag { display: inline; margin: 0; color: var(--muted); }
+
+  /* ---- a phone: one column, as tall as it needs ---- */
+  @media screen and (max-width: 840px) {
+    .hint { display: none; }
+    .sheet {
+      width: auto;
+      height: auto;
+      margin: 0 0 14px;
+      padding: 0 16px 22px;
+      overflow: visible;
+      box-shadow: none;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    .mast { margin: 0 -16px; padding: 22px 16px 0; }
+    .mast.slim { padding: 14px 16px; }
+    .mast .row { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .mast h1 { margin-top: 14px; font-size: 34px; }
+    .mast .lead { margin-top: 8px; font-size: 15px; }
+    .brand { font-size: 11px; }
+    .when { text-align: left; font-size: 10.5px; white-space: normal; }
+    .minutes { margin-top: 18px; gap: 3px; }
+    .minutes div { padding: 6px 0 10px; font-size: 8.5px; letter-spacing: 0; white-space: normal; border-top-width: 3px; }
+    section { margin-top: 26px; }
+    h2 { flex-wrap: wrap; margin-bottom: 12px; padding-bottom: 8px; font-size: 21px; }
+    h2 b { font-size: 11px; }
+    h2 small { margin: 6px 0 0; width: 100%; font-size: 10px; white-space: normal; }
+    h2 small i:first-child { margin-left: 0; }
+    .pitch { font-size: 21px; }
+    .cols { grid-template-columns: 1fr; gap: 10px; }
+    .beats.cols { grid-template-columns: 1fr 1fr 1fr; }
+    .terms div { padding-left: 12px; border-left-width: 3px; }
+    .terms dt { font-size: 18px; }
+    .card { padding: 12px 14px 14px; border-radius: 8px; }
+    .card h3 { font-size: 16px; margin-bottom: 4px; }
+    .tag, th, .kv li > span:first-child { font-size: 10px; }
+    .threat, .beats li { border-top-width: 3px; }
+    .flow { overflow-x: auto; }
+    .flow svg { width: 760px; max-width: none; }
+    .steps { margin-top: 14px; }
+    .steps li { padding-left: 30px; }
+    .steps li::before { width: 21px; height: 21px; font-size: 11px; line-height: 21px; top: 1px; }
+    table, tbody, tr, td { display: block; }
+    thead { display: none; }
+    tr { padding: 10px 0; border-top: 1px solid var(--line); }
+    tbody tr:first-child { padding-top: 0; border-top: 0; }
+    td { padding: 0; border: 0; }
+    td:first-child { font-size: 16px; white-space: normal; }
+    td.where { font-size: 11.5px; }
+    td.tech { white-space: normal; }
+    .facts li { padding: 9px 0; }
+    .kv li { grid-template-columns: 1fr; gap: 0; padding: 7px 0; }
+    .beats li { padding-top: 8px; font-size: 13.5px; }
+    .beats b { font-size: 15px; }
+    .beats time { font-size: 10.5px; }
+    .qa { grid-template-columns: 1fr; gap: 16px; }
+    .qa li { padding-left: 12px; border-left-width: 3px; }
+    .qa b { font-size: 17px; margin-bottom: 3px; }
+    .team { margin-top: 26px; padding-top: 12px; font-size: 13.5px; flex-direction: column; gap: 4px; }
+  }
+
+  @page { size: A4; margin: 0; }
+  @media print {
+    body { background: #fff; }
+    .hint { display: none; }
+    .sheet { margin: 0; box-shadow: none; break-after: page; }
+    .sheet:last-child { break-after: auto; }
+  }
+</style>
+</head>
+<body>
+
+<p class="hint">Ctrl + P pour l’imprimer · 2 pages A4</p>
+
+<!-- 1 ───────────────────────────────────────────────────────── how it works -->
+<article class="sheet">
+  <header class="mast">
+    <div class="row">
+      <div>
+        <p class="brand"><i></i>Sentinel<span>-X</span></p>
+        <h1>Fiche de <em>révision</em></h1>
+        <p class="lead">Ce qu’il faut savoir dire à l’oral, en deux pages.</p>
+      </div>
+      <p class="when"><b>Soutenance · vendredi 9 octobre 2026</b>Groupe 2 · Table 4 · Option A</p>
+    </div>
+    <div class="minutes">
+      <div style="flex: 1; --c: var(--nominal)"><b>1 min</b>Équipe</div>
+      <div style="flex: 1; --c: var(--elevated)"><b>1 min</b>Teaser</div>
+      <div style="flex: 3; --c: var(--critical)"><b>3 min</b>Démo live</div>
+      <div style="flex: 5; --c: var(--replay)"><b>5 min</b>Pitch et questions</div>
+    </div>
+  </header>
+
+  <section class="n-critical">
+    <h2><b>01</b>Le projet, <em>en une phrase</em></h2>
+    <p class="pitch">Un boîtier autonome qui surveille une micro-centrale isolée, sans personne sur place, et répond à <em>trois menaces à la fois</em>. Un jumeau numérique 3D montre en direct ce qu’il perçoit.</p>
+    <div class="cols c3" style="margin-top: 2.6mm">
+      <div class="card threat n-nominal">
+        <h3>1 · Cyberattaque</h3>
+        <p>Chaque canal est <b>chiffré et authentifié</b>&nbsp;: MQTTS, HTTPS, WSS.</p>
+      </div>
+      <div class="card threat n-critical">
+        <h3>2 · Intrusion physique</h3>
+        <p>Une <b>IA de vision</b> isole la personne sur la webcam, la caméra la suit.</p>
+      </div>
+      <div class="card threat n-elevated">
+        <h3>3 · Gaz, surchauffe</h3>
+        <p>L’<b>Alarme sonne sur place</b>, un modèle voit la dérive avant le seuil.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="n-nominal">
+    <h2><b>02</b>Le trajet d’une mesure, <em>chiffré à chaque saut</em><small><i></i>TLS<i class="cmd"></i>commande</small></h2>
+    <div class="flow">
+      <svg viewBox="0 0 820 290" role="img" aria-label="Le Sentinel publie en MQTTS vers le broker du Command Post, l'api rassemble, le navigateur de l'Opérateur reçoit en HTTPS et WSS">
+        <defs>
+          <marker id="a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 8 4 0 8Z" fill="#6a7682" /></marker>
+          <marker id="a-tls" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="4.6" markerHeight="4.6" orient="auto-start-reverse"><path d="M0 0 8 4 0 8Z" fill="#13805a" /></marker>
+          <marker id="a-cmd" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 8 4 0 8Z" fill="#6a4bd6" /></marker>
+        </defs>
+
+        <rect class="zone" x="2" y="18" width="640" height="270" rx="12" />
+        <text class="l" x="12" y="11">ENCLOSURE · LE BOÎTIER, IMPRIMÉ 3D ET GRAVÉ AU LASER</text>
+
+        <rect class="node" x="14" y="40" width="150" height="220" rx="10" />
+        <text class="t" x="26" y="62">Sentinel</text>
+        <text class="s" x="26" y="77">ESP32 · firmware C++</text>
+        <rect class="post" x="26" y="88" width="126" height="22" rx="5" /><text class="s" x="34" y="103">DHT22 · température</text>
+        <rect class="post" x="26" y="114" width="126" height="22" rx="5" /><text class="s" x="34" y="129">MQ-2 · gaz</text>
+        <rect class="post" x="26" y="140" width="126" height="22" rx="5" /><text class="s" x="34" y="155">PIR · présence</text>
+        <rect class="post" x="26" y="166" width="126" height="22" rx="5" /><text class="s" x="34" y="181">CZN-15E · bruit</text>
+        <rect class="alarm" x="26" y="200" width="126" height="28" rx="5" /><text class="t" x="34" y="218" style="font-size: 10.6px">Alarme · sirène</text>
+        <text class="s" x="26" y="246">1 cycle par seconde</text>
+
+        <rect class="post" x="222" y="40" width="408" height="220" rx="10" />
+        <text class="l" x="234" y="56">COMMAND POST · RASPBERRY PI 4 · DOCKER-COMPOSE</text>
+
+        <rect class="node" x="234" y="66" width="112" height="46" rx="8" /><text class="t" x="244" y="85">webcam USB</text><text class="s" x="244" y="100">sur moteur pas à pas</text>
+        <rect class="node" x="372" y="66" width="112" height="46" rx="8" /><text class="t" x="382" y="85">vision</text><text class="s" x="382" y="100">TFLite · personne</text>
+        <rect class="node hot" x="234" y="134" width="112" height="46" rx="8" /><text class="t" x="244" y="153">mosquitto</text><text class="s" x="244" y="168">broker MQTT · :8883</text>
+        <rect class="node" x="372" y="134" width="112" height="46" rx="8" /><text class="t" x="382" y="153">api</text><text class="s" x="382" y="168">Status · SQLite</text>
+        <rect class="node hot" x="508" y="134" width="112" height="46" rx="8" /><text class="t" x="518" y="153">reverse-proxy</text><text class="s" x="518" y="168">Caddy · :443</text>
+        <rect class="node" x="372" y="202" width="112" height="46" rx="8" /><text class="t" x="382" y="221">predictive</text><text class="s" x="382" y="236">Isolation Forest</text>
+        <rect class="node" x="508" y="202" width="112" height="46" rx="8" /><text class="t" x="518" y="221">dashboard</text><text class="s" x="518" y="236">Digital Twin 3D</text>
+
+        <rect class="node" x="700" y="121" width="116" height="72" rx="10" />
+        <text class="t" x="712" y="146">PC Opérateur</text>
+        <text class="s" x="712" y="162">un navigateur,</text>
+        <text class="s" x="712" y="175">rien d’autre</text>
+
+        <path class="w tls" d="M164 157H231" />
+        <path class="w" d="M346 157H370" />
+        <path class="w" d="M484 157H506" />
+        <path class="w tls" d="M620 157H698" />
+        <path class="w" d="M346 89H370" />
+        <path class="w" d="M428 112V132" />
+        <path class="w" d="M290 180V225H370" />
+        <path class="w" d="M428 202V182" />
+        <path class="w" d="M564 180V200" />
+        <path class="w cmd" d="M758 193V277H89V262" />
+
+        <text class="m" x="197" y="149" text-anchor="middle" style="fill: #13805a; font-weight: 700">MQTTS</text>
+        <text class="m" x="660" y="149" text-anchor="middle" style="fill: #13805a; font-weight: 700">HTTPS · WSS</text>
+        <text class="m" x="437" y="126">POST /api/v1/alerts + jeton</text>
+        <text class="m" x="437" y="195">POST + jeton</text>
+        <text class="m" x="298" y="219">télémétrie</text>
+        <text class="m" x="424" y="272" text-anchor="middle" style="fill: #6a4bd6">commande de l’Opérateur : POST /api/v1/commands, puis MQTTS jusqu’à l’ESP32</text>
+
+        <g class="num"><circle cx="197" cy="173" r="7.5" /><text x="197" y="176">1</text></g>
+        <g class="num"><circle cx="359" cy="143" r="7.5" /><text x="359" y="146">2</text></g>
+        <g class="num"><circle cx="414" cy="122" r="7.5" /><text x="414" y="125">3</text></g>
+        <g class="num"><circle cx="660" cy="173" r="7.5" /><text x="660" y="176">4</text></g>
+      </svg>
+    </div>
+    <ol class="steps cols c4">
+      <li><b>Le Sentinel mesure</b>Chaque seconde&nbsp;: lire les 4 sondes, décider, sonner, publier.</li>
+      <li><b>Le Pi rassemble</b>L’api valide chaque message, l’écrit dans SQLite, recalcule le Status.</li>
+      <li><b>Les IA alertent</b>vision et predictive postent à l’api, chacune avec son jeton.</li>
+      <li><b>L’Opérateur voit et agit</b>Le flux arrive par WebSocket&nbsp;: le Twin bouge en moins de 2&nbsp;s.</li>
+    </ol>
+  </section>
+
+  <section class="n-replay">
+    <h2><b>03</b>Les technos, <em>pilier par pilier</em></h2>
+    <table>
+      <thead><tr><th>Pilier</th><th>Tourne sur</th><th>Technos</th><th>Son rôle</th></tr></thead>
+      <tbody>
+        <tr><td>Edge / IoT</td><td class="where">ESP32</td><td class="tech">C++, PlatformIO, Arduino</td><td>Lit les sondes, décide ses Alertes, sonne, publie.</td></tr>
+        <tr><td>IA vision</td><td class="where">Pi · vision</td><td class="tech">Python, OpenCV, TensorFlow Lite</td><td>Reconnaît une personne, tourne la caméra vers elle.</td></tr>
+        <tr><td>IA prédictive</td><td class="where">Pi · predictive</td><td class="tech">Python, scikit-learn</td><td>Repère une dérive lente, avant le seuil.</td></tr>
+        <tr><td>API</td><td class="where">Pi · api</td><td class="tech">Node.js, TypeScript, Fastify, SQLite</td><td>Un seul pipeline d’Alertes, le Status, l’historique.</td></tr>
+        <tr><td>Dashboard</td><td class="where">Pi · dashboard</td><td class="tech">React, Vite, Three.js, Tailwind</td><td>Digital Twin 3D, courbes, caméra, commande.</td></tr>
+        <tr><td>Infra</td><td class="where">Pi</td><td class="tech">Docker-Compose, Mosquitto, Caddy</td><td>6 conteneurs, une commande. Wi-Fi dédié à la table.</td></tr>
+        <tr><td>Cyber</td><td class="where">partout</td><td class="tech">OpenSSL, TLS, UFW, Nmap, Wireshark</td><td>CA d’équipe, comptes et ACL, durcissement, audit.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="n-elevated">
+    <h2><b>04</b>Le vocabulaire, <em>à ne pas mélanger</em></h2>
+    <dl class="terms cols c5">
+      <div><dt>Alerte</dt><dd>L’information&nbsp;: un état qui change, levé puis refermé.</dd></div>
+      <div><dt>Alarme</dt><dd>La réaction physique&nbsp;: la sirène du Sentinel.</dd></div>
+      <div><dt>Incident</dt><dd>De la première Alerte au retour au calme.</dd></div>
+      <div><dt>Status</dt><dd>L’état du site&nbsp;: nominal, elevated ou critical.</dd></div>
+      <div><dt>Digital Twin</dt><dd>La maquette 3D, pilotée par le même flux que les courbes.</dd></div>
+    </dl>
+  </section>
+
+  <footer class="team">
+    <span class="tag">Qui répond à quoi</span>
+    <span><b>Arthur</b> API, Twin, IA</span>
+    <span><b>Amen</b> dashboard</span>
+    <span><b>Nathan</b> firmware, installation du Pi</span>
+    <span><b>Safi et Florent</b> infra, réseau, cyber</span>
+  </footer>
+</article>
+
+<!-- 2 ───────────────────────────────────────────────────────── what to defend -->
+<article class="sheet">
+  <header class="mast slim">
+    <div class="row">
+      <p class="brand"><i></i>Sentinel<span>-X</span></p>
+      <p class="when">Fiche de révision · 2 / 2 · ce qu’il faut savoir défendre</p>
+    </div>
+  </header>
+
+  <section class="n-elevated">
+    <h2><b>05</b>Qui décide quoi&nbsp;: <em>six Alertes, deux décideurs</em></h2>
+    <div class="cols" style="grid-template-columns: 1.25fr 1fr; gap: 7mm">
+      <table>
+        <thead><tr><th>Alerte</th><th>Décidée par</th><th>Règle</th></tr></thead>
+        <tbody>
+          <tr><td><code>gas</code></td><td class="who">Sentinel</td><td>MQ-2&nbsp;: 1500 mV, critique à 2500 mV</td></tr>
+          <tr><td><code>thermal</code></td><td class="who">Sentinel</td><td>DHT22&nbsp;: 40 °C, critique à 55 °C</td></tr>
+          <tr><td><code>presence</code></td><td class="who">Sentinel</td><td>PIR, tout ou rien</td></tr>
+          <tr><td><code>noise</code></td><td class="who">Sentinel</td><td>Du bruit sur 10 % du cycle ou plus</td></tr>
+          <tr><td><code>intrusion</code></td><td class="who n-critical">vision</td><td>Une personne vue 2 fois de suite</td></tr>
+          <tr><td><code>predictive</code></td><td class="who n-critical">predictive</td><td>5 scores anormaux de suite</td></tr>
+        </tbody>
+      </table>
+      <ul class="facts">
+        <li><b>Autonomie.</b> La sirène part sur le boîtier dès qu’une Alerte est critique, même si le Pi est tombé.</li>
+        <li><b>Hystérésis.</b> Une mesure qui oscille autour du seuil ne lève qu’une Alerte, jamais une rafale.</li>
+        <li><b>Status.</b> La plus haute sévérité parmi les Alertes actives&nbsp;: nominal, elevated, critical.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="n-critical">
+    <h2><b>06</b>L’IA locale&nbsp;: <em>voir l’intrus, prévoir la panne</em></h2>
+    <div class="cols c2">
+      <div class="card">
+        <span class="tag">Vision · le sujet demande moins de 100 ms par image</span>
+        <ul class="kv">
+          <li><span>Modèle</span><span><b>EfficientDet-Lite0</b> (TensorFlow Lite), classe «&nbsp;person&nbsp;» seule, image réduite à 320 × 320.</span></li>
+          <li><span>Alerte</span><span><code>x_norm</code> la position, <code>h_norm</code> la proximité, <code>pan</code> l’angle&nbsp;: de quoi placer la figurine.</span></li>
+          <li><span>Caméra</span><span>Sur un moteur pas à pas, elle suit la personne la plus proche.</span></li>
+          <li><span>Mesure</span><span><b>10,6 ms</b> par image sur PC. Sur le Pi 4, à lire en direct sur le flux caméra.</span></li>
+        </ul>
+      </div>
+      <div class="card n-elevated">
+        <span class="tag">Maintenance prédictive · aucun seuil écrit à la main</span>
+        <ul class="kv">
+          <li><span>Modèle</span><span><b>Isolation Forest</b> (scikit-learn), 200 arbres.</span></li>
+          <li><span>Principe</span><span>Il apprend le normal, sans étiquette. Un point rare s’isole en peu de coupes.</span></li>
+          <li><span>Entrée</span><span>7 variables sur 120 s, dont les pentes de la température et du gaz.</span></li>
+          <li><span>Résultat</span><span><b>43 min d’avance</b> environ sur le seuil, en simulation de dérive lente.</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="n-nominal">
+    <h2><b>07</b>La sécurité&nbsp;: <em>deux ports publiés, zéro en clair</em></h2>
+    <div class="cols c3">
+      <div class="card"><span class="tag">Surface</span><p><b>443</b> (HTTPS, WSS) et <b>8883</b> (MQTTS). Aucun port en clair.</p></div>
+      <div class="card"><span class="tag">Chiffrement</span><p>TLS 1.2 ou plus. Chaque client vérifie le certificat, signé par <b>notre CA</b>.</p></div>
+      <div class="card"><span class="tag">Identités</span><p>4 comptes MQTT sous <b>ACL</b>, un jeton par IA, une session Opérateur.</p></div>
+      <div class="card"><span class="tag">Méfiance</span><p>La source vient du canal, jamais du message. Schéma strict.</p></div>
+      <div class="card"><span class="tag">Charge</span><p>Débit limité&nbsp;: connexion 5 par minute, Alertes 20 par seconde.</p></div>
+      <div class="card"><span class="tag">Conteneurs et réseau</span><p>Non-root, <code>cap_drop: ALL</code>, lecture seule. Wi-Fi WPA2 isolé, sans NAT.</p></div>
+    </div>
+  </section>
+
+  <section class="n-replay">
+    <h2><b>08</b>La démo, <em>en six temps</em></h2>
+    <ol class="beats cols c6">
+      <li style="--c: var(--critical)"><time>0:00</time><b>Gaz</b>un briquet</li>
+      <li style="--c: var(--critical)"><time>0:40</time><b>Intrusion</b>une personne</li>
+      <li style="--c: var(--elevated)"><time>1:20</time><b>Bruit</b>un claquement</li>
+      <li style="--c: var(--replay)"><time>1:50</time><b>Dérive prédite</b>étiqueté REPLAY</li>
+      <li style="--c: var(--elevated)"><time>2:20</time><b>Commande</b>couper l’Alarme</li>
+      <li style="--c: var(--nominal)"><time>2:40</time><b>Retour au calme</b>le Twin au vert</li>
+    </ol>
+  </section>
+
+  <section class="n-critical">
+    <h2><b>09</b>Les questions du jury, <em>une réponse chacune</em></h2>
+    <ul class="qa">
+      <li><b>Pourquoi un ESP32 et un Pi 4&nbsp;?</b>Le sujet nomme l’ESP8266 et le Pi 5. ESP32&nbsp;: la mémoire pour le TLS, plusieurs entrées analogiques. Pi 4&nbsp;: celui que nous avions, d’où un modèle de vision léger.</li>
+      <li><b>Pourquoi deux entrées dans l’api&nbsp;?</b>MQTTS pour le Sentinel, léger pour un microcontrôleur. <code>POST /api/v1/alerts</code>, imposé par le sujet, pour les IA. Derrière, un seul schéma d’Alerte.</li>
+      <li><b>Et si le Pi tombe&nbsp;?</b>Le Sentinel décide seul&nbsp;: la sirène part quand même, et 16 transitions attendent en file jusqu’à la reconnexion.</li>
+      <li><b>Pourquoi pas un simple seuil pour prédire&nbsp;?</b>Le sujet l’interdit, et un seuil ne voit pas une dérive lente. Le modèle lit les pentes de la température et du gaz ensemble.</li>
+      <li><b>Le Twin montre-t-il de vraies données&nbsp;?</b>Oui, le même flux que les courbes. Flux perdu&nbsp;: l’image décroche. Rejeu&nbsp;: étiqueté REPLAY.</li>
+      <li><b>Et si la démo plante&nbsp;?</b>Le time-scrubber rejoue l’Incident enregistré, seconde par seconde. Aucune mesure n’est inventée, et on le dit.</li>
+      <li><b>Le Pi est-il durci&nbsp;?</b>Le script est prêt et rejouable (<code>cyber/harden.sh</code>, 15 min). Non lancé avant la démo&nbsp;: il réserve SSH à un seul PC. C’est le constat C1 de notre audit.</li>
+      <li><b>Comment avez-vous travaillé à cinq&nbsp;?</b>Une issue par user story, une branche et une PR par issue, la CI à chaque PR. <code>main</code> reste toujours démontrable.</li>
+    </ul>
+  </section>
+</article>
+
+</body>
+</html>

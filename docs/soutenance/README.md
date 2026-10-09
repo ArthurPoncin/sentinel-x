@@ -67,3 +67,9 @@ La mesure de la vision (10,6 ms par image) est celle du PC, dans [`../../ai/READ
 ## Le fichier à déposer
 
 Le dépôt attend un `Workshop2026-B4-G<n>-<NOMS>-pres.pptx` (PPTX ou équivalent). Ctrl+P dans la page, « Enregistrer au format PDF », marges « aucune », graphiques d'arrière-plan cochés : une page par diapositive, tout affiché, sans les animations.
+
+## La fiche de révision
+
+[`fiche-revision.html`](fiche-revision.html) : deux pages A4 à relire avant l'oral, sans réseau elle aussi. Le projet en une phrase, le trajet d'une mesure, les technos par pilier, qui décide quelle Alerte, l'IA, la sécurité, la démo et les questions du jury. Ctrl+P l'imprime ; sur un téléphone, elle se lit en une colonne.
+
+Ses faits sont ceux du dépôt le 9 octobre 2026. Si le durcissement du Pi est appliqué d'ici l'oral, corriger la réponse « Le Pi est-il durci ? ».
