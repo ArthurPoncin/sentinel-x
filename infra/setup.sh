@@ -36,15 +36,25 @@ in_container() {
 # that makes a certificate again (infra/plug-and-play.sh deletes one that is outdated) could no
 # longer write there. Back to us while this runs, handed over again at the end.
 in_container "chown $(id -u):$(id -g) /secrets/mosquitto /secrets/caddy"
+# A certificate that was missing when its container started is an empty directory since: Docker makes
+# one in place of a file it mounts and does not find (a run that stopped after deleting it, then a
+# reboot). Removed, for the file to be made below; one that is not empty is not ours to remove.
+in_container 'set -e; for path in /secrets/ca.crt /secrets/caddy/proxy.crt /secrets/caddy/proxy.key; do
+  if [ -d "$path" ]; then rmdir "$path"; fi; done'
 made() { echo "  made $1"; }
 kept() { echo "  kept $1 (already there)"; }
+# openssl's chatter is left out, not what it says when it fails.
+quietly() {
+  local said
+  said="$("$@" 2>&1)" || { printf '%s\n' "$said" >&2; return 1; }
+}
 
 echo "Team CA and certificates (Pi: $pi_ip)"
 if [[ ! -f "$secrets/ca.crt" ]]; then
-  openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 365 \
+  quietly openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 365 \
     -subj "/CN=Sentinel-X Team CA" \
     -addext "basicConstraints=critical,CA:true" -addext "keyUsage=critical,keyCertSign,cRLSign" \
-    -keyout "$secrets/ca.key" -out "$secrets/ca.crt" 2>/dev/null
+    -keyout "$secrets/ca.key" -out "$secrets/ca.crt"
   chmod 600 "$secrets/ca.key"
   made ca.crt
 else
@@ -55,12 +65,13 @@ fi
 certificate() {
   local dir="$1" name="$2" san="$3"
   if [[ -f "$dir/$name.crt" ]]; then kept "$name.crt"; return; fi
-  openssl req -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -subj "/CN=$name" \
-    -keyout "$dir/$name.key" -out "$dir/$name.csr" 2>/dev/null
-  openssl x509 -req -in "$dir/$name.csr" -CA "$secrets/ca.crt" -CAkey "$secrets/ca.key" -CAcreateserial \
+  # The key of a certificate deleted alone is its container's, not ours to write over: out of the way.
+  rm -f "$dir/$name.key"
+  quietly openssl req -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -subj "/CN=$name" \
+    -keyout "$dir/$name.key" -out "$dir/$name.csr"
+  quietly openssl x509 -req -in "$dir/$name.csr" -CA "$secrets/ca.crt" -CAkey "$secrets/ca.key" -CAcreateserial \
     -days 365 -out "$dir/$name.crt" \
-    -extfile <(printf 'basicConstraints=CA:false\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=serverAuth\nsubjectAltName=%s\n' "$san") \
-    2>/dev/null
+    -extfile <(printf 'basicConstraints=CA:false\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=serverAuth\nsubjectAltName=%s\n' "$san")
   rm "$dir/$name.csr"
   made "$name.crt ($san)"
 }

@@ -132,6 +132,23 @@ open_firewall() {
     sudo ufw allow in on wlan0 to any port "${rule%/*}" proto "${rule#*/}"
   done
 }
+# Whether the Pi's TLS port $1 serves the certificate in $2. A container reads its certificate when it
+# starts, and Compose sees no change in a mounted file: one made again since is not served until a
+# restart. Up to 15 s for a container that just started to answer.
+serves() {
+  local wanted served="" _
+  wanted="$(openssl x509 -in "$2" -noout -fingerprint -sha256)"
+  for _ in $(seq 15); do
+    served="$(timeout 5 openssl s_client -connect "127.0.0.1:$1" </dev/null 2>/dev/null \
+      | openssl x509 -noout -fingerprint -sha256 2>/dev/null || true)"
+    [[ -z "$served" ]] || break
+    sleep 1
+  done
+  if [[ "$served" != "$wanted" ]]; then
+    echo "port $1 : ${served:-pas de réponse}, attendu $wanted"
+    return 1
+  fi
+}
 join() {
   local IFS=,
   local joined="$*"
@@ -276,21 +293,17 @@ fi
 
 # A broker certificate made before the ESP32 fix, or for another table: made again.
 broker_crt="$secrets/mosquitto/broker.crt"
-broker_remade=false
 if [[ -f "$broker_crt" ]] && ! openssl x509 -in "$broker_crt" -noout -text 2>/dev/null | grep -q "DNS:$pi_ip"; then
   sudo rm -f "$broker_crt" "$secrets/mosquitto/broker.key"
-  broker_remade=true
 fi
 # A proxy certificate made before the dashboard had a name: made again, by the same CA, so the
 # Operator laptop has nothing to import again.
-proxy_remade=false
 if [[ -f "$secrets/caddy/proxy.crt" ]]; then
   proxy_text="$(openssl x509 -in "$secrets/caddy/proxy.crt" -noout -text 2>/dev/null || true)"
   if ! grep -q "IP Address:$pi_ip" <<<"$proxy_text"; then
     ui_note "le certificat HTTPS est celui d'une autre table : sudo rm infra/secrets/caddy/proxy.*, puis relance."
   elif ! grep -q "DNS:sentinel-x.local" <<<"$proxy_text"; then
     sudo rm -f "$secrets/caddy/proxy.crt" "$secrets/caddy/proxy.key"
-    proxy_remade=true
   fi
 fi
 # The screen's MQTT account, new to a running broker: it must read passwd and the ACL again.
@@ -378,11 +391,15 @@ ui_done
 ui_step "Démarrage de la stack"
 ui_task "démarrage des conteneurs" with_group docker docker compose up -d
 ((UI_RC == 0)) || ui_fail "la stack ne démarre pas : la fin du journal dit pourquoi."
-if $broker_remade || $screen_account_new; then
+# A certificate made again is asked of the port itself, not remembered from step 3: a run that stopped
+# before this step would have made one that nothing restarted its container for.
+ui_task "vérification du certificat que sert le broker" serves 8883 "$secrets/mosquitto/broker.crt"
+if ((UI_RC != 0)) || $screen_account_new; then
   ui_run "redémarrage du broker" with_group docker docker compose restart mosquitto
 fi
-if $proxy_remade; then
-  ui_run "redémarrage du proxy, son certificat porte maintenant sentinel-x.local" with_group docker docker compose restart reverse-proxy
+ui_task "vérification du certificat que sert le proxy" serves 443 "$secrets/caddy/proxy.crt"
+if ((UI_RC != 0)); then
+  ui_run "redémarrage du proxy, qui ne sert pas son certificat" with_group docker docker compose restart reverse-proxy
 fi
 ui_detail "en marche : $(with_group docker docker compose ps --format '{{.Service}}' | tr '\n' ' ')"
 ui_done
