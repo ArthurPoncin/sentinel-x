@@ -72,9 +72,12 @@ def load_settings() -> Settings:
     pan_drive = env_str("PAN_DRIVE", NO_DRIVE)
     if pan_drive != NO_DRIVE and pan_drive not in DRIVES:
         raise ConfigError(f"PAN_DRIVE: expected one of {', '.join([NO_DRIVE, *DRIVES])}, got {pan_drive!r}")
-    # A camera that turns sees everything move: it would follow its own turning.
+    # A camera that turns sees everything move: it would follow its own turning. The stack gives the
+    # motor to whoever has one: with the fallback detector, the camera stays fixed rather than the
+    # service down.
     if pan_drive != NO_DRIVE and detector == "motion":
-        raise ConfigError("PAN_DRIVE: a camera that turns needs a person detector, not DETECTOR=motion")
+        logger.warning("PAN_DRIVE=%s needs a person detector, not DETECTOR=motion: the camera stays fixed", pan_drive)
+        pan_drive = NO_DRIVE
     return Settings(
         camera_source=env_str("CAMERA_SOURCE", "opencv:0"),
         detector=detector,
@@ -132,8 +135,10 @@ class Vision:
     ) -> None:
         self._source, self._detector, self._post, self._clock = source, detector, post, clock
         self._sentinel, self._clear_after, self._fov = sentinel, clear_after, fov
-        # What says how far the camera is turned and what turns it: neither for a fixed camera.
+        # What says how far the camera is to turn and what turns it: neither for a fixed camera.
         self._follower, self._drive = pan if pan is not None else (None, None)
+        # A motor that counts how far it really turned says so itself: PanDrive.
+        self._turned_at: Callable[[float], float] | None = getattr(self._drive, "angle_at", None)
         self._min_confidence, self._infer_every = min_confidence, infer_every
         self._stream_period, self._jpeg_quality = 1 / stream_fps, jpeg_quality
         self._tracker: IntruderTracker | None = None
@@ -211,7 +216,7 @@ class Vision:
         }
         # Only a camera that turns says how far.
         if self._follower is not None:
-            health["pan"] = round(self._follower.angle, 1)
+            health["pan"] = round(self._pan(now), 1)
         return health
 
     def jpeg(self) -> tuple[object, bytes]:
@@ -245,7 +250,7 @@ class Vision:
                 width, height, sentinel=self._sentinel, clear_after=self._clear_after, fov=self._fov
             )
         # How far the camera was turned when the image was taken: what it shows is seen from there.
-        pan = self._follower.angle_at(now - age) if self._follower is not None else 0.0
+        pan = self._pan(now, age)
         started = time.perf_counter()
         try:
             detections = self._detector.detect(image)
@@ -264,6 +269,15 @@ class Vision:
                 self._follower.aim(self._tracker.target, now)
             else:
                 self._follower.rest(now)
+
+    def _pan(self, now: float, age: float = 0.0) -> float:
+        """How far the camera was turned `age` seconds ago: as its motor counted it when it does, as the
+        follower told it to be otherwise."""
+        if self._follower is None:
+            return 0.0
+        if self._turned_at is not None:
+            return self._turned_at(time.monotonic() - age)
+        return self._follower.angle_at(now - age)
 
     def _send(self, alerts: list[dict]) -> None:
         for alert in alerts:

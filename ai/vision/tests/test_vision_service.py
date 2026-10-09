@@ -13,12 +13,13 @@ from sentinel_common.alerts import AlertClient
 from sentinel_common.config import ConfigError
 from sentinel_common.contract import alert_errors
 from vision.detectors import MotionDetector
-from vision.pan import PanFollower
+from vision.pan import GpioStepper, PanFollower
 from vision.service import StreamServer, Vision, load_settings
 from vision.sources import Frame
 from vision.tracker import Detection
 
 from .test_detectors import Scene
+from .test_pan import Board
 
 TOKEN = "vision-token-0123456789abcdef0123456789abcdef"
 WIDTH, HEIGHT = 640, 480
@@ -337,6 +338,46 @@ def test_finish_parks_the_camera_where_it_rests_and_lets_the_servo_go(clock, pos
     assert posted[-1]["state"] == "cleared"
 
 
+class Counted:
+    """Where the camera really is: where its stepper counts it to be."""
+
+    def __init__(self, motor):
+        self.motor = motor
+
+    @property
+    def angle(self):
+        return self.motor.angle_at(time.monotonic())
+
+
+def test_a_stepper_behind_where_it_was_told_to_be_says_so_and_the_camera_does_not_swing_past(clock, posted):
+    # A motor held on its first half-step, then let go.
+    held = threading.Event()
+    motor = GpioStepper((6, 13, 19, 26), open_lines=lambda chip, pins: Board(), sleep=lambda seconds: held.wait(10))
+    camera, source, follower = Counted(motor), FakeSource(), PanFollower(speed=40)
+    # The room as the camera sees it from where the motor really is.
+    vision = make_vision(source, Standing(camera, 20.0), posted, clock, pan=(follower, motor))
+    motor.open()
+    try:
+        for _ in range(30):
+            frame_at(vision, source, clock)
+        # The follower turned to the person and no further; the Alerts and /health say the camera did not.
+        assert 16 <= follower.angle <= 20
+        assert {alert["detail"]["pan"] for alert in posted} == {0.0} and vision.health()["pan"] == 0.0
+        assert all(alert["detail"]["x_norm"] == pytest.approx(0.815, abs=1e-3) for alert in posted)
+        held.set()
+        deadline = time.monotonic() + 5
+        while abs(camera.angle - follower.angle) > 0.05 and time.monotonic() < deadline:
+            time.sleep(0.001)
+        for _ in range(10):
+            frame_at(vision, source, clock)
+        assert posted[-1]["detail"]["pan"] == vision.health()["pan"] == pytest.approx(follower.angle, abs=0.1)
+        assert abs(posted[-1]["detail"]["x_norm"] - 0.5) < 0.07
+    finally:
+        held.set()
+        vision.finish(sleep=lambda seconds: None)
+    assert camera.angle == 0
+
+
 class FakeApi:
     """POST /api/v1/alerts on 127.0.0.1, answering 202 like the api."""
 
@@ -600,9 +641,11 @@ def test_a_bad_setting_is_named(env, name, value, message):
         load_settings()
 
 
-def test_a_camera_that_turns_needs_a_person_detector(env):
-    env.setenv("PAN_DRIVE", "pwm")
-    with pytest.raises(ConfigError, match="PAN_DRIVE: a camera that turns needs a person detector"):
-        load_settings()
+@pytest.mark.parametrize("drive", ["stepper", "pwm"])
+def test_a_camera_that_turns_needs_a_person_detector_and_stays_fixed_without_one(env, drive, caplog):
+    env.setenv("PAN_DRIVE", drive)
+    with caplog.at_level("WARNING"):
+        assert load_settings().pan_drive == "none"
+    assert f"PAN_DRIVE={drive} needs a person detector" in caplog.text
     env.setenv("DETECTOR", "tflite")
-    assert load_settings().pan_drive == "pwm"
+    assert load_settings().pan_drive == drive
