@@ -66,4 +66,4 @@ La mesure de la vision (10,6 ms par image) est celle du PC, dans [`../../ai/READ
 
 ## Le fichier à déposer
 
-Le sujet nomme un `Workshop2026-M1-G<n>-Pres.pptx`. Ctrl+P dans la page, « Enregistrer au format PDF », marges « aucune », graphiques d'arrière-plan cochés : une page par diapositive, tout affiché, sans les animations.
+Le dépôt attend un `Workshop2026-B4-G<n>-<NOMS>-pres.pptx` (PPTX ou équivalent). Ctrl+P dans la page, « Enregistrer au format PDF », marges « aucune », graphiques d'arrière-plan cochés : une page par diapositive, tout affiché, sans les animations.

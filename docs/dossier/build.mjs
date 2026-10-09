@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Builds the engineering report: dossier.html + donnees.json + img/ + preuves/
-//   → docs/livrables/Workshop2026-M1-G<n>-Dossier.pdf (A4, the A3 poster as its last page).
+//   → docs/livrables/Workshop2026-B4-G<n>-<NOMS>-Dossier.pdf (A4, the A3 poster as its last page).
 // Usage: node docs/dossier/build.mjs
 // Needs a Chromium: $CHROME, Playwright's cache, or one installed on the system. No npm package.
 import { execFileSync } from 'node:child_process'
@@ -26,6 +26,8 @@ const value = (v, label) => (filled(v) ? escape(v) : todo(label))
 const table = filled(data.table) ? String(data.table).trim() : 'X'
 const group = filled(data.groupe) ? String(data.groupe).trim() : ''
 if (!group) missing.push('donnees.json : groupe (nom du fichier et couverture)')
+const names = filled(data.noms) ? String(data.noms).trim() : ''
+if (!names) missing.push('donnees.json : noms (nom du fichier)')
 if (table === 'X') missing.push('donnees.json : table (adresses 192.168.X.x)')
 
 // --- The slots of dossier.html --------------------------------------------------------------
@@ -250,7 +252,8 @@ if (!browser) {
 
 const outDir = join(here, '..', 'livrables')
 mkdirSync(outDir, { recursive: true })
-const out = join(outDir, `Workshop2026-M1-G${group || 'X'}-Dossier.pdf`)
+const draft = join(outDir, 'Workshop2026-B4-GX-Dossier.pdf')
+const out = group && names ? join(outDir, `Workshop2026-B4-G${group}-${names}-Dossier.pdf`) : draft
 // Next to dossier.html, so that its relative paths (img/…) still resolve.
 const page = join(here, '.dossier.build.html')
 writeFileSync(page, html)
@@ -264,8 +267,8 @@ try {
 } finally {
   rmSync(page, { force: true })
 }
-// Once the group is known, the draft named GX is no longer the deliverable.
-if (group) rmSync(join(outDir, 'Workshop2026-M1-GX-Dossier.pdf'), { force: true })
+// Once the group and the names are known, the draft named GX is no longer the deliverable.
+if (out !== draft) rmSync(draft, { force: true })
 
 console.log(`Écrit : ${out}`)
 if (missing.length > 0) {
