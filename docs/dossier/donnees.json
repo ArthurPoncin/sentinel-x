@@ -17,11 +17,11 @@
   ],
 
   "predictif_reel": {
-    "plage": "",
-    "vecteurs": "",
-    "niveau_levee": "",
-    "niveau_fin": "",
-    "avance": ""
+    "plage": "32 101 mesures du Sentinel",
+    "vecteurs": "20 009",
+    "niveau_levee": "0,697",
+    "niveau_fin": "0,660",
+    "avance": "En service sur le Pi depuis le 9 octobre 2026"
   },
 
   "audit": {
