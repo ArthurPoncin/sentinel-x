@@ -260,7 +260,7 @@
   .where b { color: var(--foreground); }
 
   .timeline { left: 110px; right: 110px; bottom: 40px; }
-  .parts { position: relative; display: grid; grid-template-columns: 1fr 1fr 3fr 5fr; gap: 6px; }
+  .parts { position: relative; display: grid; grid-template-columns: 1fr 1fr 5fr 3fr; gap: 6px; }
   .part { color: var(--muted); font: 600 17px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; transition: color 0.4s; }
   .part span { display: block; margin-bottom: 10px; white-space: nowrap; }
   .part i { display: block; height: 4px; border-radius: 2px; background: var(--border); }
@@ -379,7 +379,7 @@
   .arrowhead.cmd { fill: var(--replay); }
   .pulse-dot { filter: drop-shadow(0 0 8px currentColor); }
 
-  /* ---------- 4 · the live demo ---------- */
+  /* ---------- 13 · the live demo ---------- */
 
   .demo { width: 100%; display: flex; flex-direction: column; justify-content: center; }
   .demo-beats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; position: relative; }
@@ -397,7 +397,7 @@
   .demo-beat.cur { opacity: 1; transform: translateY(-10px); border-color: var(--status); box-shadow: 0 30px 70px -30px #000, 0 0 60px -22px var(--status); }
   .demo-beat.cur .n { background: var(--status); border-color: var(--status); color: #0b0f14; box-shadow: 0 0 24px var(--status); }
 
-  /* ---------- 5 · what the brief asks, what we deliver ---------- */
+  /* ---------- 4 · what the brief asks, what we deliver ---------- */
 
   .pillars { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; width: 100%; align-content: center; }
   .pillar { padding: 34px 32px 36px; }
@@ -413,12 +413,12 @@
   .check.soon circle { fill: rgb(245 166 35 / 12%); stroke: var(--elevated); }
   .check.soon path { stroke: var(--elevated); }
 
-  /* ---------- 6 · the architecture ---------- */
+  /* ---------- 5 · the architecture ---------- */
 
   .arch { width: 100%; display: flex; }
   .arch svg { width: 100%; flex: 1; min-height: 0; }
 
-  /* ---------- 7 · the Sentinel ---------- */
+  /* ---------- 6 · the Sentinel ---------- */
 
   .edge-left { flex: 0.95; display: flex; flex-direction: column; gap: 16px; justify-content: center; }
   .probe { padding: 22px 26px; display: grid; grid-template-columns: 1fr auto; gap: 10px 18px; align-items: center; }
@@ -441,7 +441,7 @@
   @keyframes pop { from { opacity: 0; transform: scale(0.5); } 60% { transform: scale(1.15); } to { opacity: 1; transform: none; } }
   .mark-text { font: 700 19px var(--mono); }
 
-  /* ---------- 8 · the AI ---------- */
+  /* ---------- 7 · the AI ---------- */
 
   .ai-col { flex: 1; padding: 28px 30px 26px; display: flex; flex-direction: column; min-width: 0; }
   .ai-viz { flex: 1; min-height: 0; display: flex; gap: 26px; }
@@ -469,7 +469,7 @@
   .num span { display: block; margin-top: 12px; color: var(--foreground); font-size: 27px; line-height: 1.28; }
   @keyframes draw-once { to { stroke-dashoffset: 0; } }
 
-  /* ---------- 9 · security ---------- */
+  /* ---------- 8 · security ---------- */
 
   .sec-left { flex: 1.05; display: flex; flex-direction: column; gap: 18px; }
   .ports { flex: 1; padding: 26px 28px; }
@@ -496,7 +496,7 @@
   .layer b { display: block; font-size: 27px; font-weight: 650; }
   .layer div > span { display: block; margin-top: 4px; color: var(--muted); font-size: 23px; line-height: 1.32; }
 
-  /* ---------- 10 · the Digital Twin ---------- */
+  /* ---------- 9 · the Digital Twin ---------- */
 
   .twin-list { flex: 0.82; display: grid; gap: 12px; align-content: center; }
   .twin-item { position: relative; padding: 16px 22px 16px 26px; border: 1px solid transparent; border-radius: 12px; opacity: 0.45; transition: all 0.6s var(--ease); overflow: hidden; }
@@ -531,7 +531,31 @@
   .method h3 { margin-top: 16px; font-size: 29px; font-weight: 650; }
   .method span { display: block; margin-top: 8px; color: var(--muted); font-size: 24px; line-height: 1.3; }
 
-  /* ---------- 12 · the close ---------- */
+  /* ---------- 10 · the hand control and its tutorial ---------- */
+
+  .hands { width: 100%; display: flex; flex-direction: column; justify-content: center; gap: 24px; }
+  .gestures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .gesture { padding: 26px 30px; display: grid; grid-template-columns: auto 1fr; gap: 24px; align-items: center; }
+  .gesture .hand { font-size: 64px; line-height: 1; }
+  .gesture h3 { font-size: 31px; font-weight: 700; }
+  .gesture p { margin-top: 6px; color: var(--muted); font-size: 24px; line-height: 1.3; }
+  .tutorial { display: grid; grid-template-columns: auto 1fr; gap: 28px; align-items: center; padding: 26px 32px; border-color: color-mix(in srgb, var(--status) 55%, var(--border)); }
+  .tutorial .label { padding: 10px 20px; border-radius: 6px; background: var(--status); color: #0b0f14; font: 800 22px var(--mono); letter-spacing: 0.3em; }
+  .tutorial p { font-size: 28px; line-height: 1.35; color: var(--muted); }
+  .tutorial p strong { color: var(--foreground); font-weight: 600; }
+
+  /* ---------- 12 · what comes next ---------- */
+
+  .evolutions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 26px; align-content: center; }
+  .evolution { padding: 36px 40px 40px; }
+  .evolution header { margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+  .evolution header b { font: 800 26px var(--mono); letter-spacing: 0.22em; color: var(--status); }
+  .evolution ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 26px; }
+  .evolution li { position: relative; padding-left: 46px; font-size: 31px; line-height: 1.25; }
+  .evolution li::before { content: '↗'; position: absolute; left: 0; top: -1px; color: var(--status); font: 700 30px var(--mono); }
+  .evolution.add li::before { content: '+'; }
+
+  /* ---------- 14 · the close ---------- */
 
   .s-end { align-items: center; justify-content: center; text-align: center; }
   .s-end h2 { font-size: 104px; max-width: none; letter-spacing: -0.02em; }
@@ -684,57 +708,9 @@
     <aside class="notes">Présenter chacun en une phrase. La solution : tout est dans le boîtier, capteurs, alarme, IA et réseau. L’opérateur n’a besoin que d’un navigateur, rien à installer.</aside>
   </section>
 
-  <!-- 4 ───────────────────────────────────────────────────────── the live demo -->
+  <!-- 4 ───────────────────────────────────────────────────────── the brief, delivered -->
   <!-- data-gap: the teaser's minute, played outside this page, between the slide before and this one. -->
-  <section class="slide" data-title="Démo live" data-part="2" data-gap="60" data-t="180" data-status="nominal" data-steps="6">
-    <h2 data-a>Démo <em>live</em></h2>
-    <div class="body">
-      <div class="demo">
-        <div class="demo-beats" id="beats">
-          <article class="card demo-beat" data-a data-beat-status="critical">
-            <div class="n">1</div>
-            <h3>Gaz</h3>
-            <p>Fuite de gaz. La sirène s’allume, l’écran du jumeau rougit.</p>
-            <p class="proves"><small>BÉNÉFICE</small>Alerte immédiate, sur place</p>
-          </article>
-          <article class="card demo-beat" data-a data-beat-status="critical">
-            <div class="n">2</div>
-            <h3>Intrusion</h3>
-            <p>Une personne entre dans le champ. La caméra la repère et la suit.</p>
-            <p class="proves"><small>BÉNÉFICE</small>Personne n’entre sans être vu</p>
-          </article>
-          <article class="card demo-beat" data-a data-beat-status="elevated">
-            <div class="n">3</div>
-            <h3>Bruit</h3>
-            <p>Un bruit est détecté et remonté dans le tableau de bord.</p>
-            <p class="proves"><small>BÉNÉFICE</small>Tout se lit au même endroit</p>
-          </article>
-          <article class="card demo-beat" data-a data-beat-status="replay">
-            <div class="n">4</div>
-            <h3>Replay</h3>
-            <p>Un incident enregistré se rejoue, seconde par seconde.</p>
-            <p class="proves"><small>BÉNÉFICE</small>Comprendre après coup</p>
-          </article>
-          <article class="card demo-beat" data-a data-beat-status="elevated">
-            <div class="n">5</div>
-            <h3>Commande</h3>
-            <p>L’opérateur a accès à l’alarme en direct&nbsp;: il la coupe, il la teste.</p>
-            <p class="proves"><small>BÉNÉFICE</small>La main à distance</p>
-          </article>
-          <article class="card demo-beat" data-a data-beat-status="nominal">
-            <div class="n">6</div>
-            <h3>Gestion autonome</h3>
-            <p>Les alertes se referment d’elles-mêmes, tout repasse au vert.</p>
-            <p class="proves"><small>BÉNÉFICE</small>Aucune intervention</p>
-          </article>
-        </div>
-      </div>
-    </div>
-    <aside class="notes">Basculer sur le tableau de bord (B noircit cette page). → fait avancer le repère d’un temps à l’autre si on garde la page sur un second écran. Si le direct tombe : le replay rejoue l’incident enregistré, on le dit.</aside>
-  </section>
-
-  <!-- 5 ───────────────────────────────────────────────────────── the brief, delivered -->
-  <section class="slide" data-title="Ce que le cahier des charges exige, ce que nous livrons" data-part="3" data-t="40" data-status="nominal">
+  <section class="slide" data-title="Ce que le cahier des charges exige, ce que nous livrons" data-part="2" data-gap="60" data-t="30" data-status="nominal">
     <p class="kicker" data-a>Le cahier des charges</p>
     <h2 data-a>Quatre exigences, <em>une seule solution</em> livrée.</h2>
     <div class="body">
@@ -777,11 +753,11 @@
         </article>
       </div>
     </div>
-    <aside class="notes">Ne pas tout lire : une ligne par pilier. Tout ce que le cahier des charges demande est livré, et la démo vient de montrer que les blocs fonctionnent ensemble.</aside>
+    <aside class="notes">Ne pas tout lire : une ligne par pilier. Tout ce que le cahier des charges demande est livré : la démo, en fin de présentation, montre les blocs fonctionner ensemble.</aside>
   </section>
 
-  <!-- 6 ───────────────────────────────────────────────────────── the architecture -->
-  <section class="slide" data-title="Le trajet d’une alerte" data-part="3" data-t="45" data-status="nominal">
+  <!-- 5 ───────────────────────────────────────────────────────── the architecture -->
+  <section class="slide" data-title="Le trajet d’une alerte" data-part="2" data-t="35" data-status="nominal">
     <p class="kicker" data-a>Architecture</p>
     <h2 data-a>Le trajet d’une alerte, <em>chiffré à chaque saut</em>.</h2>
     <div class="body" style="margin-top: 18px;">
@@ -838,8 +814,8 @@
     <aside class="notes">Suivre les flèches : les mesures partent du Sentinel, la vision et la prédiction ajoutent leurs alertes, tout arrive chez l’opérateur. En vert : les liaisons chiffrées. En violet : la commande de l’opérateur qui redescend. Le Sentinel sonne même si le poste central est tombé.</aside>
   </section>
 
-  <!-- 7 ───────────────────────────────────────────────────────── the Sentinel -->
-  <section class="slide" data-title="Le Sentinel : capteurs et alarme autonome" data-part="3" data-t="40" data-status="elevated">
+  <!-- 6 ───────────────────────────────────────────────────────── the Sentinel -->
+  <section class="slide" data-title="Le Sentinel : capteurs et alarme autonome" data-part="2" data-t="30" data-status="elevated">
     <p class="kicker" data-a>Le Sentinel</p>
     <h2 data-a>Il décide seul, et <em>sonne sans attendre le serveur</em>.</h2>
     <div class="body" style="margin-top: 34px;">
@@ -870,8 +846,8 @@
     <aside class="notes">Quatre capteurs lus chaque seconde, chacun avec sa plage d’alerte. La mesure peut osciller autour du seuil, il n’y a qu’une alerte. Au niveau critique, la sirène part sur le boîtier, sans passer par le poste central : c’est ce qui rend le Sentinel autonome.</aside>
   </section>
 
-  <!-- 8 ───────────────────────────────────────────────────────── the AI -->
-  <section class="slide" data-title="L’IA locale : voir et suivre" data-part="3" data-t="45" data-status="critical">
+  <!-- 7 ───────────────────────────────────────────────────────── the AI -->
+  <section class="slide" data-title="L’IA locale : voir et suivre" data-part="2" data-t="35" data-status="critical">
     <p class="kicker" data-a>IA locale · sans cloud</p>
     <h2 data-a>Voir l’intrus, <em>ne plus le lâcher</em>.</h2>
     <div class="body" style="margin-top: 30px;">
@@ -895,8 +871,8 @@
     <aside class="notes">L’IA tourne dans le boîtier, aucune image ne sort du site. Elle repère la personne et la caméra la suit. 10,6 ms est mesuré sur PC : le temps réel dans le boîtier se lit sur le flux caméra pendant la démo.</aside>
   </section>
 
-  <!-- 9 ───────────────────────────────────────────────────────── security -->
-  <section class="slide" data-title="Sécurité : chiffrer, authentifier, durcir" data-part="3" data-t="45" data-status="nominal">
+  <!-- 8 ───────────────────────────────────────────────────────── security -->
+  <section class="slide" data-title="Sécurité : chiffrer, authentifier, durcir" data-part="2" data-t="35" data-status="nominal">
     <p class="kicker" data-a>Cybersécurité</p>
     <h2 data-a>Deux accès ouverts, <em>zéro en clair</em>.</h2>
     <div class="body" style="margin-top: 30px; gap: 26px;">
@@ -930,8 +906,8 @@
     <aside class="notes">La preuve demandée par le jury : le scan réseau et la checklist de durcissement, dans le dossier. Tout est refusé par défaut, à chaque niveau. Le dernier point répond au déni de service de la diapositive 2.</aside>
   </section>
 
-  <!-- 10 ───────────────────────────────────────────────────────── the Digital Twin -->
-  <section class="slide" data-title="Le jumeau numérique" data-part="3" data-t="45" data-status="nominal">
+  <!-- 9 ───────────────────────────────────────────────────────── the Digital Twin -->
+  <section class="slide" data-title="Le jumeau numérique" data-part="2" data-t="35" data-status="nominal">
     <p class="kicker" data-a>Notre différence · le jumeau numérique</p>
     <h2 data-a>Le monde réel <em>pilote la scène</em>.</h2>
     <div class="body" style="margin-top: 26px; gap: 50px;">
@@ -956,8 +932,31 @@
     <aside class="notes">Ce sont des captures de notre application, pas des maquettes. Le jumeau montre ce que le boîtier perçoit, en direct. Laisser défiler deux ou trois images, pas plus.</aside>
   </section>
 
+  <!-- 10 ───────────────────────────────────────────────────────── the hand control and its tutorial -->
+  <section class="slide" data-title="La commande gestuelle" data-part="2" data-t="35" data-status="replay">
+    <p class="kicker" data-a>Commande gestuelle · Leap Motion</p>
+    <h2 data-a>Piloter le site <em>d’un geste</em>, sans rien toucher.</h2>
+    <div class="body" style="margin-top: 34px;">
+      <div class="hands">
+        <div class="gestures">
+          <article class="card gesture" data-a><span class="hand">✋</span><div><h3>Main à plat</h3><p>Tourne, incline et zoome la vue 3D</p></div></article>
+          <article class="card gesture" data-a><span class="hand">👐</span><div><h3>Deux mains</h3><p>Zoome, comme deux doigts sur un écran</p></div></article>
+          <article class="card gesture" data-a><span class="hand">✊</span><div><h3>Poing fermé</h3><p>Fige la vue, remonte le temps en replay</p></div></article>
+          <article class="card gesture" data-a><span class="hand">👋</span><div><h3>Balayage</h3><p>Change d’écran, comme on tourne une page</p></div></article>
+          <article class="card gesture" data-a><span class="hand">👍</span><div><h3>Pouce levé ou baissé</h3><p>Coupe ou déclenche la sirène</p></div></article>
+          <article class="card gesture" data-a><span class="hand">👆</span><div><h3>Index pointé</h3><p>Affiche ce que le système sait de ce qu’on vise</p></div></article>
+        </div>
+        <div class="card tutorial" data-a>
+          <span class="label">TUTORIEL</span>
+          <p><strong>Un tutoriel intégré au tableau de bord.</strong> Chaque geste est montré par une main en hologramme, et validé dès que l’opérateur le réussit.</p>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">Ouvrir le tutoriel des gestes sur le tableau de bord pendant cette diapositive et faire deux ou trois gestes. Un capteur posé sur le bureau lit les mains de l’opérateur : rien à toucher, rien à installer dans le boîtier. Le tutoriel apprend les gestes sans rien déclencher : ni l’alarme ni l’écran ne changent.</aside>
+  </section>
+
   <!-- 11 ───────────────────────────────────────────────────────── the project -->
-  <section class="slide" data-title="La gestion de projet" data-part="3" data-t="35" data-status="nominal">
+  <section class="slide" data-title="La gestion de projet" data-part="2" data-t="30" data-status="nominal">
     <p class="kicker" data-a>Gestion de projet · cinq jours</p>
     <h2 data-a>Un projet <em>piloté</em>, du cadrage à la démo.</h2>
     <div class="body" style="margin-top: 34px;">
@@ -980,7 +979,83 @@
     <aside class="notes">Le planning : interfaces figées lundi, un premier fil de bout en bout mardi, intégration mercredi, audit et livrables jeudi. La méthode : périmètre en trois paliers pour ne pas se disperser, cinq chantiers (capteurs, IA, tableau de bord, infrastructure, cybersécurité), chaque besoin suivi par un ticket et relu avant d’être intégré.</aside>
   </section>
 
-  <!-- 12 ───────────────────────────────────────────────────────── the close -->
+  <!-- 12 ───────────────────────────────────────────────────────── what comes next -->
+  <section class="slide" data-title="Les évolutions" data-part="2" data-t="30" data-status="elevated">
+    <p class="kicker" data-a>Évolutions</p>
+    <h2 data-a>Et demain&nbsp;? <em>Aller plus loin</em>.</h2>
+    <div class="body">
+      <div class="evolutions">
+        <article class="card evolution" data-a>
+          <header><b>FAIRE MIEUX</b></header>
+          <ul>
+            <li>Un durcissement appliqué en série, sur chaque boîtier</li>
+            <li>Les performances de l’IA mesurées dans le boîtier</li>
+            <li>Des seuils calibrés pour chaque site</li>
+          </ul>
+        </article>
+        <article class="card evolution add" data-a>
+          <header><b>AJOUTER</b></header>
+          <ul>
+            <li>Plusieurs boîtiers, un seul tableau de bord</li>
+            <li>Les alertes sur le téléphone de l’opérateur</li>
+            <li>De nouveaux capteurs&nbsp;: pluie, lumière, UV</li>
+            <li>Une alimentation autonome&nbsp;: batterie, solaire</li>
+          </ul>
+        </article>
+      </div>
+    </div>
+    <aside class="notes">Être honnête sur ce qui reste à faire : le durcissement est prêt mais reste à appliquer sur le boîtier, l’IA est mesurée sur PC, les seuils se règlent sur place. Puis la suite du produit : plusieurs sites, le mobile, d’autres capteurs, l’autonomie. Enchaîner sur la démo.</aside>
+  </section>
+
+  <!-- 13 ───────────────────────────────────────────────────────── the live demo -->
+  <section class="slide" data-title="Démo live" data-part="3" data-t="180" data-status="nominal" data-steps="6">
+    <h2 data-a>Démo <em>live</em></h2>
+    <div class="body">
+      <div class="demo">
+        <div class="demo-beats" id="beats">
+          <article class="card demo-beat" data-a data-beat-status="critical">
+            <div class="n">1</div>
+            <h3>Gaz</h3>
+            <p>Fuite de gaz. La sirène s’allume, l’écran du jumeau rougit.</p>
+            <p class="proves"><small>BÉNÉFICE</small>Alerte immédiate, sur place</p>
+          </article>
+          <article class="card demo-beat" data-a data-beat-status="critical">
+            <div class="n">2</div>
+            <h3>Intrusion</h3>
+            <p>Une personne entre dans le champ. La caméra la repère et la suit.</p>
+            <p class="proves"><small>BÉNÉFICE</small>Personne n’entre sans être vu</p>
+          </article>
+          <article class="card demo-beat" data-a data-beat-status="elevated">
+            <div class="n">3</div>
+            <h3>Bruit</h3>
+            <p>Un bruit est détecté et remonté dans le tableau de bord.</p>
+            <p class="proves"><small>BÉNÉFICE</small>Tout se lit au même endroit</p>
+          </article>
+          <article class="card demo-beat" data-a data-beat-status="replay">
+            <div class="n">4</div>
+            <h3>Replay</h3>
+            <p>Un incident enregistré se rejoue, seconde par seconde.</p>
+            <p class="proves"><small>BÉNÉFICE</small>Comprendre après coup</p>
+          </article>
+          <article class="card demo-beat" data-a data-beat-status="elevated">
+            <div class="n">5</div>
+            <h3>Commande</h3>
+            <p>L’opérateur a accès à l’alarme en direct&nbsp;: il la coupe, il la teste.</p>
+            <p class="proves"><small>BÉNÉFICE</small>La main à distance</p>
+          </article>
+          <article class="card demo-beat" data-a data-beat-status="nominal">
+            <div class="n">6</div>
+            <h3>Gestion autonome</h3>
+            <p>Les alertes se referment d’elles-mêmes, tout repasse au vert.</p>
+            <p class="proves"><small>BÉNÉFICE</small>Aucune intervention</p>
+          </article>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">La présentation est finie, place au produit. Basculer sur le tableau de bord (B noircit cette page). → fait avancer le repère d’un temps à l’autre si on garde la page sur un second écran. Si le direct tombe : le replay rejoue l’incident enregistré, on le dit.</aside>
+  </section>
+
+  <!-- 14 ───────────────────────────────────────────────────────── the close -->
   <section class="slide s-end" data-title="Questions" data-part="3" data-t="5" data-status="nominal">
     <p class="kicker" data-a>Sentinel-X</p>
     <h2 data-a>Le danger, vu <em>avant qu’il n’arrive</em>.</h2>
@@ -991,7 +1066,7 @@
       <span class="tag live">UN JUMEAU 3D EN DIRECT</span>
     </div>
     <p class="q" data-a data-d="900">Vos questions</p>
-    <aside class="notes">Une phrase de clôture, puis les questions. Pour une question technique : revenir à la diapositive avec O.</aside>
+    <aside class="notes">Après la démo : une phrase de clôture, puis les questions. Pour une question technique : revenir à la diapositive avec O.</aside>
   </section>
 
   <div class="flash" id="flash"></div>
@@ -1002,8 +1077,8 @@
     <div class="parts" id="parts">
       <div class="part"><span>Équipe</span><i></i></div>
       <div class="part"><span>Teaser</span><i></i></div>
-      <div class="part"><span>Démo live</span><i></i></div>
-      <div class="part"><span>Présentation + questions</span><i></i></div>
+      <div class="part"><span>Présentation</span><i></i></div>
+      <div class="part"><span>Démo live + questions</span><i></i></div>
       <div class="window" id="window"></div>
     </div>
   </div>

@@ -27,17 +27,18 @@ Le chrono du sujet, à la seconde. La barre du bas découpe les dix minutes en l
 |---|---|---|
 | 0:00 à 1:00 | 1 à 3 | le titre, les trois menaces, l'équipe et la solution |
 | 1:00 à 2:00 | aucune | le teaser « Sentinel Drop », projeté hors de la page |
-| 2:00 à 5:00 | 4 | la démo live et ses six temps |
-| 5:00 à 10:00 | 5 à 12 | le cahier des charges, l'architecture, le Sentinel, l'IA, la sécurité, le jumeau numérique, la gestion de projet, les questions |
+| 2:00 à 6:55 | 4 à 12 | le cahier des charges, l'architecture, le Sentinel, l'IA, la sécurité, le jumeau numérique, la commande gestuelle, la gestion de projet, les évolutions |
+| 6:55 à 10:00 | 13 et 14 | la démo live et ses six temps, puis les questions |
 
-- **Le teaser** : il n'a plus de diapositive. Le lancer depuis `../livrables/sentinel-x-teaser.mp4` après la diapositive 3 ; sa minute reste comptée dans la barre du bas (`data-gap="60"` sur la diapositive de la démo).
+- **Le teaser** : il n'a plus de diapositive. Le lancer depuis `../livrables/sentinel-x-teaser.mp4` après la diapositive 3 ; sa minute reste comptée dans la barre du bas (`data-gap="60"` sur la diapositive 4, la première après lui).
+- **La commande gestuelle** : pendant la diapositive 10, ouvrir « Tutoriel des gestes » sur le tableau de bord et faire deux ou trois gestes. Le capteur et son pont ([`../../leap/`](../../leap/README.md)) tournent sur le PC Opérateur, à lancer avant l'oral.
 - **La démo** : → fait passer le repère d'un temps au suivant, et la page prend la couleur du Status attendu. **B** noircit la page si elle reste projetée.
 
 ## Le modifier
 
 Tout est dans `index.html`. Une diapositive est une `<section class="slide">` : `data-t` est son temps en secondes (avec la minute du teaser, la somme fait 600), `data-status` sa couleur (`nominal`, `elevated`, `critical`, `replay`), `<aside class="notes">` ses notes. Les noms et les rôles de l'équipe sont dans le tableau `TEAM`, au début du script.
 
-Deux chiffres de la diapositive 11 se relèvent sur `main`. Les 78 livraisons relues sont les pull requests fusionnées le 9 octobre 2026 ; les 1 284 tests datent du 7 octobre. Avant vendredi, les relever de nouveau :
+Deux chiffres de la diapositive 11 (la gestion de projet) se relèvent sur `main`. Les 78 livraisons relues sont les pull requests fusionnées le 9 octobre 2026 ; les 1 284 tests datent du 7 octobre. Avant vendredi, les relever de nouveau :
 
 ```bash
 npm test --prefix backend && npm test --prefix dashboard     # 255 et 637 tests
@@ -45,7 +46,7 @@ npm test --prefix backend && npm test --prefix dashboard     # 255 et 637 tests
 git log --merges --grep "Merge pull request" --oneline origin/main | wc -l
 ```
 
-Les plages d'alerte de la diapositive 7 sont celles de [`../../firmware/include/config.h`](../../firmware/include/config.h) : si un seuil est recalibré sur le kit, le reporter.
+Les plages d'alerte de la diapositive 6 sont celles de [`../../firmware/include/config.h`](../../firmware/include/config.h) : si un seuil est recalibré sur le kit, le reporter.
 
 L'image du titre, [`../twin/outpost-alone.png`](../twin/outpost-alone.png), est le Twin seul : `/twin?capture` dans une fenêtre de 1240 × 1080, Status nominal, puis le noir du fond rendu transparent, pour que seul ce qui est éclairé se pose sur la page. Si le Twin change d'ici vendredi, refaire la capture, puis :
 
@@ -64,7 +65,7 @@ rgba = np.dstack([np.clip(colour, 0, 255), alpha * 255]).round().astype(np.uint8
 Image.fromarray(rgba, 'RGBA').save('docs/twin/outpost-alone.png', optimize=True)
 ```
 
-La mesure de la vision (10,6 ms par image) est celle du PC, dans [`../../ai/README.md`](../../ai/README.md#performance-on-the-pi-4--benchmark-monday) : une fois le benchmark fait sur le Pi 4 (#46), mettre son chiffre à la place, diapositive 8, et retirer « mesuré sur PC ».
+La mesure de la vision (10,6 ms par image) est celle du PC, dans [`../../ai/README.md`](../../ai/README.md#performance-on-the-pi-4--benchmark-monday) : une fois le benchmark fait sur le Pi 4 (#46), mettre son chiffre à la place, diapositive 7, et retirer « mesuré sur PC ».
 
 ## Le fichier à déposer
 
