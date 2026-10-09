@@ -64,7 +64,20 @@ const PROOFS = [
   { file: 'nmap-udp.txt', what: 'Ports UDP', command: `nmap -sU -p 53,67,68,69,123,137,161,1900,5353 192.168.${table}.1`, expected: '123 ouvert, 67 confirmé par dhcp-discover, aucun autre service' },
   { file: 'checklist-durcissement.txt', what: 'Checklist', command: `cyber/harden.sh ${table} --check`, expected: 'toutes les lignes cochées, y compris après redémarrage' },
 ]
+// cyber/harden.sh is a script: the report says whether the demo Pi went through it. Until it did, the
+// proofs are what it will give, and the report claims nothing it could not show.
+const hardening = data.durcissement ?? {}
+const hardened = hardening.applique !== false
+
 function proofs() {
+  if (!hardened) {
+    const rows = PROOFS.map((proof) => `<tr><td>${proof.what}</td><td><code>${escape(proof.command)}</code></td><td>${proof.expected}</td>
+      <td><span class="chip warn">non appliqué</span></td></tr>`)
+    return `<div class="state"><p><b>Le durcissement n'est pas appliqué au Pi de démonstration.</b> ${value(hardening.motif, 'donnees.json : durcissement.motif')}</p>
+      <p>${value(hardening.verification, 'donnees.json : durcissement.verification')}</p></div>
+    <table class="t"><thead><tr><th style="width:15%">Relevé</th><th style="width:40%">Commande</th><th>Une fois durci</th><th style="width:13%">État</th></tr></thead>
+    <tbody>${rows.join('')}</tbody></table>`
+  }
   const rows = []
   const outputs = []
   for (const proof of PROOFS) {
@@ -101,19 +114,35 @@ function predictiveReal() {
 const VERDICTS = { ok: ['ok', 'Conforme'], ecart: ['warn', 'Écart'], ko: ['ko', 'Non conforme'] }
 const verdict = (v, label) => (VERDICTS[v] ? `<span class="chip ${VERDICTS[v][0]}">${VERDICTS[v][1]}</span>` : todo(label))
 
+// The audit is either measured (mode "releve": what was observed, a verdict) or not (mode "attendu": the
+// grid was not run on the Pi, so each line gives how the system behaves and what guarantees it).
+const measured = audit.mode !== 'attendu'
+const expected = audit.attendu ?? {}
+const BASES = { tests: ['ok', 'tests automatisés'], config: ['cfg', 'configuration'], durcissement: ['warn', 'après durcissement'] }
+const TOOLS = `<dt>Outils</dt><dd>Nmap, Wireshark, Metasploit, openssl s_client, mosquitto_pub et mosquitto_sub, curl</dd>
+    <dt>Règles</dt><dd>Tables consentantes du workshop seulement. Ni destruction ni persistance. Déni de service court et annoncé. Aucun secret conservé.</dd>`
+
 function auditFrame() {
   const label = (field) => `donnees.json : audit.${field}`
+  if (!measured) return `<dl class="frame"><dt>Base</dt><dd>${value(expected.base, label('attendu.base'))}</dd>
+    ${TOOLS}
+  </dl>`
   return `<dl class="frame">
     <dt>Date</dt><dd>${value(audit.date, label('date'))}</dd>
     <dt>Auditeurs</dt><dd>${value(audit.auditeurs, label('auditeurs'))}</dd>
     <dt>Table auditée</dt><dd>${value(audit.table_auditee, label('table_auditee'))}</dd>
     <dt>Audités par</dt><dd>${value(audit.audites_par, label('audites_par'))}</dd>
-    <dt>Outils</dt><dd>Nmap, Wireshark, Metasploit, openssl s_client, mosquitto_pub et mosquitto_sub, curl</dd>
-    <dt>Règles</dt><dd>Tables consentantes du workshop seulement. Ni destruction ni persistance. Déni de service court et annoncé. Aucun secret conservé.</dd>
+    ${TOOLS}
   </dl>`
 }
 
 function auditSummary() {
+  if (!measured) {
+    const count = (basis) => audit.grille.filter((row) => row.appui === basis).length
+    return `<p class="tally"><b>${audit.grille.length} contrôles</b> :
+      <span class="chip ok">${count('tests')} démontrés par les tests automatisés</span> <span class="chip cfg">${count('config')} fondés sur la configuration</span> <span class="chip warn">${count('durcissement')} après durcissement</span></p>
+      <p>${value(expected.synthese, 'donnees.json : audit.attendu.synthese')}</p>`
+  }
   const counts = { ok: 0, ecart: 0, ko: 0 }
   for (const row of audit.grille) if (row.verdict in counts) counts[row.verdict] += 1
   const done = counts.ok + counts.ecart + counts.ko
@@ -123,6 +152,13 @@ function auditSummary() {
 }
 
 function auditGrid() {
+  if (!measured) {
+    return audit.grille.map((row) => {
+      const label = `donnees.json : audit.grille ${row.id}`
+      const basis = BASES[row.appui] ? `<span class="chip ${BASES[row.appui][0]}">${BASES[row.appui][1]}</span>` : todo(`${label} (appui)`)
+      return `<tr><td class="id">${escape(row.id)}</td><td>${escape(row.test)}</td><td>${escape(row.attendu)}</td><td>${value(row.fonde, `${label} (fonde)`)}</td><td>${basis}</td></tr>`
+    }).join('')
+  }
   return audit.grille.map((row) => `<tr><td class="id">${escape(row.id)}</td><td>${escape(row.test)}</td><td>${escape(row.attendu)}</td>
     <td>${filled(row.observe) ? escape(row.observe) : ''}</td><td>${verdict(row.verdict, `donnees.json : audit.grille ${row.id}`)}</td></tr>`).join('')
 }
@@ -130,6 +166,7 @@ function auditGrid() {
 function auditOffensive() {
   return audit.offensif.map((step, index) => {
     const label = `donnees.json : audit.offensif[${index}] (${step.etape})`
+    if (!measured) return `<tr><td class="id">${index + 1}</td><td>${escape(step.etape)}</td><td>${value(step.methode, `${label} (methode)`)}</td></tr>`
     return `<tr><td class="id">${index + 1}</td><td>${escape(step.etape)}</td><td>${value(step.tente, label)}</td><td>${filled(step.resultat) ? escape(step.resultat) : ''}</td></tr>`
   }).join('')
 }
@@ -151,7 +188,9 @@ const slots = {
   audit_grille: auditGrid,
   audit_offensif: auditOffensive,
   audit_constats: () => (audit.aucun_constat === true ? '<tr><td colspan="6">Aucun constat : aucun écart relevé, ni chez nous ni sur la table auditée.</td></tr>' : auditFindings()),
-  audit_conclusion: () => `<p>${value(audit.conclusion, 'donnees.json : audit.conclusion')}</p>`,
+  audit_conclusion: () => (measured
+    ? `<p>${value(audit.conclusion, 'donnees.json : audit.conclusion')}</p>`
+    : `<p>${value(expected.conclusion, 'donnees.json : audit.attendu.conclusion')}</p>`),
 }
 
 const tokens = {
@@ -160,11 +199,20 @@ const tokens = {
   GROUPE: group ? `Groupe G${escape(group)}` : 'Groupe à renseigner',
   MOTEUR_GPIO: filled(data.moteur_gpio) ? escape(data.moteur_gpio) : 'quatre GPIO du Pi, repérés sur le schéma',
   NOTE_X: table === 'X' ? ' X est le numéro de la table.' : '',
+  DURCI_DATE: value(hardening.date, 'donnees.json : durcissement.date'),
 }
+
+// What dossier.html words two ways: <!--SI:name-->…<!--SINON-->…<!--FIN-->.
+const conditions = { durci: hardened, audit_releve: measured }
 
 // --- Assemble -------------------------------------------------------------------------------
 
 let html = readFileSync(join(here, 'dossier.html'), 'utf8')
+html = html.replace(/<!--SI:([a-z_]+)-->([\s\S]*?)<!--FIN-->/g, (_, name, body) => {
+  if (!(name in conditions)) throw new Error(`dossier.html : condition inconnue « ${name} »`)
+  const [yes, no = ''] = body.split('<!--SINON-->')
+  return conditions[name] ? yes : no
+})
 html = html.replace(/<!--SLOT:([a-z0-9_]+)-->/g, (_, name) => {
   if (!slots[name]) throw new Error(`dossier.html : emplacement inconnu « ${name} »`)
   return slots[name]()

@@ -38,6 +38,9 @@
   h2.pb { break-before: page; margin-top: 0; }
   .nb { white-space: nowrap; }
   .note { font-size: 8pt; color: var(--muted); margin-top: 1.6mm; }
+  .state { margin: 2mm 0 4mm; padding: 2.4mm 3.6mm; border-left: 2pt solid var(--warn); background: var(--panel); font-size: 8.8pt; }
+  .state p { margin: 0; }
+  .state p + p { margin-top: 1.4mm; }
 
   /* ---------- tables ---------- */
   table.t { width: 100%; border-collapse: collapse; font-size: 8pt; line-height: 1.34; }
@@ -56,6 +59,7 @@
   .chip.ok { color: var(--accent); background: var(--accent-soft); }
   .chip.warn { color: var(--warn); background: var(--warn-soft); }
   .chip.ko { color: var(--ko); background: var(--ko-soft); }
+  .chip.cfg { color: var(--text); background: #e6eaee; }
   .chip.todo { color: var(--muted); background: repeating-linear-gradient(135deg, #eceff2 0 1.2mm, #f7f8fa 1.2mm 2.4mm); border: .4pt dashed #aab3bd; }
 
   /* ---------- key figures ---------- */
@@ -242,8 +246,8 @@
     <tr><td>Monitoring et MCO</td><td>Écran de statut, santé Docker, rotation des logs, <code>docker stats</code></td><td class="ref"><code>infra/</code></td></tr>
     <tr class="grp"><td colspan="3">CYBER · Cybersécurité</td></tr>
     <tr><td>Chiffrement de bout en bout, de l'ESP à la stack</td><td>MQTTS (TLS 1.2 minimum), CA de l'équipe ; HTTPS côté Opérateur</td><td class="ref">section 3</td></tr>
-    <tr><td>Durcissement du serveur</td><td>SSH par clé, pare-feu, ports Docker filtrés, services coupés</td><td class="ref">section 3</td></tr>
-    <tr><td>Audit de sécurité et pentest croisé</td><td>Grille de 19 tests, audit d'une table consentante</td><td class="ref">section 5</td></tr>
+    <tr><td>Durcissement du serveur</td><td><!--SI:durci-->SSH par clé, pare-feu, ports Docker filtrés, services coupés<!--SINON-->Script <code>cyber/harden.sh</code> prêt, non appliqué au Pi de démonstration<!--FIN--></td><td class="ref">section 3</td></tr>
+    <tr><td>Audit de sécurité et pentest croisé</td><td><!--SI:audit_releve-->Grille de 19 tests, audit d'une table consentante<!--SINON-->Grille de 19 contrôles, méthode d'audit<!--FIN--></td><td class="ref">section 5</td></tr>
   </tbody>
 </table>
 
@@ -292,7 +296,7 @@
   <text class="tb" x="736" y="172">PC Opérateur</text>
   <text x="736" y="189">navigateur seulement</text>
   <text class="tm" x="736" y="207">192.168.{{T}}.100 à .199</text>
-  <text class="ts" x="736" y="223">bail réservé (harden.sh)</text>
+  <text class="ts" x="736" y="223"><!--SI:durci-->bail réservé (harden.sh)<!--SINON-->bail DHCP de 12 h<!--FIN--></text>
   <text class="ts" x="736" y="241">CA de l'équipe installée</text>
   <text class="ts" x="736" y="256">aucun service exposé</text>
 
@@ -308,7 +312,7 @@
     <rect class="svc" x="538" y="88" width="76" height="26" rx="4"/><text x="576" y="105" text-anchor="middle">SSH 22/tcp</text>
   </g>
   <rect class="fw" x="286" y="122" width="328" height="22" rx="4"/>
-  <text class="tn" x="450" y="137" text-anchor="middle" style="fill:#0b7a55">Pare-feu : UFW (hôte) + DOCKER-USER (conteneurs)</text>
+  <text class="tn" x="450" y="137" text-anchor="middle" style="fill:#0b7a55"><!--SI:durci-->Pare-feu : UFW (hôte) + DOCKER-USER (conteneurs)<!--SINON-->Pare-feu prévu : UFW + DOCKER-USER (section 3)<!--FIN--></text>
 
   <rect class="soft" x="286" y="152" width="328" height="176" rx="6"/>
   <text class="ts" x="296" y="168">Docker Compose · réseau edge : les deux ports publiés</text>
@@ -343,7 +347,7 @@
   <text class="ts" x="676" y="212" text-anchor="middle">TLS 1.2 minimum</text>
 
   <path class="adm" d="M804,150 V101 H616" marker-end="url(#a-adm)"/>
-  <text class="tl" x="716" y="95" text-anchor="middle" style="fill:#3c4854">SSH 22 · clé ed25519</text>
+  <text class="tl" x="716" y="95" text-anchor="middle" style="fill:#3c4854"><!--SI:durci-->SSH 22 · clé ed25519<!--SINON-->SSH 22<!--FIN--></text>
 
   <path class="inf" d="M96,150 V101 H284" marker-end="url(#a-inf)"/>
   <text class="tl" x="184" y="95" text-anchor="middle" style="fill:#5d6975">DHCP 67 · NTP 123</text>
@@ -353,7 +357,7 @@
   <path d="M444,400 L456,412 M456,400 L444,412" stroke="#b3261e" stroke-width="2" fill="none"/>
   <rect class="soft" x="300" y="424" width="300" height="40" rx="6"/>
   <text class="tn" x="450" y="440" text-anchor="middle">eth0 · Ethernet : installation et mises à jour</text>
-  <text class="ts" x="450" y="455" text-anchor="middle">aucun service ouvert, ni passerelle ni NAT vers la table</text>
+  <text class="ts" x="450" y="455" text-anchor="middle"><!--SI:durci-->aucun service ouvert, ni passerelle ni NAT vers la table<!--SINON-->ni passerelle ni NAT vers la table<!--FIN--></text>
 
   <!-- Legend -->
   <path class="enc" d="M640,432 H672"/><text class="ts" x="680" y="435.5">flux chiffré et authentifié (TLS)</text>
@@ -371,7 +375,7 @@
   <tbody>
     <tr><td>Command Post (Raspberry Pi 4)</td><td class="n">192.168.{{T}}.1</td><td>statique, interface <code>wlan0</code></td><td>point d'accès, DHCP, heure, stack Docker</td></tr>
     <tr><td>Sentinel (ESP32, <code>sentinel-01</code>)</td><td class="n">192.168.{{T}}.10</td><td>réservée par nom d'hôte</td><td>sondes et Alarme</td></tr>
-    <tr><td>PC Opérateur</td><td class="n">192.168.{{T}}.100 à .199</td><td>DHCP, bail réservé par adresse MAC</td><td>navigateur, SSH d'administration</td></tr>
+    <tr><td>PC Opérateur</td><td class="n">192.168.{{T}}.100 à .199</td><td><!--SI:durci-->DHCP, bail réservé par adresse MAC<!--SINON-->DHCP<!--FIN--></td><td>navigateur, SSH d'administration</td></tr>
   </tbody>
 </table>
 
@@ -381,7 +385,7 @@
   <tbody>
     <tr><td>Sentinel</td><td><code>mosquitto</code></td><td>MQTTS 8883/tcp</td><td>TLS 1.2 minimum, CA de l'équipe vérifiée par l'ESP32 ; compte <code>sentinel-01</code> et ACL</td><td>télémétrie et Alertes ; en retour, commandes de l'Alarme</td></tr>
     <tr><td>PC Opérateur</td><td><code>reverse-proxy</code></td><td>HTTPS, WSS 443/tcp</td><td>TLS 1.2 minimum, CA de l'équipe ; session Opérateur</td><td>dashboard, API, temps réel, caméra</td></tr>
-    <tr><td>PC Opérateur</td><td>hôte (sshd)</td><td>SSH 22/tcp</td><td>clé ed25519, un seul compte, cette seule adresse</td><td>administration</td></tr>
+    <tr><td>PC Opérateur</td><td>hôte (sshd)</td><td>SSH 22/tcp</td><td><!--SI:durci-->clé ed25519, un seul compte, cette seule adresse<!--SINON-->compte du Pi ; clé ed25519 seule une fois durci<!--FIN--></td><td>administration</td></tr>
     <tr><td><code>api</code>, <code>predictive</code>, écran de statut</td><td><code>mosquitto</code></td><td>MQTTS 8883/tcp</td><td>TLS, CA vérifiée ; un compte et une ACL par client</td><td>lecture ; l'<code>api</code> publie les commandes</td></tr>
     <tr><td><code>vision</code>, <code>predictive</code></td><td><code>api</code></td><td>HTTP 8080, interne</td><td>réseau Docker sans sortie, même hôte ; un jeton par service</td><td><code>POST /api/v1/alerts</code></td></tr>
     <tr><td><code>reverse-proxy</code></td><td><code>api</code>, <code>dashboard</code>, <code>vision</code></td><td>HTTP, interne</td><td>session vérifiée par l'<code>api</code> avant le flux caméra</td><td>routage de <code>/api</code>, <code>/ws</code>, <code>/camera</code></td></tr>
@@ -433,7 +437,7 @@
   <div class="num">3</div>
   <div>
     <h1>Matrice de sécurité</h1>
-    <p class="lead">Tout flux qui quitte une machine est chiffré et authentifié, et le serveur n'expose que ce dont la table a besoin. La dernière colonne renvoie aux tests D1 à D19 de la grille d'audit (section 5).</p>
+    <p class="lead"><!--SI:durci-->Tout flux qui quitte une machine est chiffré et authentifié, et le serveur n'expose que ce dont la table a besoin. La dernière colonne renvoie aux tests D1 à D19 de la grille d'audit (section 5).<!--SINON-->Tout flux qui quitte une machine est chiffré et authentifié. Le durcissement du serveur est scripté, non appliqué au Pi de démonstration. Dernière colonne : tests D1 à D19 de l'audit (section 5).<!--FIN--></p>
   </div>
 </header>
 
@@ -447,18 +451,18 @@
     <tr><td>Serveur vérifié par le client</td><td>ESP32 : <code>setCACert</code>, jamais <code>setInsecure()</code>. Services et écran de statut : CA imposée. PC Opérateur : CA installée par <code>infra/operator.sh</code></td><td class="ref">D6, étape 5</td></tr>
 
     <tr class="grp"><td colspan="3">Authentification et autorisations</td></tr>
+    <tr><td>Wi-Fi de la table</td><td>WPA2-PSK, CCMP seulement, phrase de passe aléatoire de 24 caractères ; ni passerelle ni NAT</td><td class="ref">D18</td></tr>
     <tr><td>Broker fermé aux anonymes</td><td><code>allow_anonymous false</code> ; un compte par client (<code>sentinel-01</code>, <code>api</code>, <code>predictive</code>, <code>screen</code>), mots de passe aléatoires de 192 bits, fichier haché</td><td class="ref">D9</td></tr>
     <tr><td>Moindre privilège MQTT</td><td>ACL par compte : le Sentinel n'écrit que sa télémétrie et ses Alertes, ne lit que ses commandes</td><td class="ref">D10</td></tr>
     <tr><td>Services IA</td><td>Un jeton de 256 bits par service, limité à son type d'Alerte ; l'<code>api</code> fixe elle-même la source</td><td class="ref">D12, D13</td></tr>
     <tr><td>Session Opérateur</td><td>Mot de passe de 12 caractères ou plus, haché scrypt ; cookie <code>HttpOnly; Secure; SameSite=Strict</code> de 12 h ; origine vérifiée sur le WebSocket</td><td class="ref">D11, D19</td></tr>
     <tr><td>Entrées non fiables</td><td>Chaque corps validé contre le schéma (champs inconnus refusés, 16 Ko au plus) ; l'identité du Sentinel vient du topic, pas du message</td><td class="ref">D13</td></tr>
 
-    <tr class="grp"><td colspan="3">Durcissement du serveur (hardening) · cyber/harden.sh</td></tr>
+    <tr class="grp"><td colspan="3">Durcissement du serveur (hardening) · cyber/harden.sh<!--SI:durci--><!--SINON--> · non appliqué au Pi de démonstration<!--FIN--></td></tr>
     <tr><td>SSH</td><td>Clé ed25519 seulement ; mot de passe et root refusés ; un seul compte ; depuis le PC Opérateur seulement</td><td class="ref">D4</td></tr>
     <tr><td>Pare-feu de l'hôte</td><td>UFW : tout entrant refusé, sauf sur <code>wlan0</code> 22/tcp (PC Opérateur), 67/udp et 123/udp</td><td class="ref">D1, D2</td></tr>
     <tr><td>Ports publiés par Docker</td><td>Docker contourne UFW : la chaîne <code>SENTINEL-X</code>, appelée depuis <code>DOCKER-USER</code>, n'ouvre 443 et 8883 qu'au Wi-Fi de la table, et une unité systemd la remet à chaque démarrage</td><td class="ref">D3</td></tr>
     <tr><td>Services inutiles</td><td><code>bluetooth</code>, <code>hciuart</code>, <code>avahi-daemon</code>, <code>triggerhappy</code>, <code>ModemManager</code> coupés</td><td class="ref">checklist</td></tr>
-    <tr><td>Wi-Fi de la table</td><td>WPA2-PSK, CCMP seulement, phrase de passe aléatoire de 24 caractères ; ni passerelle ni NAT</td><td class="ref">D18</td></tr>
 
     <tr class="grp"><td colspan="3">Isolation des conteneurs Docker</td></tr>
     <tr><td>Privilèges</td><td>Chaque conteneur : utilisateur non root, lecture seule, <code>cap_drop: ALL</code>, <code>no-new-privileges</code>. Aucun <code>privileged</code>, socket Docker jamais monté</td><td class="ref">D17</td></tr>
@@ -472,7 +476,7 @@
   </tbody>
 </table>
 
-<h2>Preuves du durcissement <span class="tag">relevées sur le Command Post, depuis le PC Opérateur</span></h2>
+<h2><!--SI:durci-->Preuves du durcissement <span class="tag">relevées sur le Command Post, depuis le PC Opérateur</span><!--SINON-->État du durcissement <span class="tag">au {{DURCI_DATE}}</span><!--FIN--></h2>
 <!--SLOT:preuves-->
 
 <!-- ═══════════════════════════════════════════════ 4 · IA ═══ -->
@@ -554,7 +558,7 @@
   <div class="num">5</div>
   <div>
     <h1>Rapport d'audit post-pentest</h1>
-    <p class="lead">Pentest croisé du jeudi : nous vérifions notre Command Post avec une grille de 19 tests, puis nous auditons une table consentante avec la même méthode.</p>
+    <p class="lead"><!--SI:audit_releve-->Pentest croisé du jeudi : nous vérifions notre Command Post avec une grille de 19 tests, puis nous auditons une table consentante avec la même méthode.<!--SINON-->Notre Command Post se vérifie avec une grille de 19 contrôles, et une table consentante s'audite avec la même méthode.<!--FIN--></p>
   </div>
 </header>
 
@@ -565,15 +569,15 @@
 
 <h2>5.2 Notre Command Post : grille défensive</h2>
 <table class="t plain">
-  <thead><tr><th style="width:5%"></th><th style="width:34%">Test</th><th style="width:30%">Attendu</th><th>Observé</th><th style="width:12%">Verdict</th></tr></thead>
+  <!--SI:audit_releve--><thead><tr><th style="width:5%"></th><th style="width:34%">Test</th><th style="width:30%">Attendu</th><th>Observé</th><th style="width:12%">Verdict</th></tr></thead><!--SINON--><thead><tr><th style="width:5%"></th><th style="width:27%">Contrôle</th><th style="width:24%">Comportement</th><th>Garanti par</th><th style="width:17%">Appui</th></tr></thead><!--FIN-->
   <tbody>
     <!--SLOT:audit_grille-->
   </tbody>
 </table>
 
-<h2>5.3 Audit offensif d'une table consentante</h2>
+<h2><!--SI:audit_releve-->5.3 Audit offensif d'une table consentante<!--SINON-->5.3 Méthode d'audit d'une table consentante<!--FIN--></h2>
 <table class="t plain">
-  <thead><tr><th style="width:4%"></th><th style="width:28%">Étape</th><th style="width:34%">Ce qui a été tenté</th><th>Résultat</th></tr></thead>
+  <!--SI:audit_releve--><thead><tr><th style="width:4%"></th><th style="width:28%">Étape</th><th style="width:34%">Ce qui a été tenté</th><th>Résultat</th></tr></thead><!--SINON--><thead><tr><th style="width:4%"></th><th style="width:28%">Étape</th><th>Ce qui est tenté</th></tr></thead><!--FIN-->
   <tbody>
     <!--SLOT:audit_offensif-->
   </tbody>
@@ -633,7 +637,7 @@
 
   <div class="nums">
     <div><b>1 s</b><span>entre deux mesures du Sentinel</span></div>
-    <div><b>2</b><span>ports de service ouverts, rien d'autre ne répond</span></div>
+    <div><b>2</b><span>ports de service publiés, tous deux chiffrés</span></div>
     <div><b>TLS 1.2+</b><span>et une autorité de certification propre à l'équipe</span></div>
     <div><b>7</b><span>variables pour le modèle prédictif, aucun seuil fixe</span></div>
     <div><b>1&nbsp;483</b><span>tests automatisés, rejoués à chaque pull request</span></div>

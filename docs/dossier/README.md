@@ -19,10 +19,11 @@ Dans le PDF, tout ce qui manque porte l'étiquette « à relever ».
 | Quoi | Où |
 |---|---|
 | Numéro de table | `donnees.json` : `table` (le groupe, G2, y est) |
+| Durcissement appliqué ou non | `donnees.json` : `durcissement.applique`. À `false`, le dossier dit que `cyber/harden.sh` est prêt mais pas lancé sur le Pi, avec le motif. À `true`, il le décrit comme en place et attend les trois preuves |
 | Preuves du durcissement | `preuves/nmap-tcp.txt`, `preuves/nmap-udp.txt`, `preuves/checklist-durcissement.txt` : les trois fichiers de [`../DURCISSEMENT-PI.md`](../DURCISSEMENT-PI.md), étape 5 |
 | Benchmark de la vision sur le Pi 4 | `donnees.json` : `vision_pi4` (`p50`, `p95`, en ms) |
 | Modèle prédictif entraîné sur le Sentinel | `donnees.json` : `predictif_reel` |
-| Audit | `donnees.json` : `audit` |
+| Audit | `donnees.json` : `audit`. Avec `"mode": "attendu"`, la section 5 donne pour chaque contrôle le comportement du système et ce qui le garantit (`fonde`, `appui` : `tests`, `config` ou `durcissement`), sans rien présenter comme observé sur le Pi. Avec `"mode": "releve"`, elle attend ce qui a été observé et un verdict |
 
 Pour l'audit : `verdict` vaut `ok`, `ecart` ou `ko`. Un constat s'écrit `{ "id": "C1", "systeme": "…", "criticite": "…", "constat": "…", "correctif": "…", "etat": "…" }` ; sans constat, mettre `"aucun_constat": true`.
 

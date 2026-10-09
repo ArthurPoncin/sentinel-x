@@ -3,9 +3,16 @@
   "table": "4",
   "moteur_gpio": "GPIO 6, 13, 19 et 26 (broches 31, 33, 35 et 37)",
 
+  "durcissement": {
+    "applique": false,
+    "date": "9 octobre 2026",
+    "motif": "Le script réserve SSH à un seul PC : nous avons jugé le risque de nous enfermer dehors trop élevé juste avant la démonstration, et nous ne l'avons pas lancé.",
+    "verification": "Le script est idempotent. Il a été vérifié hors du Pi, dans un conteneur Debian 12 avec de vrais sshd, UFW et iptables et un réseau de table simulé ; systemd et le vrai Docker restent à vérifier sur le Pi. Il s'applique en 15 minutes et peut être lancé en démonstration : les trois relevés ci-dessous en seront la preuve."
+  },
+
   "vision_pi4": [
-    { "detecteur": "TFLite, 4 threads", "p50": "", "p95": "" },
-    { "detecteur": "TFLite, 4 threads, porte de mouvement", "p50": "", "p95": "" }
+    {"detecteur": "TFLite, 4 threads", "p50": "", "p95": ""},
+    {"detecteur": "TFLite, 4 threads, porte de mouvement", "p50": "", "p95": ""}
   ],
 
   "predictif_reel": {
@@ -17,41 +24,49 @@
   },
 
   "audit": {
+    "mode": "attendu",
+    "attendu": {
+      "base": "Tests automatisés de l'api, rejoués par la CI à chaque pull request, et configuration versionnée du broker, du proxy, de la stack Docker et du Wi-Fi.",
+      "synthese": "Six contrôles sont démontrés par les tests automatisés de l'api. Neuf se lisent dans les fichiers versionnés du broker, du proxy, de la stack Docker et du Wi-Fi. Les quatre derniers demandent le durcissement du serveur, qui n'est pas appliqué (constat C1).",
+      "conclusion": "Le chiffrement des flux, l'authentification et les limites de débit sont en place, démontrés par les tests ou lisibles dans la configuration. Il reste à appliquer cyber/harden.sh au Pi (constat C1)."
+    },
     "date": "jeudi 8 octobre 2026",
     "auditeurs": "",
     "table_auditee": "",
     "audites_par": "",
     "synthese": "",
     "grille": [
-      { "id": "D1", "test": "Ports TCP exposés (nmap -sS -p-)", "attendu": "22, 443 et 8883 seuls, le reste filtré", "observe": "", "verdict": "" },
-      { "id": "D2", "test": "Ports UDP (nmap -sU, scripts dhcp-discover et ntp-info)", "attendu": "67 et 123 seuls", "observe": "", "verdict": "" },
-      { "id": "D3", "test": "Docker ne contourne pas le pare-feu (scan depuis l'Ethernet)", "attendu": "443 et 8883 muets hors du Wi-Fi de la table", "observe": "", "verdict": "" },
-      { "id": "D4", "test": "SSH par mot de passe", "attendu": "refusé, clé ed25519 seule, depuis le PC Opérateur", "observe": "", "verdict": "" },
-      { "id": "D5", "test": "Ports en clair (MQTT 1883, HTTP 80)", "attendu": "aucun, connexion refusée", "observe": "", "verdict": "" },
-      { "id": "D6", "test": "TLS du broker (openssl s_client sur 8883)", "attendu": "TLS 1.2 ou plus, certificat de la CA d'équipe, échec sans la CA", "observe": "", "verdict": "" },
-      { "id": "D7", "test": "TLS du dashboard (openssl s_client sur 443)", "attendu": "HTTPS seul, certificat de la CA d'équipe", "observe": "", "verdict": "" },
-      { "id": "D8", "test": "Capture Wireshark d'une session de démo", "attendu": "ni identifiant ni mesure lisible", "observe": "", "verdict": "" },
-      { "id": "D9", "test": "Broker sans identifiants", "attendu": "connexion refusée", "observe": "", "verdict": "" },
-      { "id": "D10", "test": "ACL : sentinel-01 publie sur command/...", "attendu": "refusé, chaque compte reste dans son périmètre", "observe": "", "verdict": "" },
-      { "id": "D11", "test": "API, WebSocket et caméra sans session", "attendu": "401", "observe": "", "verdict": "" },
-      { "id": "D12", "test": "Jeton vision avec un autre type d'Alerte", "attendu": "403", "observe": "", "verdict": "" },
-      { "id": "D13", "test": "Alerte au champ sentinel ou source mensonger", "attendu": "ignoré, valeurs fixées par l'api", "observe": "", "verdict": "" },
-      { "id": "D14", "test": "Plus de 5 tentatives de connexion par minute", "attendu": "429 avec Retry-After", "observe": "", "verdict": "" },
-      { "id": "D15", "test": "Plus de 2 commandes/s, plus de 20 Alertes/s", "attendu": "rejet au-delà de la limite", "observe": "", "verdict": "" },
-      { "id": "D16", "test": "Message MQTT de plus de 4096 octets, rafale", "attendu": "message rejeté, service maintenu", "observe": "", "verdict": "" },
-      { "id": "D17", "test": "Revue des conteneurs", "attendu": "aucun privilège superflu, socket Docker non monté", "observe": "", "verdict": "" },
-      { "id": "D18", "test": "Revue du point d'accès Wi-Fi", "attendu": "WPA2-PSK, CCMP seul, WPS coupé, pas de NAT", "observe": "", "verdict": "" },
-      { "id": "D19", "test": "Cookie de session et origine du WebSocket", "attendu": "HttpOnly, Secure, SameSite=Strict ; autre origine : 403", "observe": "", "verdict": "" }
+      {"id": "D1", "test": "Ports TCP exposés (nmap -sS -p-)", "attendu": "22, 443 et 8883 seuls, le reste filtré", "observe": "", "verdict": "", "fonde": "docker-compose.yml : seuls le proxy (443) et le broker (8883) publient un port ; le reste est filtré par UFW (harden.sh)", "appui": "durcissement"},
+      {"id": "D2", "test": "Ports UDP (nmap -sU, scripts dhcp-discover et ntp-info)", "attendu": "67 et 123 seuls", "observe": "", "verdict": "", "fonde": "dnsmasq (67) et chrony (123) sur wlan0 ; le reste est filtré par UFW (harden.sh)", "appui": "durcissement"},
+      {"id": "D3", "test": "Docker ne contourne pas le pare-feu (scan depuis l'Ethernet)", "attendu": "443 et 8883 muets hors du Wi-Fi de la table", "observe": "", "verdict": "", "fonde": "chaîne SENTINEL-X appelée depuis DOCKER-USER, remise à chaque démarrage (harden.sh)", "appui": "durcissement"},
+      {"id": "D4", "test": "SSH par mot de passe", "attendu": "refusé, clé ed25519 seule, depuis le PC Opérateur", "observe": "", "verdict": "", "fonde": "sshd : mots de passe et root refusés, clé ed25519, un seul compte (harden.sh)", "appui": "durcissement"},
+      {"id": "D5", "test": "Ports en clair (MQTT 1883, HTTP 80)", "attendu": "aucun, connexion refusée", "observe": "", "verdict": "", "fonde": "mosquitto.conf : un seul listener, 8883 ; Caddyfile : auto_https off, seul le port 443 est publié", "appui": "config"},
+      {"id": "D6", "test": "TLS du broker (openssl s_client sur 8883)", "attendu": "TLS 1.2 ou plus, certificat de la CA d'équipe, échec sans la CA", "observe": "", "verdict": "", "fonde": "mosquitto.conf : tls_version tlsv1.2 ; certificat du broker signé par la CA (infra/setup.sh)", "appui": "config"},
+      {"id": "D7", "test": "TLS du dashboard (openssl s_client sur 443)", "attendu": "HTTPS seul, certificat de la CA d'équipe", "observe": "", "verdict": "", "fonde": "Caddyfile : protocols tls1.2, certificat de la CA, en-tête HSTS", "appui": "config"},
+      {"id": "D8", "test": "Capture Wireshark d'une session de démo", "attendu": "ni identifiant ni mesure lisible", "observe": "", "verdict": "", "fonde": "découle de D5 à D7 : aucun listener en clair sur la table", "appui": "config"},
+      {"id": "D9", "test": "Broker sans identifiants", "attendu": "connexion refusée", "observe": "", "verdict": "", "fonde": "mosquitto.conf : allow_anonymous false, password_file", "appui": "config"},
+      {"id": "D10", "test": "ACL : sentinel-01 publie sur command/...", "attendu": "refusé, chaque compte reste dans son périmètre", "observe": "", "verdict": "", "fonde": "infra/mosquitto/acl : sentinel-01 n'écrit que sa télémétrie et ses Alertes", "appui": "config"},
+      {"id": "D11", "test": "API, WebSocket et caméra sans session", "attendu": "401", "observe": "", "verdict": "", "fonde": "operator-auth.test.ts : 401 sans session, flux temps réel refusé ; /camera derrière forward_auth (Caddyfile)", "appui": "tests"},
+      {"id": "D12", "test": "Jeton vision avec un autre type d'Alerte", "attendu": "403", "observe": "", "verdict": "", "fonde": "alert-ingress.test.ts : 403 sur un type d'Alerte qui n'est pas celui du jeton", "appui": "tests"},
+      {"id": "D13", "test": "Alerte au champ sentinel ou source mensonger", "attendu": "ignoré, valeurs fixées par l'api", "observe": "", "verdict": "", "fonde": "alert-ingress.test.ts, mqtt-ingress.test.ts : source tirée du jeton, Sentinel tiré du topic", "appui": "tests"},
+      {"id": "D14", "test": "Plus de 5 tentatives de connexion par minute", "attendu": "429 avec Retry-After", "observe": "", "verdict": "", "fonde": "rate-limit.test.ts : 429 après 5 connexions par minute, même avec le bon mot de passe", "appui": "tests"},
+      {"id": "D15", "test": "Plus de 2 commandes/s, plus de 20 Alertes/s", "attendu": "rejet au-delà de la limite", "observe": "", "verdict": "", "fonde": "rate-limit.test.ts : 429 au-delà de 2 commandes/s et de 20 Alertes/s par jeton", "appui": "tests"},
+      {"id": "D16", "test": "Message MQTT de plus de 4096 octets, rafale", "attendu": "message rejeté, service maintenu", "observe": "", "verdict": "", "fonde": "mosquitto.conf : max_packet_size 4096, persistence false ; logs 10 Mo × 3 (docker-compose.yml)", "appui": "config"},
+      {"id": "D17", "test": "Revue des conteneurs", "attendu": "aucun privilège superflu, socket Docker non monté", "observe": "", "verdict": "", "fonde": "docker-compose.yml : no-new-privileges, cap_drop ALL, read_only, réseau internal ; aucun privileged", "appui": "config"},
+      {"id": "D18", "test": "Revue du point d'accès Wi-Fi", "attendu": "WPA2-PSK, CCMP seul, WPS coupé, pas de NAT", "observe": "", "verdict": "", "fonde": "plug-and-play.sh : wpa-psk, rsn, ccmp, phrase de 24 caractères, adressage manuel sans partage ; WPS à contrôler sur le Pi", "appui": "config"},
+      {"id": "D19", "test": "Cookie de session et origine du WebSocket", "attendu": "HttpOnly, Secure, SameSite=Strict ; autre origine : 403", "observe": "", "verdict": "", "fonde": "operator-auth.test.ts : cookie fermé aux scripts et aux autres sites, page d'une autre origine refusée", "appui": "tests"}
     ],
     "offensif": [
-      { "etape": "Reconnaissance (Nmap)", "tente": "", "resultat": "" },
-      { "etape": "Transport (TLS, Wireshark)", "tente": "", "resultat": "" },
-      { "etape": "Authentification (broker, API)", "tente": "", "resultat": "" },
-      { "etape": "Résilience (DoS court, cible prévenue)", "tente": "", "resultat": "" },
-      { "etape": "Homme du milieu (avec accord)", "tente": "", "resultat": "" },
-      { "etape": "Restitution à la table auditée", "tente": "", "resultat": "" }
+      {"etape": "Reconnaissance (Nmap)", "tente": "", "resultat": "", "methode": "Cartographie des ports TCP et UDP ; services exposés, versions, ports en clair"},
+      {"etape": "Transport (TLS, Wireshark)", "tente": "", "resultat": "", "methode": "openssl s_client sur chaque port TLS : version, certificat, chaîne de confiance ; capture Wireshark d'une session"},
+      {"etape": "Authentification (broker, API)", "tente": "", "resultat": "", "methode": "Broker : connexion anonyme, test de l'ACL. API : endpoint protégé appelé sans session"},
+      {"etape": "Résilience (DoS court, cible prévenue)", "tente": "", "resultat": "", "methode": "Dépassement des limites de connexion, de commandes et d'Alertes ; message MQTT surdimensionné"},
+      {"etape": "Homme du milieu (avec accord)", "tente": "", "resultat": "", "methode": "Interception et rejeu sur le segment de la table : la vérification de la CA doit les empêcher"},
+      {"etape": "Restitution à la table auditée", "tente": "", "resultat": "", "methode": "Constats rendus à la table auditée, rien n'est conservé"}
     ],
-    "constats": [],
+    "constats": [
+      {"id": "C1", "systeme": "Command Post", "criticite": "Moyenne", "constat": "cyber/harden.sh n'est pas appliqué : SSH accepte le mot de passe depuis toute la table, le pare-feu d'hôte n'est pas actif, 443 et 8883 répondent aussi par l'Ethernet", "correctif": "cyber/harden.sh 4, 15 minutes (docs/DURCISSEMENT-PI.md)", "etat": "prêt, non appliqué"}
+    ],
     "conclusion": ""
   }
 }
