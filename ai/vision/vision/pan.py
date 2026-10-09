@@ -11,7 +11,8 @@
   there. Says whether the motor is wired and which way it turns, and puts a camera back to where it rests.
 
 Angles are in degrees from where the camera rests, positive toward the right of its image: the `pan` of an
-`intrusion` Alert.
+`intrusion` Alert. Where it rests, its 0, is where it stands when the service starts: the stepper counts
+its half-steps from there, and the service parks it there as it stops.
 """
 
 import logging
@@ -43,7 +44,12 @@ class PanFollower:
       servo's travel;
     - when the last inference did not see that person, it stays where it is: they are found again where
       they were lost;
-    - with no intrusion (`rest`), it goes back to where it rests, at `home_speed`.
+    - with no intrusion (`rest`), it stays where it is for `home_after` seconds (someone lost may come
+      back into its image), then goes back to where it rests, at `home_speed`;
+    - and once there, with `patrol` degrees, it looks around for intruders: from `patrol` degrees to the
+      left to as many to the right and back again, no further than its travel, slowly, at `patrol_speed`,
+      so that what it frames does not blur and the motor does not work for nothing. With 0, it stays
+      where it rests.
 
     It remembers where it was for the last `memory` seconds: an image is always a little old, and the
     angle that goes with it is the one of when it was taken (`angle_at`).
@@ -59,6 +65,9 @@ class PanFollower:
         deadband: float = 4.0,
         gain: float = 0.7,
         memory: float = 2.0,
+        home_after: float = 0.0,
+        patrol: float = 0.0,
+        patrol_speed: float = 8.0,
     ) -> None:
         if not (_is_number(low) and _is_number(high) and low <= 0 <= high and low < high):
             raise ValueError(f"low and high: a travel that holds 0, where the camera rests, expected, got {low!r} to {high!r}")
@@ -70,9 +79,18 @@ class PanFollower:
             raise ValueError(f"gain: a number in ]0, 1] expected, got {gain!r}")
         if not (_is_number(memory) and memory > 0):
             raise ValueError(f"memory: a number > 0 expected, got {memory!r}")
+        if not (_is_number(home_after) and home_after >= 0):
+            raise ValueError(f"home_after: a number >= 0 expected, got {home_after!r}")
+        if not (_is_number(patrol) and patrol >= 0 and _is_number(patrol_speed) and patrol_speed > 0):
+            raise ValueError(f"patrol and patrol_speed: numbers >= 0 and > 0 expected, got {patrol!r} and {patrol_speed!r}")
         self._low, self._high = low, high
         self._speed, self._home_speed = speed, home_speed
         self._deadband, self._gain, self._memory = deadband, gain, memory
+        self._home_after, self._patrol_speed = home_after, patrol_speed
+        # Its patrol, within its travel: on one side only when where it rests is an end of it.
+        self._patrol = (max(-patrol, low), min(patrol, high)) if patrol > 0 else None
+        self._idle_since: float | None = None  # since when there is no intrusion, None during one
+        self._patrolling = False  # it is back where it rests, and looks around from there
         self._angle = 0.0  # how far it is turned
         self._goal = 0.0  # how far it is turning to
         self._pace = speed  # and how fast, in degrees a second
@@ -89,6 +107,7 @@ class PanFollower:
         (the tracker's `target`), None when that inference did not see them. Returns the angle to turn to
         now."""
         self.step(now)
+        self._idle_since, self._patrolling = None, False
         self._pace = self._speed
         off = bearing - self._angle if bearing is not None and _is_number(bearing) else 0.0
         if abs(off) > self._deadband:
@@ -98,23 +117,44 @@ class PanFollower:
         return self._angle
 
     def rest(self, now: float) -> float:
-        """After an inference with no intrusion in progress: back to where it rests."""
-        self.step(now)
-        self._goal, self._pace = 0.0, self._home_speed
-        return self._angle
+        """After an inference with no intrusion in progress: after `home_after` seconds, back to where it
+        rests, then on patrol around it."""
+        if self._idle_since is None:
+            self._idle_since = now
+            self._goal = self._angle  # it waits where it is
+        return self.step(now)
 
     def step(self, now: float) -> float:
         """Turns on toward where it is going, for the time gone by since the last call. Returns the angle
         to turn to now. A clock that goes back turns nothing."""
         if self._at is not None:
             reach = self._pace * max(0.0, now - self._at)
-            self._angle += min(max(self._goal - self._angle, -reach), reach)
+            off = self._goal - self._angle
+            # Right there when within reach, give or take the rounding of the steps before: an end of its
+            # patrol is reached, and it turns back.
+            self._angle = self._goal if abs(off) <= reach + 1e-9 else self._angle + math.copysign(reach, off)
+        if self._idle_since is not None:
+            self._idle(now)
         if self._at is None or now > self._at:
             self._at = now
             self._trail.append((now, self._angle))
             while len(self._trail) > 1 and now - self._trail[1][0] >= self._memory:
                 self._trail.popleft()
         return self._angle
+
+    def _idle(self, now: float) -> None:
+        """Where it goes with no intrusion: nowhere for `home_after` seconds, then where it rests, then
+        from one end of its patrol to the other."""
+        if now - self._idle_since < self._home_after:
+            return
+        if not self._patrolling:
+            self._goal, self._pace = 0.0, self._home_speed
+            if self._angle == 0.0 and self._patrol is not None:
+                # From where it rests, to the right first.
+                self._patrolling, self._goal, self._pace = True, self._patrol[1], self._patrol_speed
+        elif self._angle == self._goal:
+            low, high = self._patrol
+            self._goal = low if self._goal == high else high
 
     def angle_at(self, moment: float) -> float:
         """How far the camera was turned at `moment`, between the two instants it remembers around it.
@@ -561,6 +601,9 @@ def make_pan(name: str) -> tuple[PanFollower, PanDrive] | None:
         high=high,
         speed=env_float("PAN_SPEED_DEG_S", 60, min=1, max=360),
         deadband=env_float("PAN_DEADBAND_DEG", 4, min=0, max=45),
+        home_after=env_float("PAN_HOME_AFTER_S", 2, min=0, max=600),
+        patrol=env_float("PAN_PATROL_DEG", 30, min=0, max=180),
+        patrol_speed=env_float("PAN_PATROL_SPEED_DEG_S", 8, min=1, max=90),
     )
     return follower, factory()
 

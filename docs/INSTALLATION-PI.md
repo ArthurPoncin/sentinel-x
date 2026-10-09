@@ -114,6 +114,8 @@ La webcam peut être posée sur un moteur pas à pas 28BYJ-48, au-dessus du boî
 
 Sans moteur branché, mets `PAN_DRIVE=none` dans `.env` avant de lancer le script : sinon `vision` croit tourner la caméra, et le jumeau place le bonhomme de travers.
 
+**Le point 0** : là où la caméra regarde quand `vision` démarre, au premier allumage du Pi comme après l'avoir éteint et rallumé. Quand personne n'est là, elle y revient 2 s après la fin de l'intrusion, puis fait sa **ronde** : elle tourne lentement jusqu'à +30°, puis jusqu'à -30°, et ainsi de suite, pour chercher les intrus. Quelqu'un apparaît : elle le suit, puis revient à son 0 et reprend sa ronde.
+
 Le moteur ne sait pas où il est : il compte les pas qu'il fait depuis son démarrage. `vision` le ramène au centre quand il s'arrête proprement. Si le Pi a été coupé brutalement, ou si tu as tourné la caméra à la main, **remets-la droit devant avant de relancer** `vision`. Entre deux mouvements, le moteur n'est plus alimenté : ses engrenages tiennent la caméra, et il ne chauffe pas.
 
 **Tester le moteur, ou remettre la caméra droite sans la forcer** — la commande fait tourner la caméra du nombre de degrés donné (positif : vers la droite de son image) et la laisse là, ce qui devient sa position de repos :
@@ -135,6 +137,9 @@ Les LED de la carte clignotent pendant qu'il tourne. Si la caméra part à gauch
 | `PAN_MIN_DEG` / `PAN_MAX_DEG` | `-90` / `90` | Le câble de la webcam tire en bout de course : réduis (par exemple `-60` / `60`) |
 | `PAN_STEP_MS` | `2` | Le moteur vibre sans tourner, ou la caméra n'est pas au bon endroit après un aller-retour : il manque des pas, mets `3` |
 | `PAN_STEPS_PER_TURN` | `4096` | Un tour demandé ne fait pas un tour : c'est le nombre de demi-pas d'un tour de l'axe |
+| `PAN_HOME_AFTER_S` | `2` | La caméra revient trop vite (ou trop tard) à son 0 quand elle a perdu la personne : c'est l'attente, en secondes, après la fin de l'intrusion |
+| `PAN_PATROL_DEG` | `30` | La ronde est trop large ou trop étroite : la caméra va de 0 à +30°, puis -30°, et ainsi de suite. `0` : pas de ronde, elle reste à son 0 |
+| `PAN_PATROL_SPEED_DEG_S` | `8` | La ronde est trop lente, ou l'image est floue pendant la ronde |
 | `CAMERA_FOV_DEG` | `60` | Le bonhomme du jumeau n'est pas du bon côté quand la personne est au bord de l'image |
 | `PAN_DRIVE` | — | Pas de moteur, ou caméra à laisser fixe : `PAN_DRIVE=none` |
 
@@ -150,7 +155,7 @@ La webcam peut être posée sur un servo, au-dessus du boîtier : elle tourne al
    ```
 3. **Après le redémarrage** : ajoute `PAN_DRIVE=pwm` dans `.env` (sans cette ligne, c'est le moteur pas à pas que le script donne à `vision`), puis `infra/plug-and-play.sh 4 --no-flash`. L'étape 4 affiche `servo de la caméra sur GPIO 18, donné à vision`.
 
-Au démarrage de `vision`, le servo se met au centre : c'est la position de repos, celle où la caméra regarde droit devant. Elle y revient quand plus personne n'est là.
+Au démarrage de `vision`, le servo se met au centre : c'est la position de repos, celle où la caméra regarde droit devant. Elle y revient 2 s après la fin d'une intrusion, puis fait sa ronde de -30° à +30° autour, comme le moteur pas à pas.
 
 **Régler le servo** — dans le fichier `.env` à la racine du dépôt, puis `docker compose up -d vision` :
 
@@ -160,6 +165,9 @@ Au démarrage de `vision`, le servo se met au centre : c'est la position de repo
 | `PAN_MIN_DEG` / `PAN_MAX_DEG` | `-90` / `90` | Le servo bute ou force en bout de course : réduis (par exemple `-80` / `80`) |
 | `PAN_MIN_US` / `PAN_MAX_US` | `500` / `2500` | À `-90` et `90` la caméra ne fait pas un quart de tour de chaque côté : ce sont les impulsions aux deux bouts de la course, en microsecondes |
 | `PAN_SPEED_DEG_S` | `60` | La caméra est trop lente à suivre, ou l'image devient floue quand elle tourne |
+| `PAN_HOME_AFTER_S` | `2` | La caméra revient trop vite (ou trop tard) à son 0 quand elle a perdu la personne : c'est l'attente, en secondes, après la fin de l'intrusion |
+| `PAN_PATROL_DEG` | `30` | La ronde est trop large ou trop étroite : la caméra va de 0 à +30°, puis -30°, et ainsi de suite. `0` : pas de ronde, elle reste à son 0 |
+| `PAN_PATROL_SPEED_DEG_S` | `8` | La ronde est trop lente, ou l'image est floue pendant la ronde |
 | `CAMERA_FOV_DEG` | `60` | Le bonhomme du jumeau n'est pas du bon côté quand la personne est au bord de l'image : c'est l'angle de champ horizontal de la webcam |
 
 ### L'écran de statut

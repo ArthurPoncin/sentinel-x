@@ -249,8 +249,8 @@ class Standing:
         return [person(0.5 + math.tan(math.radians(off_axis)) / (2 * math.tan(math.radians(self.fov / 2))))]
 
 
-def make_turning(posted, clock, bearing, **options):
-    source, follower, drive = FakeSource(), PanFollower(), FakeDrive()
+def make_turning(posted, clock, bearing, follower=None, **options):
+    source, follower, drive = FakeSource(), follower or PanFollower(), FakeDrive()
     room = Standing(follower, bearing)
     return source, room, drive, make_vision(source, room, posted, clock, pan=(follower, drive), **options)
 
@@ -298,6 +298,21 @@ def test_the_camera_waits_where_it_lost_them_then_goes_back_to_rest_once_the_int
     for _ in range(8):
         frame_at(vision, source, clock)
     assert drive.turned[-1] == 0
+
+
+def test_the_camera_on_patrol_finds_someone_out_of_its_image_and_turns_to_them(clock, posted):
+    # 50 degrees to the right: out of its 60-degree image while it rests.
+    follower = PanFollower(patrol=30, patrol_speed=10)
+    source, room, drive, vision = make_turning(posted, clock, bearing=50.0, follower=follower)
+    for _ in range(15):
+        frame_at(vision, source, clock)
+    assert posted == [] and 0 < drive.turned[-1] < 20
+    for _ in range(25):
+        frame_at(vision, source, clock)
+    assert posted and {a["state"] for a in posted} == {"raised"}
+    # Seen from where the patrol had taken it, and followed beyond its patrol.
+    assert 20 < posted[0]["detail"]["pan"] < 30
+    assert 46 <= drive.turned[-1] <= 50
 
 
 def test_health_and_the_feed_say_how_far_the_camera_is_turned(clock, posted):
