@@ -33,8 +33,9 @@ trap 'rm -rf "$work"' EXIT
 ca="$work/ca.crt"
 
 step "1. Le certificat de l'équipe, pris sur le Pi ($pi_ip)"
-scp -q "$pi_user@$pi_ip:$pi_dir/infra/secrets/ca.crt" "$ca" \
-  || die "le Pi ne répond pas : connecte ce PC au Wi-Fi SentinelX-$table, puis relance."
+# ssh's errors are kept, for scp to say why it fails: its warnings only are left out.
+scp -o LogLevel=ERROR "$pi_user@$pi_ip:$pi_dir/infra/secrets/ca.crt" "$ca" \
+  || die "scp n'a pas pris le certificat sur le Pi, sa raison est juste au-dessus. « timed out » : ce PC n'est pas sur le Wi-Fi SentinelX-$table, ou le Pi est durci et SSH ne répond qu'au PC Opérateur. « Permission denied » : l'utilisateur du Pi ou son mot de passe. « No such file » : le dépôt n'est pas dans ~/$pi_dir sur le Pi, donne son dossier en 3e argument."
 openssl x509 -in "$ca" -noout -subject 2>/dev/null | grep -q "$ca_name" \
   || die "ce fichier n'est pas le certificat de l'équipe ($ca_name)."
 ok "$(openssl x509 -in "$ca" -noout -fingerprint -sha256 | sed 's/.*=/empreinte SHA-256 /')"

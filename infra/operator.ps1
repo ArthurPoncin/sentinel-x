@@ -23,8 +23,9 @@ if (-not $admin.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
 Write-Host "`n1. Le certificat de l'equipe, pris sur le Pi ($piIp)"
 $ca = Join-Path $env:TEMP "sentinel-x-ca.crt"
-scp -q "${PiUser}@${piIp}:$PiDir/infra/secrets/ca.crt" $ca
-if ($LASTEXITCODE -ne 0) { throw "Le Pi ne repond pas : connecte ce PC au Wi-Fi SentinelX-$Table, puis relance." }
+# ssh's errors are kept, for scp to say why it fails: its warnings only are left out.
+scp -o LogLevel=ERROR "${PiUser}@${piIp}:$PiDir/infra/secrets/ca.crt" $ca
+if ($LASTEXITCODE -ne 0) { throw "scp n'a pas pris le certificat sur le Pi, sa raison est juste au-dessus. 'timed out' : ce PC n'est pas sur le Wi-Fi SentinelX-$Table, ou le Pi est durci et SSH ne repond qu'au PC Operateur. 'Permission denied' : l'utilisateur du Pi ou son mot de passe. 'No such file' : le depot n'est pas dans ~/$PiDir sur le Pi, donne son dossier en 3e argument." }
 $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 $ca
 if ($cert.Subject -notmatch [regex]::Escape($caName)) { throw "Ce fichier n'est pas le certificat de l'equipe ($caName)." }
 Write-Host "  empreinte SHA-1 $($cert.Thumbprint)"
