@@ -175,6 +175,14 @@ def test_its_patrol_keeps_to_its_travel():
     assert min(angles) == pytest.approx(-10) and max(angles) == pytest.approx(30)
 
 
+@pytest.mark.parametrize("low, high, ends", [(0, 90, (0, 30)), (-90, 0, (-30, 0))])
+def test_patrols_on_one_side_when_it_rests_at_an_end_of_its_travel(low, high, ends):
+    follower = PanFollower(low=low, high=high, patrol=30, patrol_speed=10)
+    follower.rest(0.0)
+    angles = idle(follower, 0.0, 10.0)
+    assert (min(angles), max(angles)) == pytest.approx(ends)
+
+
 def test_turns_to_an_intruder_seen_on_patrol_and_patrols_afresh_after():
     follower = PanFollower(patrol=30, patrol_speed=10, home_after=1)
     idle(follower, 0.0, 2.0)

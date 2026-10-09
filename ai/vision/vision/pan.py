@@ -43,8 +43,9 @@ class PanFollower:
     - with no intrusion (`rest`), it stays where it is for `home_after` seconds (someone lost may come
       back into its image), then goes back to where it rests, at `home_speed`;
     - and once there, with `patrol` degrees, it looks around for intruders: from `patrol` degrees to the
-      left to as many to the right and back again, slowly, at `patrol_speed`, so that what it frames does
-      not blur and the motor does not work for nothing. With 0, it stays where it rests.
+      left to as many to the right and back again, no further than its travel, slowly, at `patrol_speed`,
+      so that what it frames does not blur and the motor does not work for nothing. With 0, it stays
+      where it rests.
 
     It remembers where it was for the last `memory` seconds: an image is always a little old, and the
     angle that goes with it is the one of when it was taken (`angle_at`).
@@ -82,8 +83,8 @@ class PanFollower:
         self._speed, self._home_speed = speed, home_speed
         self._deadband, self._gain, self._memory = deadband, gain, memory
         self._home_after, self._patrol_speed = home_after, patrol_speed
-        # Its patrol, within its travel: none when either end is where it rests.
-        self._patrol = (max(-patrol, low), min(patrol, high)) if patrol > 0 and low < 0 < high else None
+        # Its patrol, within its travel: on one side only when where it rests is an end of it.
+        self._patrol = (max(-patrol, low), min(patrol, high)) if patrol > 0 else None
         self._idle_since: float | None = None  # since when there is no intrusion, None during one
         self._patrolling = False  # it is back where it rests, and looks around from there
         self._angle = 0.0  # how far it is turned
