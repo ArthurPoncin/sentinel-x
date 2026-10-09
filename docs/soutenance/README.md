@@ -45,6 +45,23 @@ gh pr list --state merged --limit 500 --json number --jq length
 gh issue list --state closed --limit 500 --json number --jq length
 ```
 
+L'image du titre, [`../twin/outpost-alone.png`](../twin/outpost-alone.png), est le Twin seul : `/twin?capture` dans une fenêtre de 1240 × 1080, Status nominal, puis le noir du fond rendu transparent, pour que seul ce qui est éclairé se pose sur la page. Si le Twin change d'ici vendredi, refaire la capture, puis :
+
+```python
+import numpy as np
+from PIL import Image
+
+rgb = np.asarray(Image.open('capture.png').convert('RGB')).astype(np.float32)
+alpha = np.clip(rgb.max(axis=2) / 64, 0, 1)  # opaque dès qu'un canal atteint 64, transparent au noir
+colour = np.where(alpha[..., None] > 0, rgb / np.maximum(alpha, 1 / 255)[..., None], 0)
+height, width = alpha.shape
+y, x = np.mgrid[0:height, 0:width]
+radius = np.hypot((x - width / 2) / (width / 2), (y - height / 2) / (height / 2))
+alpha *= np.clip((1 - radius) / 0.15, 0, 1)  # plus rien au bord du cadre
+rgba = np.dstack([np.clip(colour, 0, 255), alpha * 255]).round().astype(np.uint8)
+Image.fromarray(rgba, 'RGBA').save('docs/twin/outpost-alone.png', optimize=True)
+```
+
 La mesure de la vision (10,6 ms par image) est celle du PC, dans [`../../ai/README.md`](../../ai/README.md#performance-on-the-pi-4--benchmark-monday) : une fois le benchmark fait sur le Pi 4 (#46), mettre son chiffre à la place, diapositive 9.
 
 ## Le fichier à déposer
