@@ -122,9 +122,86 @@ def test_the_way_home_is_taken_at_its_speed_and_ends_where_it_rests():
     assert all(abs(later - earlier) <= 3 + 1e-9 for earlier, later in zip([45.0, *way], way))
 
 
+def idle(follower: PanFollower, start: float, seconds: float, every: float = 0.1) -> list[float]:
+    """An inference every `every` seconds with no intrusion: how far the camera is turned at each."""
+    return [follower.rest(start + i * every) for i in range(1, round(seconds / every) + 1)]
+
+
+def test_waits_where_it_lost_them_for_a_while_before_going_back_to_where_it_rests():
+    follower = PanFollower(speed=60, home_speed=30, home_after=2)
+    follow(follower, 45.0, 0.0, 3.0)
+    turned = follower.angle
+    # 2 s where it is: they may come back into its image.
+    follower.rest(3.0)
+    assert [follower.step(3.0 + i * 0.1) for i in range(1, 21)] == [turned] * 20
+    assert follower.step(6.0) == pytest.approx(turned - 30)
+    assert follower.step(10.0) == 0
+
+
+def test_once_back_where_it_rests_it_patrols_slowly_from_one_side_to_the_other():
+    follower = PanFollower(patrol=30, patrol_speed=10)
+    follower.rest(0.0)
+    angles = idle(follower, 0.0, 15.0)
+    # Right first, 30 degrees in 3 s, then all the way left in 6 s, then right again.
+    assert angles[29] == pytest.approx(30)
+    assert angles[89] == pytest.approx(-30)
+    assert angles[-1] == pytest.approx(30)
+    assert min(angles) == pytest.approx(-30) and max(angles) == pytest.approx(30)
+    assert all(abs(later - earlier) <= 1 + 1e-9 for earlier, later in zip(angles, angles[1:]))
+
+
+def test_patrols_between_inferences_too():
+    follower = PanFollower(patrol=30, patrol_speed=10)
+    follower.rest(0.0)
+    angles = [follower.step(i * 0.5) for i in range(1, 25)]
+    assert angles[5] == pytest.approx(30) and angles[17] == pytest.approx(-30)
+
+
+def test_goes_back_to_where_it_rests_before_it_patrols():
+    follower = PanFollower(home_speed=30, patrol=30, patrol_speed=10)
+    follow(follower, -60.0, 0.0, 3.0)
+    assert follower.angle < -50
+    angles = idle(follower, 3.0, 5.0)
+    back = next(i for i, angle in enumerate(angles) if angle == 0)
+    assert angles[:back] == sorted(angles[:back])
+    # From there, slowly to the right.
+    assert 0 < angles[back + 10] <= 10 + 1e-9
+
+
+def test_its_patrol_keeps_to_its_travel():
+    follower = PanFollower(low=-10, high=90, patrol=30, patrol_speed=10)
+    follower.rest(0.0)
+    angles = idle(follower, 0.0, 10.0)
+    assert min(angles) == pytest.approx(-10) and max(angles) == pytest.approx(30)
+
+
+@pytest.mark.parametrize("low, high, ends", [(0, 90, (0, 30)), (-90, 0, (-30, 0))])
+def test_patrols_on_one_side_when_it_rests_at_an_end_of_its_travel(low, high, ends):
+    follower = PanFollower(low=low, high=high, patrol=30, patrol_speed=10)
+    follower.rest(0.0)
+    angles = idle(follower, 0.0, 10.0)
+    assert (min(angles), max(angles)) == pytest.approx(ends)
+
+
+def test_turns_to_an_intruder_seen_on_patrol_and_patrols_afresh_after():
+    follower = PanFollower(patrol=30, patrol_speed=10, home_after=1)
+    idle(follower, 0.0, 2.0)
+    assert 0 < follower.angle < 30
+    assert 46 <= follow(follower, 50.0, 2.0, 2.0)[-1] <= 50
+    # Waits, goes back, then patrols again from where it rests: to the right first.
+    angles = idle(follower, 4.0, 5.0)
+    assert angles[:10] == [angles[0]] * 10
+    back = angles.index(0)
+    assert angles[:back] == sorted(angles[:back], reverse=True)
+    assert 0 < angles[-1] <= 30 and angles[back:] == sorted(angles[back:])
+
+
 @pytest.mark.parametrize(
     "settings",
     [
+        {"home_after": -1},
+        {"patrol": -5},
+        {"patrol_speed": 0},
         {"low": 10, "high": 90},
         {"low": -90, "high": -10},
         {"low": 0, "high": 0},
@@ -374,6 +451,7 @@ def no_pan_settings(monkeypatch):
     for name in (
         "PAN_PWM_DIR", "PAN_MIN_DEG", "PAN_MAX_DEG", "PAN_MIN_US", "PAN_MAX_US", "PAN_INVERT", "PAN_SPEED_DEG_S", "PAN_DEADBAND_DEG",
         "PAN_STEPPER_PINS", "PAN_GPIO_CHIP", "PAN_STEPS_PER_TURN", "PAN_STEP_MS",
+        "PAN_HOME_AFTER_S", "PAN_PATROL_DEG", "PAN_PATROL_SPEED_DEG_S",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -407,6 +485,19 @@ def test_the_stepper_drive_takes_its_pins_and_its_half_steps_from_the_environmen
     assert follower.angle == 0
 
 
+def test_waits_2_s_then_patrols_30_degrees_either_way_at_8_a_second_unless_told_otherwise(monkeypatch):
+    follower, _ = make_pan("stepper")
+    follower.rest(0.0)
+    angles = idle(follower, 0.0, 12.0)
+    assert set(angles[:20]) == {0.0}
+    # Then 30 degrees in 3.75 s, and back.
+    assert angles[19 + 37] < 30 and angles[19 + 38] == 30 and angles[-1] < 30
+    monkeypatch.setenv("PAN_HOME_AFTER_S", "0")
+    monkeypatch.setenv("PAN_PATROL_DEG", "0")
+    follower, _ = make_pan("stepper")
+    assert set(idle(follower, 0.0, 12.0)) == {0.0}
+
+
 @pytest.mark.parametrize(
     "name, variables",
     [
@@ -420,6 +511,9 @@ def test_the_stepper_drive_takes_its_pins_and_its_half_steps_from_the_environmen
         ("pwm", {"PAN_MIN_DEG": "0", "PAN_MAX_DEG": "0"}),
         ("pwm", {"PAN_MIN_US": "2500", "PAN_MAX_US": "500"}),
         ("pwm", {"PAN_SPEED_DEG_S": "0"}),
+        ("pwm", {"PAN_HOME_AFTER_S": "-1"}),
+        ("pwm", {"PAN_PATROL_DEG": "-30"}),
+        ("pwm", {"PAN_PATROL_SPEED_DEG_S": "0"}),
         ("pwm", {"PAN_INVERT": "maybe"}),
     ],
 )
