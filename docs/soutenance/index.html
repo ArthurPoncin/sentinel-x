@@ -279,8 +279,17 @@
 
   /* ---------- 1 · title ---------- */
 
-  .s-title { flex-direction: row; align-items: center; gap: 70px; }
-  .s-title .text { flex: 1.05; }
+  .s-title { flex-direction: row; align-items: center; }
+  .s-title .text { position: relative; }
+  /* The Twin behind the title: alone (/twin?capture) and still. Its black is transparent in the file, so only what is lit shows over the room. */
+  .s-title .scene {
+    position: absolute;
+    top: 30px;
+    left: 916px;
+    width: 1116px;
+    height: 972px;
+    background: url(../twin/outpost-alone.png) center / contain no-repeat;
+  }
   .s-title h1 {
     font-size: 150px;
     line-height: 0.95;
@@ -298,12 +307,6 @@
   @keyframes draw-line { to { width: 240px; } }
   .s-title .pitch { font-size: 34px; line-height: 1.4; color: var(--muted); }
   .s-title .pitch strong { color: var(--foreground); }
-  .s-title .tags { margin-top: 44px; display: flex; gap: 14px; flex-wrap: wrap; }
-  .s-title .visual { flex: 0.95; position: relative; }
-  .s-title .shot { aspect-ratio: 16 / 10; width: 100%; }
-  .kenburns { animation: kenburns 26s ease-in-out infinite alternate; }
-  @keyframes kenburns { from { transform: scale(1); } to { transform: scale(1.09) translate(-1.5%, 1%); } }
-  .s-title .caption { position: absolute; left: 22px; bottom: 20px; z-index: 2; }
   .keys { position: absolute; left: 110px; bottom: 122px; color: #4b5866; font: 500 17px/1 var(--mono); letter-spacing: 0.06em; }
 
   /* ---------- 2 · the three threats ---------- */
@@ -596,6 +599,7 @@
   .twin-view .shot { position: absolute; inset: 0; opacity: 0; transition: opacity 0.9s; }
   .twin-view .shot.on { opacity: 1; }
   .twin-view .shot.on .zoom { animation: kenburns 9s ease-out both; }
+  @keyframes kenburns { from { transform: scale(1); } to { transform: scale(1.09) translate(-1.5%, 1%); } }
   .zoom { position: absolute; inset: 0; background: inherit; }
   .twin-view .frame { position: absolute; inset: -1px; border: 2px solid var(--status); border-radius: 16px; opacity: 0.6; transition: border-color 0.8s; pointer-events: none; box-shadow: 0 0 80px -30px var(--status); }
 
@@ -692,22 +696,14 @@
 
   <!-- 1 ───────────────────────────────────────────────────────── title -->
   <section class="slide s-title" data-title="Sentinel-X" data-part="0" data-t="15" data-status="nominal">
+    <div class="scene" data-a="fade" data-d="200"></div>
     <div class="text">
-      <p class="kicker" data-a>Workshop national EPSI · M1 · Octobre 2026</p>
       <h1 aria-label="Sentinel-X">
         <span>S</span><span>E</span><span>N</span><span>T</span><span>I</span><span>N</span><span>E</span><span>L</span><span class="x">-X</span>
       </h1>
       <p class="sub" data-a data-d="800">L’avant-poste industriel du futur</p>
       <div class="line"></div>
       <p class="pitch" data-a data-d="1200">Un boîtier autonome, <strong>trois menaces neutralisées</strong>.<br />Et un jumeau numérique 3D qui rend tout visible, en direct.</p>
-      <div class="tags" data-a data-d="1500">
-        <span class="tag live">OPTION A · CENTRALISATION EMBARQUÉE</span>
-        <span class="tag">ESP32 + RASPBERRY PI 4</span>
-      </div>
-    </div>
-    <div class="visual" data-a="scale" data-d="500">
-      <div class="shot"><div class="zoom kenburns" data-src="../twin/outpost-nominal.png" data-crop="420,195,1010"></div></div>
-      <span class="tag live caption">DIGITAL TWIN · LIVE</span>
     </div>
     <p class="keys">→ avancer · ← reculer · F plein écran · O plan · N notes · B écran noir</p>
     <aside class="notes">Bonjour, nous sommes le consortium Sentinel-X. Un seul boîtier pour surveiller une micro-centrale isolée, et un jumeau 3D qui montre en direct ce que le boîtier perçoit.</aside>
