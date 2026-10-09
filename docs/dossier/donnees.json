@@ -1,0 +1,57 @@
+{
+  "groupe": "2",
+  "table": "4",
+  "moteur_gpio": "GPIO 6, 13, 19 et 26 (broches 31, 33, 35 et 37)",
+
+  "vision_pi4": [
+    { "detecteur": "TFLite, 4 threads", "p50": "", "p95": "" },
+    { "detecteur": "TFLite, 4 threads, porte de mouvement", "p50": "", "p95": "" }
+  ],
+
+  "predictif_reel": {
+    "plage": "",
+    "vecteurs": "",
+    "niveau_levee": "",
+    "niveau_fin": "",
+    "avance": ""
+  },
+
+  "audit": {
+    "date": "jeudi 8 octobre 2026",
+    "auditeurs": "",
+    "table_auditee": "",
+    "audites_par": "",
+    "synthese": "",
+    "grille": [
+      { "id": "D1", "test": "Ports TCP exposés (nmap -sS -p-)", "attendu": "22, 443 et 8883 seuls, le reste filtré", "observe": "", "verdict": "" },
+      { "id": "D2", "test": "Ports UDP (nmap -sU, scripts dhcp-discover et ntp-info)", "attendu": "67 et 123 seuls", "observe": "", "verdict": "" },
+      { "id": "D3", "test": "Docker ne contourne pas le pare-feu (scan depuis l'Ethernet)", "attendu": "443 et 8883 muets hors du Wi-Fi de la table", "observe": "", "verdict": "" },
+      { "id": "D4", "test": "SSH par mot de passe", "attendu": "refusé, clé ed25519 seule, depuis le PC Opérateur", "observe": "", "verdict": "" },
+      { "id": "D5", "test": "Ports en clair (MQTT 1883, HTTP 80)", "attendu": "aucun, connexion refusée", "observe": "", "verdict": "" },
+      { "id": "D6", "test": "TLS du broker (openssl s_client sur 8883)", "attendu": "TLS 1.2 ou plus, certificat de la CA d'équipe, échec sans la CA", "observe": "", "verdict": "" },
+      { "id": "D7", "test": "TLS du dashboard (openssl s_client sur 443)", "attendu": "HTTPS seul, certificat de la CA d'équipe", "observe": "", "verdict": "" },
+      { "id": "D8", "test": "Capture Wireshark d'une session de démo", "attendu": "ni identifiant ni mesure lisible", "observe": "", "verdict": "" },
+      { "id": "D9", "test": "Broker sans identifiants", "attendu": "connexion refusée", "observe": "", "verdict": "" },
+      { "id": "D10", "test": "ACL : sentinel-01 publie sur command/...", "attendu": "refusé, chaque compte reste dans son périmètre", "observe": "", "verdict": "" },
+      { "id": "D11", "test": "API, WebSocket et caméra sans session", "attendu": "401", "observe": "", "verdict": "" },
+      { "id": "D12", "test": "Jeton vision avec un autre type d'Alerte", "attendu": "403", "observe": "", "verdict": "" },
+      { "id": "D13", "test": "Alerte au champ sentinel ou source mensonger", "attendu": "ignoré, valeurs fixées par l'api", "observe": "", "verdict": "" },
+      { "id": "D14", "test": "Plus de 5 tentatives de connexion par minute", "attendu": "429 avec Retry-After", "observe": "", "verdict": "" },
+      { "id": "D15", "test": "Plus de 2 commandes/s, plus de 20 Alertes/s", "attendu": "rejet au-delà de la limite", "observe": "", "verdict": "" },
+      { "id": "D16", "test": "Message MQTT de plus de 4096 octets, rafale", "attendu": "message rejeté, service maintenu", "observe": "", "verdict": "" },
+      { "id": "D17", "test": "Revue des conteneurs", "attendu": "aucun privilège superflu, socket Docker non monté", "observe": "", "verdict": "" },
+      { "id": "D18", "test": "Revue du point d'accès Wi-Fi", "attendu": "WPA2-PSK, CCMP seul, WPS coupé, pas de NAT", "observe": "", "verdict": "" },
+      { "id": "D19", "test": "Cookie de session et origine du WebSocket", "attendu": "HttpOnly, Secure, SameSite=Strict ; autre origine : 403", "observe": "", "verdict": "" }
+    ],
+    "offensif": [
+      { "etape": "Reconnaissance (Nmap)", "tente": "", "resultat": "" },
+      { "etape": "Transport (TLS, Wireshark)", "tente": "", "resultat": "" },
+      { "etape": "Authentification (broker, API)", "tente": "", "resultat": "" },
+      { "etape": "Résilience (DoS court, cible prévenue)", "tente": "", "resultat": "" },
+      { "etape": "Homme du milieu (avec accord)", "tente": "", "resultat": "" },
+      { "etape": "Restitution à la table auditée", "tente": "", "resultat": "" }
+    ],
+    "constats": [],
+    "conclusion": ""
+  }
+}

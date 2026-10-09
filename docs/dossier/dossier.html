@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Sentinel-X · Dossier d'ingénierie technique</title>
+<!-- The engineering report. Built into a PDF by build.mjs, which fills the tokens in double braces and the
+     SLOT comments from donnees.json, img/ and preuves/. No dash longer than a hyphen anywhere in the text. -->
+<style>
+  :root {
+    --ink: #0f1720; --text: #1f2a35; --muted: #5d6975; --line: #d8dde3; --panel: #f3f5f7;
+    --accent: #0b7a55; --accent-soft: #e2f5ec; --warn: #8a5a00; --warn-soft: #fdf0d9; --ko: #b3261e; --ko-soft: #fde7e5;
+    --night: #020304; --nominal: #3ecf8e; --elevated: #f5a623; --critical: #ff4d4f;
+    --sans: 'Inter', 'Noto Sans', system-ui, 'Segoe UI', sans-serif;
+    --mono: 'JetBrains Mono', 'JetBrainsMono Nerd Font', 'DejaVu Sans Mono', Menlo, Consolas, monospace;
+  }
+  @page {
+    size: A4; margin: 16mm 16mm 19mm;
+    @bottom-left { content: "Sentinel-X · Dossier d'ingénierie technique · {{GROUPE}}"; font-family: 'Inter', sans-serif; font-size: 7.2pt; color: #7b8794; }
+    @bottom-right { content: counter(page) " / " counter(pages); font-family: 'Inter', sans-serif; font-size: 7.2pt; color: #7b8794; }
+  }
+  @page cover { margin: 0; @bottom-left { content: none; } @bottom-right { content: none; } }
+  @page poster { size: A3; margin: 0; @bottom-left { content: none; } @bottom-right { content: none; } }
+
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; font-family: var(--sans); font-size: 9pt; line-height: 1.42; color: var(--text); font-variant-numeric: tabular-nums; }
+  p { margin: 0 0 2.2mm; }
+  b, strong { font-weight: 650; color: var(--ink); }
+  code { font-family: var(--mono); font-size: .88em; color: var(--ink); }
+
+  /* ---------- section heads ---------- */
+  .sec { display: flex; gap: 5mm; align-items: flex-start; border-top: 1.4pt solid var(--ink); padding-top: 3.5mm; margin-bottom: 5mm; break-before: page; }
+  .sec .num { font-size: 30pt; font-weight: 700; line-height: .86; color: var(--accent); min-width: 9mm; }
+  .sec h1 { margin: 0; font-size: 17pt; line-height: 1.1; font-weight: 700; letter-spacing: -.012em; color: var(--ink); }
+  .sec .lead { margin: 1.6mm 0 0; font-size: 9.4pt; color: var(--text); max-width: 158mm; }
+  h2 { margin: 5mm 0 2mm; font-size: 11pt; font-weight: 700; color: var(--ink); break-after: avoid; }
+  h2 .tag { font-weight: 500; color: var(--muted); font-size: 8.4pt; margin-left: 2mm; }
+  .cap { margin: 4mm 0 1.4mm; font-size: 7pt; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); break-after: avoid; }
+  h2.pb { break-before: page; margin-top: 0; }
+  .nb { white-space: nowrap; }
+  .note { font-size: 8pt; color: var(--muted); margin-top: 1.6mm; }
+
+  /* ---------- tables ---------- */
+  table.t { width: 100%; border-collapse: collapse; font-size: 8pt; line-height: 1.34; }
+  .t th { text-align: left; font-size: 6.8pt; font-weight: 650; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); padding: 1.3mm 2mm 1.3mm 0; border-bottom: .9pt solid var(--ink); vertical-align: bottom; }
+  .t td { padding: 1.2mm 2mm 1.2mm 0; border-bottom: .5pt solid var(--line); vertical-align: top; }
+  .t tr { break-inside: avoid; }
+  .t td:first-child { color: var(--ink); font-weight: 550; }
+  .t .grp td { padding: 2.6mm 0 .9mm; font-size: 6.8pt; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); border-bottom: .5pt solid var(--line); break-after: avoid; }
+  .t .id { font-family: var(--mono); font-size: 7.4pt; font-weight: 500; color: var(--muted); white-space: nowrap; }
+  .t .n { font-family: var(--mono); font-size: 7.6pt; white-space: nowrap; }
+  .t .sub { font-weight: 400; color: var(--muted); font-size: 7.4pt; }
+  .t .ref { color: var(--muted); font-size: 7.4pt; white-space: nowrap; }
+  .t.plain td:first-child { font-weight: 400; color: var(--text); }
+
+  .chip { display: inline-block; font-size: 6.6pt; font-weight: 650; letter-spacing: .02em; padding: .25mm 1.7mm; border-radius: 1.6mm; white-space: nowrap; }
+  .chip.ok { color: var(--accent); background: var(--accent-soft); }
+  .chip.warn { color: var(--warn); background: var(--warn-soft); }
+  .chip.ko { color: var(--ko); background: var(--ko-soft); }
+  .chip.todo { color: var(--muted); background: repeating-linear-gradient(135deg, #eceff2 0 1.2mm, #f7f8fa 1.2mm 2.4mm); border: .4pt dashed #aab3bd; }
+
+  /* ---------- key figures ---------- */
+  .figures { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; margin: 4mm 0 0; border-top: .5pt solid var(--line); border-bottom: .5pt solid var(--line); }
+  .figures div { padding: 2.2mm 3mm 2.2mm 0; }
+  .figures div + div { padding-left: 3mm; border-left: .5pt solid var(--line); }
+  .figures b { display: block; font-size: 17pt; line-height: 1.05; font-weight: 700; letter-spacing: -.02em; color: var(--ink); }
+  .figures span { display: block; margin-top: .8mm; font-size: 7.3pt; line-height: 1.3; color: var(--muted); }
+
+  /* ---------- figures ---------- */
+  figure { margin: 0; break-inside: avoid; }
+  figcaption { margin-top: 1.4mm; font-size: 7.4pt; color: var(--muted); }
+  svg.net { display: block; width: 100%; height: auto; }
+  .net text { font-family: var(--sans); font-size: 11.5px; fill: var(--text); }
+  .net .tb { font-weight: 700; fill: var(--ink); font-size: 12.5px; }
+  .net .tn { font-weight: 650; fill: var(--ink); font-size: 11.5px; }
+  .net .tm { font-family: var(--mono); font-size: 10.6px; fill: var(--ink); }
+  .net .ts { font-size: 10.2px; fill: var(--muted); }
+  .net .tz { font-size: 9.6px; font-weight: 700; letter-spacing: .09em; fill: var(--muted); }
+  .net .tl { font-size: 10.8px; font-weight: 650; paint-order: stroke; stroke: #fff; stroke-width: 3.5px; stroke-linejoin: round; }
+  .net .box { fill: #fff; stroke: var(--ink); stroke-width: 1.15; }
+  .net .soft { fill: var(--panel); stroke: #c3cad2; stroke-width: .8; }
+  .net .svc { fill: #fff; stroke: #8b96a2; stroke-width: .8; }
+  .net .zone { fill: #fafbfc; stroke: #8b96a2; stroke-width: 1; stroke-dasharray: 5 4; }
+  .net .fw { fill: var(--accent-soft); stroke: var(--accent); stroke-width: .8; }
+  .net .enc { fill: none; stroke: var(--accent); stroke-width: 2; }
+  .net .adm { fill: none; stroke: #3c4854; stroke-width: 1.2; stroke-dasharray: 5 3; }
+  .net .inf { fill: none; stroke: #8b96a2; stroke-width: 1; }
+  .net .bus { fill: none; stroke: #5d6975; stroke-width: 1; }
+
+  .placeholder { height: 90mm; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.5mm; text-align: center;
+    border: .9pt dashed #9aa5b1; border-radius: 2mm; background: repeating-linear-gradient(135deg, #f6f7f9 0 3mm, #fbfcfd 3mm 6mm); color: var(--muted); }
+  .placeholder b { font-size: 11pt; color: var(--muted); }
+  .placeholder span { font-size: 7.6pt; }
+  img.wiring { display: block; width: 100%; max-height: 98mm; object-fit: contain; border: .5pt solid var(--line); border-radius: 1.5mm; background: #fff; }
+  img.wire { display: block; width: 100%; margin: 0 auto; }
+  .newpage { break-before: page; }
+  figure + figure { margin-top: 4mm; }
+
+  /* ---------- pipelines ---------- */
+  .flow { display: flex; gap: 3.4mm; margin: 1.5mm 0 2mm; break-inside: avoid; }
+  .flow .step { position: relative; flex: 1; padding: 1.6mm 2.2mm; border: .6pt solid #c3cad2; border-radius: 1.4mm; background: var(--panel); font-size: 7.4pt; line-height: 1.32; color: var(--text); }
+  .flow .step b { display: block; font-size: 8pt; margin-bottom: .5mm; }
+  .flow .step.key { background: var(--accent-soft); border-color: var(--accent); }
+  .flow .step.out { background: #fff; border: .9pt solid var(--ink); }
+  .flow .step + .step::before { content: ""; position: absolute; left: -2.9mm; top: 50%; margin-top: -1.3mm; border: 1.3mm solid transparent; border-left-color: #8b96a2; border-right-width: 0; }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 7mm; }
+  dl.frame { display: grid; grid-template-columns: 26mm 1fr; margin: 0; font-size: 8.3pt; border-top: .9pt solid var(--ink); }
+  dl.frame dt, dl.frame dd { margin: 0; padding: 1.4mm 0; border-bottom: .5pt solid var(--line); }
+  dl.frame dt { font-size: 6.8pt; font-weight: 650; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); padding-top: 1.75mm; }
+  .tally { margin-bottom: 1.6mm; }
+  figure.proof { margin-top: 3mm; }
+  figure.proof pre { margin: 1mm 0 0; padding: 2mm 2.5mm; font-family: var(--mono); font-size: 6.3pt; line-height: 1.35; white-space: pre-wrap; word-break: break-word; background: var(--panel); border: .5pt solid var(--line); border-radius: 1.2mm; color: var(--ink); }
+  figure.proof figcaption { margin: 0; }
+
+  /* ---------- cover ---------- */
+  .cover { page: cover; position: relative; width: 210mm; height: 297mm; overflow: hidden; background: var(--night); color: #dfe7ee; break-after: page; }
+  .cover img { position: absolute; left: 0; top: 14mm; width: 210mm; height: 131.25mm; object-fit: cover; }
+  .cover .shade { position: absolute; left: 0; top: 0; width: 210mm; height: 158mm; background: linear-gradient(180deg, var(--night) 0, rgba(2,3,4,0) 14%, rgba(2,3,4,0) 70%, var(--night) 97%); }
+  .cover .top { position: absolute; left: 18mm; right: 18mm; top: 14mm; display: flex; justify-content: space-between; font-size: 7.4pt; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: #94a3b1; }
+  .cover .main { position: absolute; left: 18mm; right: 18mm; top: 160mm; }
+  .cover .wordmark { font-size: 40pt; font-weight: 800; letter-spacing: .16em; line-height: 1; color: #fff; }
+  .cover .wordmark i { font-style: normal; color: var(--nominal); }
+  .cover h1 { margin: 6mm 0 0; font-size: 19pt; font-weight: 500; letter-spacing: -.005em; color: #fff; }
+  .cover .sub { margin: 2.4mm 0 0; font-size: 10pt; color: #94a3b1; }
+  .cover .rule { margin: 10mm 0 7mm; height: 0; border-top: .6pt solid #25313d; }
+  .cover .grid { display: grid; grid-template-columns: 1fr 1.25fr; gap: 14mm; }
+  .cover .label { font-size: 6.8pt; font-weight: 650; letter-spacing: .14em; text-transform: uppercase; color: var(--nominal); margin-bottom: 3mm; }
+  .cover ol, .cover ul { margin: 0; padding: 0; list-style: none; font-size: 9.2pt; line-height: 1.3; }
+  .cover li { display: flex; gap: 3.5mm; padding: 1.5mm 0; border-bottom: .5pt solid #1a242e; color: #dfe7ee; }
+  .cover li span { color: #7d8b99; min-width: 13mm; font-size: 7.6pt; font-weight: 600; letter-spacing: .06em; padding-top: .35mm; }
+  .cover li em { font-style: normal; color: #94a3b1; }
+
+  /* ---------- poster (A3) ---------- */
+  .poster { page: poster; position: relative; width: 297mm; height: 420mm; overflow: hidden; background: var(--night); color: #dfe7ee; break-before: page; }
+  .poster .hero { position: absolute; left: 43.5mm; top: 15mm; width: 210mm; height: 118.1mm; object-fit: cover; }
+  .poster .shade { position: absolute; left: 0; top: 0; width: 297mm; height: 170mm; background: linear-gradient(180deg, var(--night) 0, rgba(2,3,4,0) 12%, rgba(2,3,4,0) 72%, var(--night) 80%); }
+  .poster .top { position: absolute; left: 20mm; right: 20mm; top: 15mm; display: flex; justify-content: space-between; font-size: 9.5pt; font-weight: 600; letter-spacing: .15em; text-transform: uppercase; color: #b9c4cf; }
+  .poster .title { position: absolute; left: 20mm; right: 20mm; top: 128mm; }
+  .poster .wordmark { font-size: 64pt; font-weight: 800; letter-spacing: .15em; line-height: 1; color: #fff; }
+  .poster .wordmark i { font-style: normal; color: var(--nominal); }
+  .poster .tagline { margin-top: 4mm; font-size: 24pt; font-weight: 600; letter-spacing: -.01em; color: #fff; }
+  .poster .pitch { margin-top: 2.5mm; font-size: 13.5pt; line-height: 1.35; color: #a9b6c2; max-width: 215mm; }
+  .poster .cards { position: absolute; left: 20mm; right: 20mm; top: 186mm; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8mm; }
+  .poster .card { border-top: 1.6mm solid var(--c); background: #0c1218; border-radius: 0 0 2mm 2mm; overflow: hidden; }
+  .poster .card img { display: block; width: 100%; aspect-ratio: 3 / 2; object-fit: cover; }
+  .poster .card div { padding: 5mm 5.5mm 6mm; }
+  .poster .card .k { font-size: 8.4pt; font-weight: 700; letter-spacing: .15em; text-transform: uppercase; color: var(--c); }
+  .poster .card h3 { margin: 1.4mm 0 2.2mm; font-size: 17pt; line-height: 1.15; font-weight: 700; color: #fff; }
+  .poster .card p { margin: 0; font-size: 11pt; line-height: 1.42; color: #b9c4cf; }
+  .poster .chain { position: absolute; left: 20mm; right: 20mm; top: 299mm; padding: 6mm 7mm 6.5mm; background: #0d131a; border-top: 1.6mm solid var(--nominal); border-radius: 0 0 2mm 2mm; }
+  .poster .chain .k { font-size: 8.4pt; font-weight: 700; letter-spacing: .15em; text-transform: uppercase; color: var(--nominal); }
+  .poster .chain h3 { margin: 1.4mm 0 4.5mm; font-size: 17pt; font-weight: 700; color: #fff; }
+  .poster .links { display: grid; grid-template-columns: 1fr 34mm 1.5fr 34mm 1fr; align-items: center; }
+  .poster .node { padding: 3.6mm 4mm; border: .7pt solid #2b3a48; border-radius: 1.6mm; background: #111a23; }
+  .poster .node b { display: block; font-size: 12.5pt; color: #fff; }
+  .poster .node span { display: block; margin-top: .8mm; font-size: 9.4pt; line-height: 1.35; color: #a9b6c2; }
+  .poster .wire { position: relative; height: 0; border-top: 1.1pt solid var(--nominal); text-align: center; }
+  .poster .wire::after { content: ""; position: absolute; right: -.3mm; top: -1.75mm; border: 1.5mm solid transparent; border-left: 2.4mm solid var(--nominal); border-right-width: 0; }
+  .poster .wire b { position: absolute; left: 0; right: 0; bottom: 1.6mm; font-size: 9.6pt; font-weight: 700; color: var(--nominal); }
+  .poster .wire span { position: absolute; left: 0; right: 0; top: 1.8mm; font-size: 8.2pt; color: #8fa0af; }
+  .poster .nums { position: absolute; left: 20mm; right: 20mm; top: 370mm; display: grid; grid-template-columns: repeat(5, 1fr); }
+  .poster .nums div { padding: 0 5mm; border-left: .6pt solid #25313d; }
+  .poster .nums div:first-child { padding-left: 0; border-left: 0; }
+  .poster .nums b { display: block; font-size: 32pt; white-space: nowrap; line-height: 1; font-weight: 700; letter-spacing: -.02em; color: #fff; }
+  .poster .nums span { display: block; margin-top: 1.6mm; font-size: 9.2pt; line-height: 1.32; color: #a9b6c2; }
+  .poster .foot { position: absolute; left: 20mm; right: 20mm; bottom: 12mm; display: flex; justify-content: space-between; padding-top: 3.5mm; border-top: .6pt solid #25313d; font-size: 9pt; color: #8fa0af; }
+  .poster .foot b { color: #dfe7ee; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════ Couverture ═══ -->
+<section class="cover">
+  <img src="img/couverture.jpg" alt="">
+  <div class="shade"></div>
+  <div class="top"><span>Mission Sentinel-X</span><span>Workshop national Bac+4 · EPSI · Octobre 2026</span></div>
+  <div class="main">
+    <div class="wordmark">SENTINEL<i>-X</i></div>
+    <h1>Dossier d'ingénierie technique</h1>
+    <p class="sub">{{GROUPE}} · Option A, centralisation embarquée sur Raspberry Pi</p>
+    <div class="rule"></div>
+    <div class="grid">
+      <div>
+        <div class="label">Contenu</div>
+        <ol>
+          <li><span>1</span>Schéma réseau</li>
+          <li><span>2</span>Schéma de câblage électronique</li>
+          <li><span>3</span>Matrice de sécurité</li>
+          <li><span>4</span>Documentation de l'IA</li>
+          <li><span>5</span>Rapport d'audit post-pentest</li>
+          <li><span>Annexe</span>Poster A3</li>
+        </ol>
+      </div>
+      <div>
+        <div class="label">Équipe</div>
+        <ul>
+          <li><span>DEV</span><div>Arthur <em>· API, jumeau numérique, services IA</em></div></li>
+          <li><span>DEV</span><div>Amen <em>· Dashboard, vue Opérateur</em></div></li>
+          <li><span>DEV</span><div>Nathan <em>· Firmware ESP32, installation du Pi</em></div></li>
+          <li><span>INFRA</span><div>Safi <em>· Infrastructure, réseau, cybersécurité</em></div></li>
+          <li><span>INFRA</span><div>Florent <em>· Infrastructure, réseau, cybersécurité</em></div></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ Le système en bref ═══ -->
+<header class="sec" style="break-before: auto">
+  <div class="num">0</div>
+  <div>
+    <h1>Le système en bref</h1>
+    <p class="lead">Sentinel-X protège une micro-centrale isolée contre trois menaces : gaz et surchauffe, intrusion physique, attaque réseau. Un seul boîtier réunit le <b>Sentinel</b> (ESP32 et ses sondes) et le <b>Command Post</b> (Raspberry Pi 4, le « PC Serveur Local » du sujet). Le PC de l'Opérateur n'apporte qu'un navigateur.</p>
+  </div>
+</header>
+
+<div class="figures">
+  <div><b>1 s</b><span>entre deux mesures envoyées par le Sentinel</span></div>
+  <div><b>2</b><span>ports de service ouverts à la table : 443 et 8883</span></div>
+  <div><b>TLS 1.2+</b><span>sur tout flux qui quitte une machine</span></div>
+  <div><b>6</b><span>conteneurs, tous non root et en lecture seule</span></div>
+  <div><b>1&nbsp;483</b><span>tests automatisés, rejoués à chaque pull request</span></div>
+</div>
+
+<h2>Réponse au sujet</h2>
+<table class="t plain">
+  <thead><tr><th style="width:36%">Exigence du sujet</th><th>Réponse de l'équipe</th><th style="width:15%">Où</th></tr></thead>
+  <tbody>
+    <tr class="grp"><td colspan="3">DEV · Conception et développement</td></tr>
+    <tr><td>Micrologiciel C++, capteurs cadencés, payloads</td><td>Firmware C++ (PlatformIO) : un instantané JSON par seconde, Alertes à hystérésis, Alarme autonome</td><td class="ref"><code>firmware/</code></td></tr>
+    <tr><td>Affichage local du statut</td><td>Écran HDMI du Command Post (écart 3)</td><td class="ref"><code>infra/screen.py</code></td></tr>
+    <tr><td>API REST ou WebSocket</td><td>API Node.js (Fastify) : REST, WebSocket, <code>POST /api/v1/alerts</code></td><td class="ref"><code>backend/</code></td></tr>
+    <tr><td>Dashboard : courbes, statut, retour webcam</td><td>React : jumeau 3D, courbes, Status, caméra, rejeu d'incident</td><td class="ref"><code>dashboard/</code></td></tr>
+    <tr><td>Commande à distance des actionneurs</td><td>Commande de l'Alarme : API, puis MQTTS, puis ESP32</td><td class="ref"><code>backend/</code></td></tr>
+    <tr class="grp"><td colspan="3">IA · Intelligence artificielle et data</td></tr>
+    <tr><td>Vision : présence humaine en temps réel</td><td>Service <code>vision</code> : EfficientDet-Lite0 (TFLite), classe personne</td><td class="ref">section 4</td></tr>
+    <tr><td>Maintenance prédictive sans seuil statique</td><td>Service <code>predictive</code> : Isolation Forest, niveaux appris</td><td class="ref">section 4</td></tr>
+    <tr><td>Images 640 × 480, moins de 100 ms par trame</td><td>Capture en 640 × 480, modèle en 320 × 320, banc de mesure</td><td class="ref">section 4</td></tr>
+    <tr class="grp"><td colspan="3">INFRA · Réseau et systèmes</td></tr>
+    <tr><td>Stack Docker-Compose : base, API, broker</td><td>6 services, redémarrage automatique, historique SQLite</td><td class="ref"><code>docker-compose.yml</code></td></tr>
+    <tr><td>Point d'accès Wi-Fi dédié, adressage, isolation</td><td>Sous-réseau propre à la table, sans route vers l'extérieur</td><td class="ref">section 1</td></tr>
+    <tr><td>Monitoring et MCO</td><td>Écran de statut, santé Docker, rotation des logs, <code>docker stats</code></td><td class="ref"><code>infra/</code></td></tr>
+    <tr class="grp"><td colspan="3">CYBER · Cybersécurité</td></tr>
+    <tr><td>Chiffrement de bout en bout, de l'ESP à la stack</td><td>MQTTS (TLS 1.2 minimum), CA de l'équipe ; HTTPS côté Opérateur</td><td class="ref">section 3</td></tr>
+    <tr><td>Durcissement du serveur</td><td>SSH par clé, pare-feu, ports Docker filtrés, services coupés</td><td class="ref">section 3</td></tr>
+    <tr><td>Audit de sécurité et pentest croisé</td><td>Grille de 19 tests, audit d'une table consentante</td><td class="ref">section 5</td></tr>
+  </tbody>
+</table>
+
+<h2>Écarts au sujet</h2>
+<table class="t">
+  <thead><tr><th style="width:4%"></th><th style="width:33%">Écart</th><th>Justification</th></tr></thead>
+  <tbody>
+    <tr><td class="id">1</td><td>ESP32 à la place de l'ESP8266</td><td>Même famille, même chaîne d'outils (Arduino, PlatformIO). Assez de mémoire pour le TLS obligatoire, et plusieurs entrées analogiques contre une seule, limitée à 1 V.</td></tr>
+    <tr><td class="id">2</td><td>Raspberry Pi 4 à la place du Pi 5</td><td>Matériel disponible. Inférence plus lente : modèle léger et leviers de la section 4.</td></tr>
+    <tr><td class="id">3</td><td>Écran HDMI sur le Pi à la place de l'OLED sur le microcontrôleur</td><td>Même statut IP et Wi-Fi, plus l'état du Sentinel, ses mesures, les Alertes et les conteneurs.</td></tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════════════ 1 · Schéma réseau ═══ -->
+<header class="sec">
+  <div class="num">1</div>
+  <div>
+    <h1>Schéma réseau</h1>
+    <p class="lead">Le Command Post est le point d'accès d'un sous-réseau Wi-Fi isolé, propre à la table. Rien ne route vers un autre réseau : ni passerelle, ni DNS, ni NAT.{{NOTE_X}}</p>
+  </div>
+</header>
+
+<figure>
+<svg class="net" viewBox="0 0 900 468" role="img" aria-label="Schéma réseau de la table">
+  <defs>
+    <marker id="a-enc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0b7a55"/></marker>
+    <marker id="a-adm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3c4854"/></marker>
+    <marker id="a-inf" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8b96a2"/></marker>
+  </defs>
+
+  <rect class="zone" x="5" y="5" width="890" height="392" rx="10"/>
+  <text class="tz" x="20" y="27">WI-FI DE LA TABLE</text>
+  <text class="tm" x="136" y="27">SentinelX-{{T}} · 192.168.{{T}}.0/24 · WPA2-PSK (CCMP) · 2,4 GHz, canal 6 · ni DNS, ni passerelle, ni NAT</text>
+
+  <!-- Sentinel -->
+  <rect class="box" x="16" y="150" width="160" height="118" rx="7"/>
+  <text class="tb" x="28" y="172">Sentinel</text>
+  <text x="28" y="189">ESP32 · sentinel-01</text>
+  <text class="tm" x="28" y="207">192.168.{{T}}.10</text>
+  <text class="ts" x="28" y="223">adresse réservée (DHCP)</text>
+  <text class="ts" x="28" y="241">DHT22, MQ-2, PIR, son</text>
+  <text class="ts" x="28" y="256">Alarme : enceinte</text>
+
+  <!-- PC Opérateur -->
+  <rect class="box" x="724" y="150" width="160" height="118" rx="7"/>
+  <text class="tb" x="736" y="172">PC Opérateur</text>
+  <text x="736" y="189">navigateur seulement</text>
+  <text class="tm" x="736" y="207">192.168.{{T}}.100 à .199</text>
+  <text class="ts" x="736" y="223">bail réservé (harden.sh)</text>
+  <text class="ts" x="736" y="241">CA de l'équipe installée</text>
+  <text class="ts" x="736" y="256">aucun service exposé</text>
+
+  <!-- Command Post -->
+  <rect class="box" x="272" y="42" width="356" height="342" rx="8"/>
+  <text class="tb" x="286" y="64">Command Post · Raspberry Pi 4</text>
+  <text class="tm" x="614" y="64" text-anchor="end">192.168.{{T}}.1</text>
+  <text class="ts" x="286" y="82">Services de l'hôte</text>
+  <g>
+    <rect class="svc" x="286" y="88" width="76" height="26" rx="4"/><text x="324" y="105" text-anchor="middle">DHCP 67/udp</text>
+    <rect class="svc" x="370" y="88" width="76" height="26" rx="4"/><text x="408" y="105" text-anchor="middle">NTP 123/udp</text>
+    <rect class="svc" x="454" y="88" width="76" height="26" rx="4"/><text x="492" y="105" text-anchor="middle">AP Wi-Fi</text>
+    <rect class="svc" x="538" y="88" width="76" height="26" rx="4"/><text x="576" y="105" text-anchor="middle">SSH 22/tcp</text>
+  </g>
+  <rect class="fw" x="286" y="122" width="328" height="22" rx="4"/>
+  <text class="tn" x="450" y="137" text-anchor="middle" style="fill:#0b7a55">Pare-feu : UFW (hôte) + DOCKER-USER (conteneurs)</text>
+
+  <rect class="soft" x="286" y="152" width="328" height="176" rx="6"/>
+  <text class="ts" x="296" y="168">Docker Compose · réseau edge : les deux ports publiés</text>
+  <rect class="svc" x="296" y="176" width="130" height="40" rx="5" style="stroke:#0b7a55;stroke-width:1.2"/>
+  <text class="tn" x="306" y="193">mosquitto</text><text class="tm" x="306" y="208">:8883 MQTTS</text>
+  <rect class="svc" x="474" y="176" width="130" height="40" rx="5" style="stroke:#0b7a55;stroke-width:1.2"/>
+  <text class="tn" x="484" y="193">reverse-proxy</text><text class="tm" x="484" y="208">:443 HTTPS, WSS</text>
+
+  <path class="bus" d="M331.5,240 H568.5 M361,216 V240 M539,216 V240 M331.5,240 V262 M410.5,240 V262 M489.5,240 V262 M568.5,240 V262"/>
+  <text class="ts" x="450" y="234" text-anchor="middle">réseau internal, sans sortie</text>
+  <g>
+    <rect class="svc" x="296" y="262" width="71" height="44" rx="5"/><text class="tn" x="331.5" y="280" text-anchor="middle">api</text><text class="ts" x="331.5" y="295" text-anchor="middle">REST · WS</text>
+    <rect class="svc" x="375" y="262" width="71" height="44" rx="5"/><text class="tn" x="410.5" y="280" text-anchor="middle">dashboard</text><text class="ts" x="410.5" y="295" text-anchor="middle">jumeau 3D</text>
+    <rect class="svc" x="454" y="262" width="71" height="44" rx="5"/><text class="tn" x="489.5" y="280" text-anchor="middle">vision</text><text class="ts" x="489.5" y="295" text-anchor="middle">TFLite</text>
+    <rect class="svc" x="533" y="262" width="71" height="44" rx="5"/><text class="tn" x="568.5" y="280" text-anchor="middle">predictive</text><text class="ts" x="568.5" y="295" text-anchor="middle">Isol. Forest</text>
+  </g>
+  <text class="ts" x="296" y="321">historique SQLite et modèle prédictif sur volumes</text>
+
+  <g>
+    <rect class="svc" x="286" y="340" width="104" height="26" rx="4"/><text x="338" y="357" text-anchor="middle">Webcam USB</text>
+    <rect class="svc" x="398" y="340" width="104" height="26" rx="4"/><text x="450" y="357" text-anchor="middle">Moteur pas-à-pas</text>
+    <rect class="svc" x="510" y="340" width="104" height="26" rx="4"/><text x="562" y="357" text-anchor="middle">Écran HDMI</text>
+  </g>
+
+  <!-- Flows -->
+  <path class="enc" d="M176,196 H294" marker-end="url(#a-enc)"/>
+  <text class="tl" x="224" y="187" text-anchor="middle" style="fill:#0b7a55">MQTTS 8883</text>
+  <text class="ts" x="224" y="212" text-anchor="middle">TLS 1.2 minimum</text>
+
+  <path class="enc" d="M724,196 H606" marker-end="url(#a-enc)"/>
+  <text class="tl" x="676" y="187" text-anchor="middle" style="fill:#0b7a55">HTTPS, WSS 443</text>
+  <text class="ts" x="676" y="212" text-anchor="middle">TLS 1.2 minimum</text>
+
+  <path class="adm" d="M804,150 V101 H616" marker-end="url(#a-adm)"/>
+  <text class="tl" x="716" y="95" text-anchor="middle" style="fill:#3c4854">SSH 22 · clé ed25519</text>
+
+  <path class="inf" d="M96,150 V101 H284" marker-end="url(#a-inf)"/>
+  <text class="tl" x="184" y="95" text-anchor="middle" style="fill:#5d6975">DHCP 67 · NTP 123</text>
+
+  <!-- Ethernet -->
+  <path class="inf" d="M450,384 V424"/>
+  <path d="M444,400 L456,412 M456,400 L444,412" stroke="#b3261e" stroke-width="2" fill="none"/>
+  <rect class="soft" x="300" y="424" width="300" height="40" rx="6"/>
+  <text class="tn" x="450" y="440" text-anchor="middle">eth0 · Ethernet : installation et mises à jour</text>
+  <text class="ts" x="450" y="455" text-anchor="middle">aucun service ouvert, ni passerelle ni NAT vers la table</text>
+
+  <!-- Legend -->
+  <path class="enc" d="M640,432 H672"/><text class="ts" x="680" y="435.5">flux chiffré et authentifié (TLS)</text>
+  <path class="adm" d="M640,446 H672"/><text class="ts" x="680" y="449.5">administration</text>
+  <path class="inf" d="M640,460 H672"/><text class="ts" x="680" y="463.5">service d'infrastructure</text>
+  <text class="ts" x="16" y="435.5">Isolation entre tables :</text>
+  <text class="ts" x="16" y="449.5">un SSID, une phrase de passe et</text>
+  <text class="ts" x="16" y="463.5">un sous-réseau par table.</text>
+</svg>
+</figure>
+
+<div class="cap">Plan d'adressage · masque 255.255.255.0 · bail DHCP de 12 h</div>
+<table class="t">
+  <thead><tr><th style="width:26%">Hôte</th><th style="width:24%">Adresse</th><th style="width:25%">Attribution</th><th>Rôle</th></tr></thead>
+  <tbody>
+    <tr><td>Command Post (Raspberry Pi 4)</td><td class="n">192.168.{{T}}.1</td><td>statique, interface <code>wlan0</code></td><td>point d'accès, DHCP, heure, stack Docker</td></tr>
+    <tr><td>Sentinel (ESP32, <code>sentinel-01</code>)</td><td class="n">192.168.{{T}}.10</td><td>réservée par nom d'hôte</td><td>sondes et Alarme</td></tr>
+    <tr><td>PC Opérateur</td><td class="n">192.168.{{T}}.100 à .199</td><td>DHCP, bail réservé par adresse MAC</td><td>navigateur, SSH d'administration</td></tr>
+  </tbody>
+</table>
+
+<div class="cap">Matrice des flux</div>
+<table class="t">
+  <thead><tr><th style="width:17%">De</th><th style="width:14%">Vers</th><th style="width:15%">Protocole, port</th><th style="width:31%">Protection</th><th>Contenu</th></tr></thead>
+  <tbody>
+    <tr><td>Sentinel</td><td><code>mosquitto</code></td><td>MQTTS 8883/tcp</td><td>TLS 1.2 minimum, CA de l'équipe vérifiée par l'ESP32 ; compte <code>sentinel-01</code> et ACL</td><td>télémétrie et Alertes ; en retour, commandes de l'Alarme</td></tr>
+    <tr><td>PC Opérateur</td><td><code>reverse-proxy</code></td><td>HTTPS, WSS 443/tcp</td><td>TLS 1.2 minimum, CA de l'équipe ; session Opérateur</td><td>dashboard, API, temps réel, caméra</td></tr>
+    <tr><td>PC Opérateur</td><td>hôte (sshd)</td><td>SSH 22/tcp</td><td>clé ed25519, un seul compte, cette seule adresse</td><td>administration</td></tr>
+    <tr><td><code>api</code>, <code>predictive</code>, écran de statut</td><td><code>mosquitto</code></td><td>MQTTS 8883/tcp</td><td>TLS, CA vérifiée ; un compte et une ACL par client</td><td>lecture ; l'<code>api</code> publie les commandes</td></tr>
+    <tr><td><code>vision</code>, <code>predictive</code></td><td><code>api</code></td><td>HTTP 8080, interne</td><td>réseau Docker sans sortie, même hôte ; un jeton par service</td><td><code>POST /api/v1/alerts</code></td></tr>
+    <tr><td><code>reverse-proxy</code></td><td><code>api</code>, <code>dashboard</code>, <code>vision</code></td><td>HTTP, interne</td><td>session vérifiée par l'<code>api</code> avant le flux caméra</td><td>routage de <code>/api</code>, <code>/ws</code>, <code>/camera</code></td></tr>
+    <tr><td>Sentinel, PC Opérateur</td><td>hôte</td><td>DHCP 67/udp, NTP 123/udp</td><td>services d'infrastructure, sans donnée métier</td><td>adresses, heure qui date chaque mesure</td></tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════════════ 2 · Câblage ═══ -->
+<header class="sec">
+  <div class="num">2</div>
+  <div>
+    <h1>Schéma de câblage électronique</h1>
+    <p class="lead">Le Sentinel est un ESP32 DevKitC V4 (38 broches) qui porte les sondes et l'Alarme. La webcam, son moteur et l'écran sont reliés au Raspberry Pi 4. Les broches sont celles de <code>firmware/include/pins.h</code>.</p>
+  </div>
+</header>
+
+<figure>
+  <!--SLOT:cablage-->
+</figure>
+
+<div class="cap">Sentinel · ESP32</div>
+<table class="t">
+  <thead><tr><th style="width:20%">Composant</th><th style="width:17%">Rôle</th><th style="width:20%">Signal</th><th>Montage</th></tr></thead>
+  <tbody>
+    <tr><td>DHT22</td><td>température, humidité</td><td>DATA sur GPIO 4</td><td>résistance de tirage de 10 kΩ vers 3V3</td></tr>
+    <tr><td>MQ-2</td><td>gaz, fumées</td><td>AO sur GPIO 34 (ADC1)</td><td>chauffage en 5 V ; pont diviseur 10 kΩ / 20 kΩ pour que la sortie reste sous 3,3 V</td></tr>
+    <tr><td>PIR HC-SR501</td><td>présence</td><td>OUT sur GPIO 27</td><td>sortie déjà en 3,3 V</td></tr>
+    <tr><td>CZN-15E</td><td>niveau sonore</td><td>DO sur GPIO 26</td><td>sortie numérique, seuil réglé au potentiomètre du module</td></tr>
+    <tr><td>Enceinte 4 à 8 Ω</td><td>Alarme (sirène)</td><td>GPIO 25</td><td>entre la broche et la masse, à travers 100 Ω : environ 30 mA, ce qu'une broche peut fournir ; jamais sur le 5 V</td></tr>
+  </tbody>
+</table>
+<p class="note">Les sondes analogiques sont sur l'ADC1 : l'ADC2 est indisponible quand le Wi-Fi est actif.</p>
+
+<!--SLOT:cablage_pi-->
+<div class="cap">Command Post · Raspberry Pi 4</div>
+<table class="t">
+  <thead><tr><th style="width:30%">Périphérique</th><th style="width:42%">Liaison</th><th>Rôle</th></tr></thead>
+  <tbody>
+    <tr><td>Webcam USB</td><td>port USB</td><td>image du service <code>vision</code></td></tr>
+    <tr><td>Moteur pas-à-pas 28BYJ-48 (unipolaire, 5 fils) et carte driver ULN2003</td><td>entrées IN1 à IN4 de la carte sur {{MOTEUR_GPIO}} ; IN5 à IN7 non utilisées ; carte alimentée par le 5 V du Pi (broche 4, masse en broche 39), environ 200 mA</td><td>oriente la webcam vers la personne suivie</td></tr>
+    <tr><td>Écran HDMI 800 × 480</td><td>micro-HDMI</td><td>écran de statut</td></tr>
+    <tr><td>ESP32</td><td>USB</td><td>flash du firmware, moniteur série</td></tr>
+    <tr><td>Alimentation</td><td>bloc USB-C officiel 5,1 V / 3 A</td><td>Raspberry Pi 4</td></tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════════════ 3 · Sécurité ═══ -->
+<header class="sec">
+  <div class="num">3</div>
+  <div>
+    <h1>Matrice de sécurité</h1>
+    <p class="lead">Tout flux qui quitte une machine est chiffré et authentifié, et le serveur n'expose que ce dont la table a besoin. La dernière colonne renvoie aux tests D1 à D19 de la grille d'audit (section 5).</p>
+  </div>
+</header>
+
+<table class="t">
+  <thead><tr><th style="width:24%">Mesure</th><th>Mise en œuvre</th><th style="width:12%">Test</th></tr></thead>
+  <tbody>
+    <tr class="grp"><td colspan="3">Chiffrement des flux (TLS)</td></tr>
+    <tr><td>MQTT chiffré seulement</td><td>Un seul listener, MQTTS sur 8883, <code>tls_version tlsv1.2</code> ; aucun port 1883</td><td class="ref">D5, D6, D8</td></tr>
+    <tr><td>HTTPS seulement</td><td>Caddy, TLS 1.2 minimum, en-tête HSTS ; aucun port 80</td><td class="ref">D5, D7, D8</td></tr>
+    <tr><td>CA de l'équipe</td><td>Autorité de certification ECDSA P-256 créée sur le Pi (<code>infra/setup.sh</code>). Certificats : broker (<code>IP:192.168.{{T}}.1</code>, <code>DNS:mosquitto</code>) et proxy (adresse du Pi, <code>sentinel-x.local</code>)</td><td class="ref">D6, D7</td></tr>
+    <tr><td>Serveur vérifié par le client</td><td>ESP32 : <code>setCACert</code>, jamais <code>setInsecure()</code>. Services et écran de statut : CA imposée. PC Opérateur : CA installée par <code>infra/operator.sh</code></td><td class="ref">D6, étape 5</td></tr>
+
+    <tr class="grp"><td colspan="3">Authentification et autorisations</td></tr>
+    <tr><td>Broker fermé aux anonymes</td><td><code>allow_anonymous false</code> ; un compte par client (<code>sentinel-01</code>, <code>api</code>, <code>predictive</code>, <code>screen</code>), mots de passe aléatoires de 192 bits, fichier haché</td><td class="ref">D9</td></tr>
+    <tr><td>Moindre privilège MQTT</td><td>ACL par compte : le Sentinel n'écrit que sa télémétrie et ses Alertes, ne lit que ses commandes</td><td class="ref">D10</td></tr>
+    <tr><td>Services IA</td><td>Un jeton de 256 bits par service, limité à son type d'Alerte ; l'<code>api</code> fixe elle-même la source</td><td class="ref">D12, D13</td></tr>
+    <tr><td>Session Opérateur</td><td>Mot de passe de 12 caractères ou plus, haché scrypt ; cookie <code>HttpOnly; Secure; SameSite=Strict</code> de 12 h ; origine vérifiée sur le WebSocket</td><td class="ref">D11, D19</td></tr>
+    <tr><td>Entrées non fiables</td><td>Chaque corps validé contre le schéma (champs inconnus refusés, 16 Ko au plus) ; l'identité du Sentinel vient du topic, pas du message</td><td class="ref">D13</td></tr>
+
+    <tr class="grp"><td colspan="3">Durcissement du serveur (hardening) · cyber/harden.sh</td></tr>
+    <tr><td>SSH</td><td>Clé ed25519 seulement ; mot de passe et root refusés ; un seul compte ; depuis le PC Opérateur seulement</td><td class="ref">D4</td></tr>
+    <tr><td>Pare-feu de l'hôte</td><td>UFW : tout entrant refusé, sauf sur <code>wlan0</code> 22/tcp (PC Opérateur), 67/udp et 123/udp</td><td class="ref">D1, D2</td></tr>
+    <tr><td>Ports publiés par Docker</td><td>Docker contourne UFW : la chaîne <code>SENTINEL-X</code>, appelée depuis <code>DOCKER-USER</code>, n'ouvre 443 et 8883 qu'au Wi-Fi de la table, et une unité systemd la remet à chaque démarrage</td><td class="ref">D3</td></tr>
+    <tr><td>Services inutiles</td><td><code>bluetooth</code>, <code>hciuart</code>, <code>avahi-daemon</code>, <code>triggerhappy</code>, <code>ModemManager</code> coupés</td><td class="ref">checklist</td></tr>
+    <tr><td>Wi-Fi de la table</td><td>WPA2-PSK, CCMP seulement, phrase de passe aléatoire de 24 caractères ; ni passerelle ni NAT</td><td class="ref">D18</td></tr>
+
+    <tr class="grp"><td colspan="3">Isolation des conteneurs Docker</td></tr>
+    <tr><td>Privilèges</td><td>Chaque conteneur : utilisateur non root, lecture seule, <code>cap_drop: ALL</code>, <code>no-new-privileges</code>. Aucun <code>privileged</code>, socket Docker jamais monté</td><td class="ref">D17</td></tr>
+    <tr><td>Réseau</td><td><code>api</code>, <code>dashboard</code>, <code>vision</code>, <code>predictive</code> sur un réseau Docker <code>internal</code> sans sortie ; seuls le proxy et le broker publient un port</td><td class="ref">D1, D17</td></tr>
+    <tr><td>Périphériques</td><td>La webcam est passée à <code>vision</code> par son seul nœud <code>/dev</code>, par le groupe <code>video</code></td><td class="ref">D17</td></tr>
+
+    <tr class="grp"><td colspan="3">Déni de service et secrets</td></tr>
+    <tr><td>Limites de débit</td><td>Connexion : 5 par minute et par adresse. Commandes : 2 par seconde. Alertes : 20 par seconde et par jeton. Au-delà : <code>429</code></td><td class="ref">D14, D15</td></tr>
+    <tr><td>Inondation MQTT</td><td><code>max_packet_size 4096</code>, broker sans persistance, logs en rotation (10 Mo × 3 par conteneur) : la carte SD ne se remplit pas</td><td class="ref">D16</td></tr>
+    <tr><td>Secrets hors du dépôt</td><td>Générés sur le Pi dans <code>infra/secrets/</code> (ignoré par git, droits 600). La CI refuse tout fichier secret suivi</td><td class="ref">CI</td></tr>
+  </tbody>
+</table>
+
+<h2>Preuves du durcissement <span class="tag">relevées sur le Command Post, depuis le PC Opérateur</span></h2>
+<!--SLOT:preuves-->
+
+<!-- ═══════════════════════════════════════════════ 4 · IA ═══ -->
+<header class="sec">
+  <div class="num">4</div>
+  <div>
+    <h1>Documentation de l'IA</h1>
+    <p class="lead">Deux services Python en conteneur sur le Command Post. Chacun publie ses Alertes par <code>POST /api/v1/alerts</code> avec son propre jeton ; 437 tests automatisés les couvrent, sans matériel.</p>
+  </div>
+</header>
+
+<h2>4.1 Vision : détection d'intrusion <span class="tag">service vision · ai/vision/</span></h2>
+<div class="flow">
+  <div class="step"><b>Webcam USB</b>Capture OpenCV, image ramenée à <span class="nb">640 × 480</span></div>
+  <div class="step"><b>Porte de mouvement</b>Optionnelle : épargne le modèle quand rien ne bouge</div>
+  <div class="step key"><b>EfficientDet-Lite0</b>TFLite, entrée <span class="nb">320 × 320</span>, classe personne, score de 0,5 ou plus</div>
+  <div class="step"><b>Suivi</b>Une personne suivie, la plus proche ; jusqu'à 4 autres signalées</div>
+  <div class="step out"><b>Alerte intrusion</b>Position, taille, confiance, angle de la caméra</div>
+</div>
+<table class="t">
+  <tbody>
+    <tr><td style="width:19%">Modèle</td><td>EfficientDet-Lite0 (COCO, Apache 2.0), adapté de <code>automaticdai/rpi-object-detection</code> (MIT), TensorFlow Lite sur 4 threads. Poids téléchargés à la construction de l'image, sha256 vérifié.</td></tr>
+    <tr><td>Cycle de l'Alerte</td><td>Levée après 2 inférences de suite avec une personne (sévérité critique), mise à jour au plus toutes les 500 ms sous le même identifiant, fin après 3 s sans personne.</td></tr>
+    <tr><td>Suivi par la caméra</td><td>Le moteur pas-à-pas garde la personne suivie au centre de l'image ; sans intrusion, il balaie 30° de chaque côté. L'angle part dans chaque Alerte et le jumeau numérique place l'intrus sur le site.</td></tr>
+    <tr><td>Retour visuel, repli</td><td>Flux MJPEG annoté à 15 images par seconde. Repli autorisé par le sujet : mouvement OpenCV seul (<code>DETECTOR=motion</code>).</td></tr>
+  </tbody>
+</table>
+
+<div class="cap">Performance · exigence : 640 × 480, moins de 100 ms par trame · outil : python -m vision.bench</div>
+<table class="t">
+  <thead><tr><th style="width:26%">Machine</th><th>Détecteur</th><th style="width:30%">Inférence p50 / p95 (ms par image)</th></tr></thead>
+  <tbody>
+    <tr><td>PC de développement <span class="sub">(4 vCPU)</span></td><td>TFLite, 4 threads</td><td class="n">10,6 / 13,1</td></tr>
+    <tr><td></td><td>TFLite, 4 threads, porte de mouvement</td><td class="n">12,2 / 15,0</td></tr>
+    <tr><td></td><td>Mouvement seul (repli)</td><td class="n">2,1 / 3,0</td></tr>
+    <!--SLOT:vision_pi4-->
+  </tbody>
+</table>
+<p class="note">Leviers si le Pi 4 dépasse 100 ms : une inférence toutes les deux ou trois images (<code>INFER_EVERY</code>), porte de mouvement, repli OpenCV.</p>
+
+<h2>4.2 Maintenance prédictive <span class="tag">service predictive · ai/predictive/</span></h2>
+<div class="flow">
+  <div class="step"><b>Télémétrie</b>Abonné MQTTS au broker, un instantané par seconde</div>
+  <div class="step"><b>Fenêtre glissante</b>120 s, au moins 20 instantanés sur 60 s</div>
+  <div class="step"><b>7 variables</b>Valeurs, pentes et moyennes de la fenêtre</div>
+  <div class="step key"><b>Isolation Forest</b>Normalisation puis 200 arbres : score d'anomalie de 0 à 1</div>
+  <div class="step out"><b>Alerte predictive</b>Score et variables en cause</div>
+</div>
+<div class="cols">
+  <table class="t">
+    <thead><tr><th style="width:44%">Variables</th><th>Sens</th></tr></thead>
+    <tbody>
+      <tr><td><code>temp</code>, <code>humidity</code>, <code>air</code></td><td>dernières mesures</td></tr>
+      <tr><td><code>temp_slope</code>, <code>air_slope</code></td><td>tendance par minute (moindres carrés)</td></tr>
+      <tr><td><code>temp_mean</code>, <code>air_mean</code></td><td>moyennes sur la fenêtre</td></tr>
+    </tbody>
+  </table>
+  <table class="t">
+    <thead><tr><th style="width:34%">Règle</th><th>Valeur</th></tr></thead>
+    <tbody>
+      <tr><td>Niveaux appris</td><td>levée au quantile 0,999, fin au quantile 0,99 des scores d'un nominal tenu à l'écart de l'entraînement</td></tr>
+      <tr><td>Hystérésis</td><td>levée après 5 scores de suite au-dessus, fin après 10 de suite en dessous</td></tr>
+    </tbody>
+  </table>
+</div>
+<p class="note" style="color:var(--text)"><b>Aucun seuil statique.</b> Le modèle apprend le nominal seul, lu dans l'historique de l'<code>api</code> ; les périodes sous Alerte sont écartées, l'entraînement est refusé sous 100 vecteurs.</p>
+
+<div class="cap" style="margin-top:3mm">Validation</div>
+<table class="t">
+  <thead><tr><th style="width:19%">Jeu de données</th><th style="width:24%">Contenu</th><th style="width:8%">Vecteurs</th><th style="width:12%">Levée / fin</th><th>Résultat</th></tr></thead>
+  <tbody>
+    <tr><td>Simulation<br><span class="sub"><code>predictive simulate</code></span></td><td>2 h de nominal synthétique, puis dérive lente chaleur et gaz</td><td class="n">7 140</td><td class="n">0,602 / 0,580</td><td>Alerte 2 min 47 s après le début de la dérive : 43 min 19 s avant le seuil thermique du firmware, 47 min 17 s avant son seuil gaz</td></tr>
+    <!--SLOT:predictif_reel-->
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════════════ 5 · Audit ═══ -->
+<header class="sec">
+  <div class="num">5</div>
+  <div>
+    <h1>Rapport d'audit post-pentest</h1>
+    <p class="lead">Pentest croisé du jeudi : nous vérifions notre Command Post avec une grille de 19 tests, puis nous auditons une table consentante avec la même méthode.</p>
+  </div>
+</header>
+
+<!--SLOT:audit_cadre-->
+
+<h2>5.1 Synthèse</h2>
+<!--SLOT:audit_synthese-->
+
+<h2>5.2 Notre Command Post : grille défensive</h2>
+<table class="t plain">
+  <thead><tr><th style="width:5%"></th><th style="width:34%">Test</th><th style="width:30%">Attendu</th><th>Observé</th><th style="width:12%">Verdict</th></tr></thead>
+  <tbody>
+    <!--SLOT:audit_grille-->
+  </tbody>
+</table>
+
+<h2>5.3 Audit offensif d'une table consentante</h2>
+<table class="t plain">
+  <thead><tr><th style="width:4%"></th><th style="width:28%">Étape</th><th style="width:34%">Ce qui a été tenté</th><th>Résultat</th></tr></thead>
+  <tbody>
+    <!--SLOT:audit_offensif-->
+  </tbody>
+</table>
+
+<h2>5.4 Constats et correctifs</h2>
+<table class="t plain">
+  <thead><tr><th style="width:6%"></th><th style="width:15%">Système</th><th style="width:11%">Criticité</th><th>Constat</th><th style="width:24%">Correctif</th><th style="width:13%">État</th></tr></thead>
+  <tbody>
+    <!--SLOT:audit_constats-->
+  </tbody>
+</table>
+
+<h2>5.5 Conclusion</h2>
+<!--SLOT:audit_conclusion-->
+
+<!-- ═══════════════════════════════════════════════ Annexe · Poster A3 ═══ -->
+<section class="poster">
+  <img class="hero" src="img/poster-site.jpg" alt="">
+  <div class="shade"></div>
+  <div class="top"><span>Mission Sentinel-X · Workshop national Bac+4 · EPSI 2026</span><span>{{GROUPE}}</span></div>
+  <div class="title">
+    <div class="wordmark">SENTINEL<i>-X</i></div>
+    <div class="tagline">La sécurité à la bordure.</div>
+    <div class="pitch">Un boîtier autonome qui surveille, comprend et défend une micro-centrale isolée, là où personne ne peut veiller.</div>
+  </div>
+
+  <div class="cards">
+    <div class="card" style="--c: var(--critical)">
+      <img src="img/poster-gaz.jpg" alt="">
+      <div><span class="k">Détecter</span><h3>Fuite de gaz, surchauffe</h3>
+      <p>Les sondes sont lues chaque seconde. Au seuil critique, la sirène sonne sur place, même serveur coupé.</p></div>
+    </div>
+    <div class="card" style="--c: var(--elevated)">
+      <img src="img/poster-derive.jpg" alt="">
+      <div><span class="k">Anticiper</span><h3>La dérive avant l'incident</h3>
+      <p>Un modèle Isolation Forest apprend le fonctionnement normal et signale une dérive lente bien avant le seuil.</p></div>
+    </div>
+    <div class="card" style="--c: var(--critical)">
+      <img src="img/poster-intrusion.jpg" alt="">
+      <div><span class="k">Repérer</span><h3>Intrusion physique</h3>
+      <p>La caméra reconnaît une personne, la suit, et le jumeau numérique 3D la place sur le site en direct.</p></div>
+    </div>
+  </div>
+
+  <div class="chain">
+    <span class="k">Protéger</span>
+    <h3>Une chaîne chiffrée de la sonde à l'écran</h3>
+    <div class="links">
+      <div class="node"><b>Sentinel</b><span>ESP32, sondes gaz, température, présence et son, sirène</span></div>
+      <div class="wire"><b>MQTTS</b><span>TLS 1.2 minimum</span></div>
+      <div class="node"><b>Command Post</b><span>Raspberry Pi 4 dans le boîtier : broker, API, IA et dashboard dans 6 conteneurs sans privilège</span></div>
+      <div class="wire"><b>HTTPS, WSS</b><span>session Opérateur</span></div>
+      <div class="node"><b>Opérateur</b><span>Jumeau numérique 3D, courbes, caméra, commande de l'alarme</span></div>
+    </div>
+  </div>
+
+  <div class="nums">
+    <div><b>1 s</b><span>entre deux mesures du Sentinel</span></div>
+    <div><b>2</b><span>ports de service ouverts, rien d'autre ne répond</span></div>
+    <div><b>TLS 1.2+</b><span>et une autorité de certification propre à l'équipe</span></div>
+    <div><b>7</b><span>variables pour le modèle prédictif, aucun seuil fixe</span></div>
+    <div><b>1&nbsp;483</b><span>tests automatisés, rejoués à chaque pull request</span></div>
+  </div>
+
+  <div class="foot"><span><b>Arthur · Amen · Nathan · Safi · Florent</b></span><span>Option A : centralisation embarquée sur Raspberry Pi 4</span></div>
+</section>
+
+</body>
+</html>
