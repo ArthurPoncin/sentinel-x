@@ -174,6 +174,7 @@ Two ingress paths feed one Alert pipeline: the Sentinel publishes over MQTTS, th
 | Hand bridge | Node 22, TypeScript, Ultraleap LeapC through FFI | [`leap/`](leap/) |
 | Platform | Docker Compose, Mosquitto, Caddy, NetworkManager, dnsmasq, chrony | [`infra/`](infra/) |
 | Security | OpenSSL team CA, UFW, hardening and audit scripts | [`cyber/`](cyber/) |
+| Enclosures | OpenSCAD, STL for the Creality K2 Plus, no supports | [`enclosure/`](enclosure/) |
 
 ## Security
 
@@ -242,7 +243,7 @@ The dashboard is then on `https://192.168.X.1/`. Step by step, from a blank SD c
 | [`cyber/PENTEST-PLAN.md`](cyber/PENTEST-PLAN.md) | Defensive checklist and offensive audit plan (French) |
 | [`docs/dossier/`](docs/dossier/) and [`docs/soutenance/`](docs/soutenance/) | Sources of the engineering report and of the defence deck (French) |
 
-Each folder has its own README: [`firmware`](firmware/README.md), [`backend`](backend/README.md), [`dashboard`](dashboard/README.md), [`ai`](ai/README.md), [`leap`](leap/README.md), [`infra`](infra/README.md), [`cyber`](cyber/README.md).
+Each folder has its own README: [`firmware`](firmware/README.md), [`backend`](backend/README.md), [`dashboard`](dashboard/README.md), [`ai`](ai/README.md), [`leap`](leap/README.md), [`infra`](infra/README.md), [`cyber`](cyber/README.md), [`enclosure`](enclosure/README.md) (French).
 
 ## Team
 
