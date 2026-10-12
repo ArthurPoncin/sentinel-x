@@ -7,7 +7,7 @@ import type { TelemetryPipeline } from './telemetry.js'
 
 const TOPICS = ['sentinel/+/telemetry', 'sentinel/+/alert']
 
-// What the Sentinel decides alone. The others belong to the AI services, over HTTP.
+// What the Sentinel decides alone. The others belong to the AI services, over HTTP, and to the API itself.
 const SENTINEL_KINDS: readonly AlertKind[] = ['gas', 'thermal', 'presence', 'noise']
 
 type Read<T> = { success: true; data: T } | { success: false; reason: string }

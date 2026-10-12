@@ -100,6 +100,37 @@ describe('contract', () => {
     expect(AlertSchema.safeParse({ ...alert, kind: 'intrusion', detail }).success).toBe(false)
   })
 
+  describe('a cyber Alert, raised by the API on an attack it refuses', () => {
+    const cyber = {
+      ...alert,
+      alert_id: 'cyber-login-9f2c41aa',
+      sentinel: 'command-post',
+      source: 'api',
+      kind: 'cyber',
+      value: 14,
+      detail: { vector: 'login', attempts: 14 },
+    }
+
+    it('accepts the documented one', () => {
+      expect(AlertSchema.parse(cyber)).toEqual(cyber)
+    })
+
+    it.each(['login', 'service-token', 'feed-origin'])('accepts the %s vector', (vector) => {
+      expect(AlertSchema.safeParse({ ...cyber, detail: { ...cyber.detail, vector } }).success).toBe(true)
+    })
+
+    it.each([
+      ['a vector the contract does not know', { vector: 'ssh' }],
+      ['a field the contract does not define', { password: 'hunter2' }],
+      ['no vector', { vector: undefined }],
+      ['no number of attempts', { attempts: undefined }],
+      ['a number of attempts that is not a whole number', { attempts: 2.5 }],
+      ['no attempt at all', { attempts: 0 }],
+    ])('rejects it with %s', (_what, changes) => {
+      expect(AlertSchema.safeParse({ ...cyber, detail: { ...cyber.detail, ...changes } }).success).toBe(false)
+    })
+  })
+
   it.each([
     ['kind', 'flood'],
     ['source', 'drone'],

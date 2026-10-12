@@ -31,10 +31,49 @@ def predictive(**changes):
     return {**alert, **changes}
 
 
+def cyber(**changes):
+    """A brute force on the login, as the api itself raises it: no service posts one."""
+    alert = {
+        "alert_id": "cyber-login-9f2c41aa",
+        "sentinel": "command-post",
+        "source": "api",
+        "kind": "cyber",
+        "severity": "warning",
+        "state": "raised",
+        "value": 14,
+        "detail": {"vector": "login", "attempts": 14},
+        "ts": "2026-10-05T14:23:05Z",
+    }
+    return {**alert, **changes}
+
+
 def test_accepts_the_examples_of_the_architecture():
     assert alert_errors(intrusion()) == []
     assert alert_errors(predictive()) == []
     assert alert_errors(predictive(source="predictive", value=0.91)) == []
+    assert alert_errors(cyber()) == []
+
+
+@pytest.mark.parametrize("vector", ["login", "service-token", "feed-origin"])
+def test_accepts_a_cyber_alert_on_each_vector(vector):
+    assert alert_errors(cyber(detail={"vector": vector, "attempts": 5})) == []
+
+
+@pytest.mark.parametrize(
+    "detail",
+    [
+        {"vector": "ssh", "attempts": 14},
+        {"vector": "login", "attempts": 14, "password": "hunter2"},
+        {"attempts": 14},
+        {"vector": "login"},
+        {"vector": "login", "attempts": 2.5},
+        {"vector": "login", "attempts": 0},
+        {"vector": "login", "attempts": True},
+        {},
+    ],
+)
+def test_refuses_what_the_api_refuses_of_a_cyber_alert(detail):
+    assert alert_errors(cyber(detail=detail)) != []
 
 
 def seen(**changes):

@@ -27,6 +27,7 @@ import {
   type Incidents,
   LoginSchema,
 } from './contract.js'
+import { createCyberWatch } from './cyber-watch.js'
 import type { HistoryRepository } from './history.js'
 import { createHub, type Hub } from './hub.js'
 import { listIncidents, replayIncident } from './incidents.js'
@@ -60,6 +61,8 @@ export interface ServerConfig {
   // The Operator's password hash: a session is required on every other endpoint and on /ws.
   // `false` lets anyone in, for development only.
   operatorAuth: false | { passwordHash: string }
+  // The clock of the rate limits and of the cyber watch, in milliseconds: the tests move it.
+  now?: () => number
 }
 
 const ALERT_BODY_LIMIT = 16 * 1024
@@ -71,7 +74,11 @@ const OPEN_ROUTES = new Set(['/health', '/api/v1/auth/login', '/api/v1/auth/chec
 // A command is a handful of short fields, and the broker takes no packet above 4096 bytes.
 const COMMAND_BODY_LIMIT = 1024
 
-// The one kind each AI service may post. The Sentinel's kinds only come in over MQTT.
+// How often the cyber watch is asked which attacks went quiet.
+const CYBER_SETTLE_MS = 500
+
+// The one kind each AI service may post. The Sentinel's kinds only come in over MQTT, and `cyber`
+// from nowhere: the API raises it itself.
 const KIND_OF_SERVICE: Record<Service, AlertKind> = {
   vision: 'intrusion',
   predictive: 'predictive',
@@ -115,10 +122,14 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
 
   // As in docs/ARCHITECTURE.md: login 5/min per IP, commands 2/s, alerts 20/s per token.
   const limits = {
-    login: createRateLimit(5, 60_000),
-    commands: createRateLimit(2, 1000),
-    alerts: createRateLimit(20, 1000),
+    login: createRateLimit(5, 60_000, config.now),
+    commands: createRateLimit(2, 1000, config.now),
+    alerts: createRateLimit(20, 1000, config.now),
   }
+
+  // The API's own Alerts: it tells the watch what it refuses, and emits what the watch makes of it.
+  const cyber = createCyberWatch(config.now)
+  const emit = (raised: ReturnType<typeof cyber.settle>) => raised.forEach(alerts.accept)
 
   const sessions = createSessions()
   const hasSession = (request: FastifyRequest) =>
@@ -138,12 +149,16 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
   })
 
   app.post('/api/v1/auth/login', { bodyLimit: LOGIN_BODY_LIMIT }, async (request, reply) => {
-    if (!withinLimit(limits.login, request.ip, reply)) return reply
+    if (!withinLimit(limits.login, request.ip, reply)) {
+      emit(cyber.refused('login'))
+      return reply
+    }
     const parsed = LoginSchema.safeParse(request.body)
     if (!parsed.success) return refuse(reply, 400, 'Bad Request', z.prettifyError(parsed.error))
     if (!config.operatorAuth) return reply.code(204).send()
 
     if (!(await verifyPassword(parsed.data.password, config.operatorAuth.passwordHash))) {
+      emit(cyber.refused('login'))
       return refuse(reply, 401, 'Unauthorized', 'Wrong password')
     }
     return reply.code(204).header('set-cookie', sessionCookie(sessions.open())).send()
@@ -236,6 +251,12 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
     }
 
     return reply.code(202).send(relayed.data)
+  })
+
+  // An attack that stops clears on the server's own clock: no request comes to say so.
+  whileRunning(app, () => {
+    const settling = setInterval(() => emit(cyber.settle()), CYBER_SETTLE_MS)
+    return () => clearInterval(settling)
   })
 
   if (config.mockFeed) {

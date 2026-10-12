@@ -2,7 +2,7 @@ import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } fr
 import type { AlertSource } from './contract.js'
 
 // The services that post to POST /api/v1/alerts, each with a bearer token of its own.
-export type Service = Exclude<AlertSource, 'esp32'>
+export type Service = Exclude<AlertSource, 'esp32' | 'api'>
 export type ServiceTokens = Partial<Record<Service, string>>
 
 // Same length whatever the input, so the comparison takes the same time whatever was sent.

@@ -8,10 +8,13 @@ import math
 import re
 from datetime import datetime, timezone
 
-KINDS = ("gas", "thermal", "presence", "noise", "intrusion", "predictive")
+KINDS = ("gas", "thermal", "presence", "noise", "intrusion", "predictive", "cyber")
 SEVERITIES = ("info", "warning", "critical")
 STATES = ("raised", "cleared")
-SOURCES = ("esp32", "vision", "predictive")
+# `api`: the Command Post's own API, the only one to raise `cyber` Alerts. No service posts them.
+SOURCES = ("esp32", "vision", "predictive", "api")
+# The entry point of the API an attack goes for.
+CYBER_VECTORS = ("login", "service-token", "feed-origin")
 
 # zod's z.iso.datetime(): UTC with a `Z`, no offset. Seconds required here, a stricter subset.
 _ISO_UTC = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
@@ -101,6 +104,15 @@ def _detail_errors(kind: str, detail: object) -> list[str]:
             errors.append("detail.anomaly_score: not a number")
         if "drivers" in detail and not (isinstance(drivers, list) and all(isinstance(d, str) for d in drivers)):
             errors.append("detail.drivers: not a list of strings")
+        return errors
+    if kind == "cyber":
+        expected = {"vector", "attempts"}
+        errors = [f"detail.{key}: unknown field" for key in detail.keys() - expected]
+        errors += [f"detail.{key}: missing" for key in sorted(expected - detail.keys())]
+        if "vector" in detail and detail["vector"] not in CYBER_VECTORS:
+            errors.append(f"detail.vector: not one of {', '.join(CYBER_VECTORS)}")
+        if "attempts" in detail and not (_is_id(detail["attempts"]) and detail["attempts"] >= 1):
+            errors.append("detail.attempts: not a whole number, 1 or more")
         return errors
     # The Sentinel's kinds carry no detail.
     return [f"detail.{key}: unknown field" for key in detail]

@@ -109,6 +109,9 @@ def test_only_the_sentinels_own_alerts_exclude(history_db, alert):
         alert("i1", "intrusion", "raised", at(3), source="vision"),
         alert("d1", "predictive", "raised", at(4), source="predictive"),
         alert("g2", "gas", "raised", at(5), sentinel="sentinel-02"),
+        # An attack on the Command Post, raised by the api itself and never cleared.
+        alert("c1", "cyber", "raised", at(6), sentinel="command-post", source="api"),
+        alert("c1", "cyber", "raised", at(7), sentinel="command-post", source="api"),
     )
     [data] = nominal(read_sqlite(history_db(records), moment(0), moment(10))).sentinels
     assert data.excluded == 0 and data.periods == []
