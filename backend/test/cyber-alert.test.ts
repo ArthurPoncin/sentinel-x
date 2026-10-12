@@ -2,8 +2,9 @@ import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { hashPassword } from '../src/auth.js'
 import { type Alert, COMMAND_POST, type Frame, HistorySchema, IncidentsSchema } from '../src/contract.js'
 import { QUIET_MS, THRESHOLD } from '../src/cyber-watch.js'
+import { intrusionAlert, predictiveAlert } from './support/alerts.js'
 import { startBroker } from './support/broker.js'
-import { startServer } from './support/server.js'
+import { startServer, TOKEN } from './support/server.js'
 import type { TestClient } from './support/ws-client.js'
 
 vi.spyOn(console, 'log').mockImplementation(() => {})
@@ -244,5 +245,132 @@ describe('where a brute force comes from', () => {
     for (let tried = 0; tried < THRESHOLD; tried++) await guessFrom(request, '192.168.4.66')
 
     await expect.poll(() => alertsOf(feed).at(-1)?.detail).toMatchObject({ address: HERE })
+  })
+})
+
+describe('an attack on the Alerts entry', () => {
+  it('raises a cyber Alert of its own once the requests without a token, or with an unknown one, reach the threshold', async () => {
+    const { feed, post } = await startOutpost()
+    const body = JSON.stringify(intrusionAlert())
+
+    for (let tried = 0; tried < THRESHOLD - 1; tried++) {
+      expect((await post(body, tried % 2 ? null : 'Bearer not-a-token')).status).toBe(401)
+    }
+    expect(alertsOf(feed)).toEqual([])
+    await post(body, null)
+
+    await vi.waitFor(() => expect(alertsOf(feed)).toHaveLength(1))
+    expect(alertsOf(feed)).toEqual([
+      {
+        alert_id: expect.stringMatching(/^cyber-service-token-/),
+        sentinel: COMMAND_POST,
+        source: 'api',
+        kind: 'cyber',
+        severity: 'warning',
+        state: 'raised',
+        value: THRESHOLD,
+        detail: { vector: 'service-token', attempts: THRESHOLD, address: HERE },
+        ts: new Date(START + 60_000).toISOString(),
+      },
+    ])
+  })
+
+  it('counts a valid token used for a kind that is not its own', async () => {
+    const { feed, postAlert } = await startOutpost()
+
+    for (let tried = 0; tried < THRESHOLD; tried++) {
+      expect((await postAlert(intrusionAlert(), TOKEN.predictive)).status).toBe(403)
+    }
+
+    await vi.waitFor(() => expect(alertsOf(feed)).toHaveLength(1))
+    expect(alertsOf(feed)[0]).toMatchObject({
+      alert_id: expect.stringMatching(/^cyber-service-token-/),
+      state: 'raised',
+      detail: { vector: 'service-token', attempts: THRESHOLD, address: HERE },
+    })
+  })
+})
+
+describe('an attack on the live feed', () => {
+  it('raises a cyber Alert of its own once the openings from a refused origin reach the threshold', async () => {
+    const { connect, feed } = await startOutpost()
+    const open = () => connect({ origin: 'https://evil.example' })
+
+    for (let tried = 0; tried < THRESHOLD - 1; tried++) await expect(open()).rejects.toThrow(/403/)
+    expect(alertsOf(feed)).toEqual([])
+    await expect(open()).rejects.toThrow(/403/)
+
+    await vi.waitFor(() => expect(alertsOf(feed)).toHaveLength(1))
+    expect(alertsOf(feed)[0]).toMatchObject({
+      alert_id: expect.stringMatching(/^cyber-feed-origin-/),
+      kind: 'cyber',
+      severity: 'warning',
+      state: 'raised',
+      value: THRESHOLD,
+      detail: { vector: 'feed-origin', attempts: THRESHOLD, address: HERE },
+    })
+  })
+})
+
+describe('two vectors attacked at once', () => {
+  it('gives two Alerts, each raised again and cleared on its own', async () => {
+    const { clock, feed, guess, post } = await startOutpost()
+    const forge = () => post(JSON.stringify(intrusionAlert()), 'Bearer not-a-token')
+    const told = () => alertsOf(feed).map(({ alert_id, state, value }) => [alert_id.slice(0, -9), state, value])
+
+    await guess(THRESHOLD)
+    for (let tried = 0; tried < THRESHOLD; tried++) await forge()
+    await vi.waitFor(() => expect(alertsOf(feed)).toHaveLength(2))
+    expect(new Set(alertsOf(feed).map((alert) => alert.alert_id)).size).toBe(2)
+
+    // The forged tokens go on, the guesses stop: only the login goes quiet.
+    clock.now += QUIET_MS - 1000
+    await forge()
+    clock.now += 1000
+    await vi.waitFor(() => expect(alertsOf(feed)).toHaveLength(4), { timeout: 3000 })
+    clock.now += QUIET_MS
+    await vi.waitFor(() => expect(alertsOf(feed)).toHaveLength(5), { timeout: 3000 })
+
+    expect(told()).toEqual([
+      ['cyber-login', 'raised', THRESHOLD],
+      ['cyber-service-token', 'raised', THRESHOLD],
+      ['cyber-service-token', 'raised', THRESHOLD + 1],
+      ['cyber-login', 'cleared', THRESHOLD],
+      ['cyber-service-token', 'cleared', THRESHOLD + 1],
+    ])
+    const [login, token, tokenAgain, loginCleared, tokenCleared] = alertsOf(feed)
+    expect([loginCleared?.alert_id, tokenAgain?.alert_id, tokenCleared?.alert_id]).toEqual([
+      login?.alert_id,
+      token?.alert_id,
+      token?.alert_id,
+    ])
+  })
+})
+
+describe('what is no attack', () => {
+  it('counts no request without a session on a protected route: an expired tab sends them', async () => {
+    const { connect, feed, hub, request } = await startOutpost()
+
+    for (let tried = 0; tried < THRESHOLD + 1; tried++) {
+      expect((await request(`/api/v1/history?${new URLSearchParams(DAY)}`)).status).toBe(401)
+      expect((await request('/api/v1/commands', { method: 'POST' })).status).toBe(401)
+      await expect(connect()).rejects.toThrow(/401/)
+    }
+    hub.broadcast(marker)
+
+    await vi.waitFor(() => expect(feed.frames).toMatchObject([{ type: 'status' }, marker]))
+  })
+
+  it('raises nothing when the AI services post their Alerts, however many', async () => {
+    const { feed, postAlert } = await startOutpost()
+
+    for (let posted = 0; posted < THRESHOLD; posted++) {
+      const state = posted % 2 ? 'cleared' : 'raised'
+      expect((await postAlert(intrusionAlert({ state }))).status).toBe(202)
+      expect((await postAlert(predictiveAlert({ state }))).status).toBe(202)
+    }
+
+    await vi.waitFor(() => expect(alertsOf(feed)).toHaveLength(THRESHOLD * 2))
+    expect(alertsOf(feed).map((alert) => alert.kind)).not.toContain('cyber')
   })
 })

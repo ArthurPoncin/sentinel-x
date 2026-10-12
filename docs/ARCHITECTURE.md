@@ -187,7 +187,15 @@ The **single unified Alert schema**, emitted by the Sentinel, by the AI services
 | Cleared | 15 s without a refusal, on the `api`'s own clock, without any request |
 | After a clearing | an attack that resumes opens a new Alert, with another `alert_id` |
 
-Refusals counted today, vector `login`: a wrong password (`401`) and a login past the rate limit (`429`). The vectors `service-token` and `feed-origin` are in the contract; nothing raises them yet.
+Each vector is counted apart and has its own Alert: two attacked at once give two Alerts, each raised again and cleared for itself.
+
+| Vector | Refusals counted |
+|---|---|
+| `login` | a wrong password (`401`) and a login past the rate limit (`429`) |
+| `service-token` | on `POST /api/v1/alerts`: no token or an unknown one (`401`), and a valid token posting a `kind` that is not its own (`403`) |
+| `feed-origin` | an opening of `/ws` from an origin that may not (`403`) |
+
+A request without an Operator session on a protected route is counted for none: a tab whose session expired sends them.
 
 > An **Incident** spans from the first `raised` Alert until every open Alert has `cleared`. `alert_id` is how the time-scrubber groups and replays it.
 
