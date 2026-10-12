@@ -89,10 +89,10 @@ src/
 │   ├── incidents/           # ThreatOverview, IncidentTable, useIncidents() on GET /api/v1/incidents
 │   ├── camera/              # #14 — CameraPanel on /camera, intruder marker from x_norm · #168 — CameraView: the same
 │   │                        # picture with no card around it, for a glass window
-│   ├── windows/             # #168, #169, #171 — the glass windows of the Twin's screen
+│   ├── windows/             # #168, #169, #170, #171 — the glass windows of the Twin's screen
 │   │   ├── components/      # GlassWindows: the bar and the open windows, over the scene
-│   │   ├── hooks/           # useWindows(): the open windows and where to send events
-│   │   ├── utils/           # windowsAfter(windows, event) · WINDOWS, SLOTS, SLOT_PLACE, MAX_WINDOWS · isOpen(windows, id)
+│   │   ├── hooks/           # useWindows(alerts, at): the open windows and where to send events; the Alerts open and close theirs
+│   │   ├── utils/           # windowsAfter(state, event) · WINDOWS, SLOTS, SLOT_PLACE, MAX_WINDOWS, WINDOW_OF, CLOSE_AFTER_MS · isOpen(windows, id)
 │   │   └── index.ts
 │   ├── actuators/           # #14 — ActuatorPanel, POST /api/v1/commands
 │   ├── replay/              # #15 — the time-scrubber and scenario mode
@@ -555,7 +555,7 @@ const shown = player.frames ? stateAfter(player.frames) : liveState   // replaye
 
 ## Glass windows — `features/windows`
 
-On the Twin's screen, windows of glass float beside the Outpost. A bar at the foot of the stage, on the right, opens and closes each.
+On the Twin's screen, windows of glass float beside the Outpost. A bar at the foot of the stage, on the right, opens and closes each, and the one an Alert concerns opens by itself (#170).
 
 | Window | Name (its word for the voice) | What it shows |
 | --- | --- | --- |
@@ -573,7 +573,8 @@ import { IncidentList } from '@/features/replay'
 import { GasCurve, TemperatureCurve, toSeries } from '@/features/telemetry'
 import { GlassWindows, useWindows } from '@/features/windows'
 
-const [windows, send] = useWindows()
+// The Alerts shown open and close their windows: `at` is the replayed instant, or null while live.
+const [windows, send] = useWindows(shown.activeAlerts, player.replay ? player.at : null)
 const series = toSeries(player.frames ?? history)   // what the Twin shows: live, or up to the replayed instant
 <GlassWindows
   windows={windows}
@@ -590,7 +591,18 @@ const series = toSeries(player.frames ?? history)   // what the Twin shows: live
 ```
 
 - **HTML, not 3D.** The windows are elements laid over the canvas and tilted in perspective by CSS (`.glass-windows`, `.glass-window` in `app/styles.css`). Nothing is added to the scene, and they reuse the components there are: the route hands each window its content.
-- **The state** — `windowsAfter(windows, event)` (`utils/windows.ts`), pure and tested. An open window is `{ id, by, since, slot }`: which, opened by whom, since when, in which slot. The events are `open` (with who asks and the instant) and `close`. Opening a window already open gives back the same windows: no second one, and the first keeps its slot. At most `MAX_WINDOWS` (4, one a slot) are open: past that, the one open for the longest gives way and the new one takes its slot. The mouse and the keyboard send these events today; whatever opens or closes a window later sends the same.
+- **The state** — `windowsAfter(state, event)` (`utils/windows.ts`), pure and tested. The state is `{ open, alerted }`: the open windows, and the windows an Alert concerned at the last look. An open window is `{ id, by, since, slot }`: which, opened by whom (`operator` or `alert`), since when, in which slot. The events are `open` (with who asks and the instant), `close`, and `alerts` (the kinds of the active Alerts at an instant). Opening a window already open gives back the same state: no second one, and the first keeps its slot. At most `MAX_WINDOWS` (4, one a slot) are open: past that, the one open for the longest gives way and the new one takes its slot. The mouse, the keyboard and the Alerts send these events today; whatever opens or closes a window later sends the same.
+- **Opened by an Alert (#170)** — `WINDOW_OF` says which window an Alert concerns:
+
+  | Alert | Window |
+  | --- | --- |
+  | `intrusion` | `camera` |
+  | `gas` | `gas` |
+  | `thermal`, `predictive` | `temperature` |
+  | `cyber` | `security` (#171) |
+  | `presence`, `noise` | none |
+
+  The window opens as the Alert is raised, `by: 'alert'`, through the same limit as any other: with four open, the one open for the longest gives way. It closes `CLOSE_AFTER_MS` (5 s) after no Alert concerns it any more (`until` is that instant), and stays if one does again meanwhile. An Alert opens its window as it is raised, not for as long as it lasts: one the Operator closed, or that gave way, stays closed while the Alert goes on, raised again or not, and opens again for the next one. A window the Operator opened is left alone when its Alert clears. An `open` by the Operator on a window an Alert opened makes it the Operator's: it then closes only at the Operator's word. The bar's button closes an open window, whoever opened it, so that `open` comes from the voice once it is there. `useWindows(alerts, at)` sends `alerts` when the active Alerts change; live, a timer sends it again at the instant a window is due to close; in a replay, each replayed second does, so the windows open and close at the replayed instants. Wound back, or a replay started, a window whose Alert is not active at that instant closes within the delay.
 - **The slots** — `SLOTS`, fixed, two to a side, taken a side in turn and the upper ones first: `left-top`, `right-top`, `left-bottom`, `right-bottom` (`SLOT_PLACE` says where each is). Each side is a column (`.glass-column`) against its edge of the stage, under the LIVE label on the left and under the scrubber on the right, down to the caption and the bar: the upper window hangs from its top, the lower one stands on its foot, so two open windows never cover each other. Where the two are taller than the column, what they show gives way: a curve gets shorter (down to 96 px), a list scrolls inside its window; the camera's picture keeps its shape.
 - **At the demo laptop's size** — checked in a browser at 1366 × 768 with the sidebar open, on the mock feed, live and in a replay: the stage is 1126 × 719, each column takes 291 px of it (260 to 551 and 1059 to 1350), and with four windows open none overlaps another, nor the label, the scrubber, the caption or the bar. The Outpost in the middle is not covered.
 - **What they read** — what the Twin shows: the live feed, or the replayed instant during a replay. The curves are then those of the replay up to that instant, and the Alerts those active at it. The Incidents are the time-scrubber's own list (`useIncidentsToReplay`, called once by the route): the Command Post's records, or those this window saw when it cannot be reached.
@@ -600,7 +612,7 @@ const series = toSeries(player.frames ?? history)   // what the Twin shows: live
 - **In a replay** the camera's window says « pas d'image rejouée »: the stream is not recorded, and the camera is not asked. Back to live, the stream is shown again.
 - **Capture mode** — no bar and no window with `?capture`.
 - **Cost** — the glass blurs the scene behind it (`backdrop-filter`), over a canvas redrawn on every frame. Measured on the Iris Xe at 1920 × 1080, production bundle, mock feed, the orbit turning, a still image standing for the stream: the window closed, open, and open on a tinted ground with no blur, in turn within one page, 5 s each. Frame rate uncapped, two series of six turns: 68.1, 82.7 and 70.0 images a second, then 54.7, 57.7 and 54.3. Capped by the screen, eight turns: 42.2, 41.9 and 42.6. The three states are within what two runs of the same state differ by; 11 to 21 other Chromiums shared the GPU, hence the low figures. The blur costs nothing that shows there. That the 60 hold on the demo laptop is still to check on it: should they not, remove `backdrop-filter` and darken the ground of `.glass-window`. Not measured again with four windows open (#169).
-- **Not yet** — the windows an Alert opens (#170), the security one among them, the voice and the hand.
+- **Not yet** — the voice and the hand.
 
 ## Hand control — `features/gestures`
 
