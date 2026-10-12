@@ -9,8 +9,7 @@ parts=(
   "command-post shell"
   "command-post base"
   "command-post bezel"
-  "command-post clamps"
-  "command-post turntable"
+  "command-post tower"
   "sentinel base"
   "sentinel lid"
   "leap-stand stand"
@@ -34,9 +33,9 @@ shot() {  # file part camera png
     -o "apercu/$4.png" "$1.scad" >/dev/null 2>&1
   echo "✓ apercu/$4.png"
 }
-shot command-post assembly "72,66,40,62,0,32,520" poste-de-commande
-shot command-post assembly "72,66,40,62,0,212,520" poste-de-commande-arriere
-shot command-post inside "72,66,20,50,0,212,470" poste-de-commande-interieur
+shot command-post assembly "72,62,92,62,0,32,720" poste-de-commande
+shot command-post assembly "72,62,92,62,0,212,720" poste-de-commande-arriere
+shot command-post inside "72,62,38,52,0,212,520" poste-de-commande-interieur
 shot sentinel assembly "73,75,25,58,0,22,470" sentinel
-shot sentinel inside "73,75,20,55,0,200,440" sentinel-interieur
+shot sentinel inside "73,80,10,18,0,0,420" sentinel-interieur
 shot leap-stand assembly "0,0,6,55,0,25,220" support-leap
