@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Incident, IncidentReplay } from '@/shared/contract'
-import { fetchIncidentReplay, fetchIncidents } from './incidents-client'
+import { fetchIncidentReplay, fetchIncidents, fetchLastClosedIncident } from './incidents-client'
 
 const INCIDENT: Incident = {
   incident_id: 1,
@@ -46,5 +46,29 @@ describe('the Incidents client', () => {
   it('fails on a body outside the contract', async () => {
     answer(200, { incidents: [{ ...INCIDENT, peak: 'severe' }] })
     await expect(fetchIncidents()).rejects.toThrow()
+  })
+})
+
+describe('the last closed Incident', () => {
+  const ONGOING: Incident = { ...INCIDENT, incident_id: 2, start: '2026-10-05T15:00:00Z', end: null, ongoing: true }
+
+  it('is taken from the list the Command Post already gives, not the one still going on', async () => {
+    const fetch = answer(200, { incidents: [INCIDENT, ONGOING] })
+
+    expect(await fetchLastClosedIncident()).toEqual(INCIDENT)
+    expect(fetch.mock.calls.map(([path]) => path)).toEqual(['/api/v1/incidents'])
+  })
+
+  it('is none while no Incident has closed', async () => {
+    answer(200, { incidents: [ONGOING] })
+    expect(await fetchLastClosedIncident()).toBeNull()
+
+    answer(200, { incidents: [] })
+    expect(await fetchLastClosedIncident()).toBeNull()
+  })
+
+  it('fails when the Command Post does not answer', async () => {
+    answer(503, { error: 'Unavailable' })
+    await expect(fetchLastClosedIncident()).rejects.toThrow('GET /api/v1/incidents: 503')
   })
 })

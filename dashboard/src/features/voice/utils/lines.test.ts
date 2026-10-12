@@ -20,6 +20,18 @@ describe('lastLine', () => {
     expect(line('sentinelle lance la sirène', { kind: 'command', command: 'siren' })).toBe(
       '« sentinelle lance la sirène » · commande : déclencher la sirène',
     )
+    expect(line('sentinelle jumeau', { kind: 'command', command: 'twin' })).toBe(
+      '« sentinelle jumeau » · commande : aller au jumeau numérique',
+    )
+    expect(line('sentinelle opérateur', { kind: 'command', command: 'operator' })).toBe(
+      "« sentinelle opérateur » · commande : aller à l'écran opérateur",
+    )
+    expect(line('sentinelle gestes', { kind: 'command', command: 'tutorial' })).toBe(
+      '« sentinelle gestes » · commande : aller au tutoriel des gestes',
+    )
+    expect(line('sentinelle rejoue le dernier incident', { kind: 'command', command: 'replay-last' })).toBe(
+      '« sentinelle rejoue le dernier incident » · commande : rejouer le dernier incident',
+    )
     expect(line('sentinelle', { kind: 'woken' })).toBe('« sentinelle » · mot d\'éveil entendu')
     expect(line('coupe la sirène', { kind: 'ignored' })).toBe('« coupe la sirène » · sans « Sentinelle », rien n\'est fait')
     expect(line('sentinelle coupe la sirène', { kind: 'unsure' })).toBe(

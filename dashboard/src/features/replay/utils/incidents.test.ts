@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Alert, Frame, Incident } from '@/shared/contract'
-import { incidents } from './incidents'
+import { incidents, lastClosed } from './incidents'
 
 const at = (time: string) => `2026-10-05T${time}Z`
 
@@ -159,5 +159,36 @@ describe('incidents', () => {
     expect(incidents([gas({ state: 'cleared', ts: at('14:24:00') }), gas({ ts: at('14:23:00') })])).toMatchObject([
       { start: at('14:23:00'), end: at('14:24:00'), ongoing: false },
     ])
+  })
+})
+
+describe('lastClosed', () => {
+  const incident = (incident_id: number, start: string, end: string | null): Incident => ({
+    incident_id,
+    start: at(start),
+    end: end === null ? null : at(end),
+    ongoing: end === null,
+    alerts: 2,
+    kinds: ['gas'],
+    peak: 'warning',
+  })
+
+  it('is the Incident that closed last', () => {
+    const listed = [incident(1, '14:00:00', '14:01:00'), incident(2, '14:10:00', '14:12:00')]
+
+    expect(lastClosed(listed)?.incident_id).toBe(2)
+    // Whatever the order of the list: the scrubber shows it newest first.
+    expect(lastClosed(listed.toReversed())?.incident_id).toBe(2)
+  })
+
+  it('is never the one still going on', () => {
+    const listed = [incident(1, '14:00:00', '14:01:00'), incident(2, '14:10:00', null)]
+
+    expect(lastClosed(listed)?.incident_id).toBe(1)
+  })
+
+  it('is none when no Incident has closed', () => {
+    expect(lastClosed([])).toBeNull()
+    expect(lastClosed([incident(1, '14:10:00', null)])).toBeNull()
   })
 })

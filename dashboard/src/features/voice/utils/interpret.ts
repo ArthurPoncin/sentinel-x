@@ -14,12 +14,22 @@ export const ASLEEP: Wake = { until: -Infinity }
 // The word a command starts with: the French one, a closed grammar only knows the words of its model.
 export const WAKE_WORD = 'sentinelle'
 
-export type Command = 'siren' | 'siren-off'
+// The screens of the menu, each a command of its own: its name is the way to it.
+export const SCREENS = ['operator', 'twin', 'tutorial'] as const
 
-// Each command, by each way of asking for it.
+export type Screen = (typeof SCREENS)[number]
+
+export type Command = 'siren' | 'siren-off' | Screen | 'replay-last'
+
+// Each command, by each way of asking for it. Every word is one of the model's: the engine drops from its
+// grammar a word it has never heard.
 export const WORDINGS: Readonly<Record<Command, readonly string[]>> = {
   siren: ['déclenche la sirène', 'lance la sirène', 'active la sirène'],
   'siren-off': ['coupe la sirène', 'arrête la sirène', 'stoppe la sirène'],
+  operator: ['opérateur', 'écran opérateur', 'vue opérateur'],
+  twin: ['jumeau', 'jumeau numérique', 'écran jumeau'],
+  tutorial: ['tutoriel', 'tutoriel des gestes', 'gestes'],
+  'replay-last': ['rejoue le dernier incident', 'relance le dernier incident', 'montre le dernier incident'],
 }
 
 // Seconds after the wake word during which a command is taken: the time to say one, and for the engine to be

@@ -1,4 +1,5 @@
 // Public API of the replay feature: import from '@/features/replay', never from its folders.
+export { fetchLastClosedIncident } from './api/incidents-client'
 export { IncidentList } from './components/incident-list'
 export { TimeScrubber, type TimeScrubberProps } from './components/time-scrubber'
 export { type IncidentsToReplay, useIncidentsToReplay } from './hooks/use-incidents-to-replay'

@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { ASLEEP, type Command, GRAMMAR, interpret, THRESHOLD, UNKNOWN, WAKE_WINDOW, WAKE_WORD, WORDINGS } from './interpret'
+import {
+  ASLEEP,
+  type Command,
+  GRAMMAR,
+  interpret,
+  SCREENS,
+  THRESHOLD,
+  UNKNOWN,
+  WAKE_WINDOW,
+  WAKE_WORD,
+  WORDINGS,
+} from './interpret'
 
 // A sentence the engine is sure of.
 const said = (text: string, confidence = 1) => ({ text, confidence })
@@ -89,6 +100,14 @@ describe('interpret', () => {
   it('takes each command by each of its wordings, in one sentence or in two', () => {
     expect(WORDINGS['siren-off']).toEqual(['coupe la sirène', 'arrête la sirène', 'stoppe la sirène'])
     expect(WORDINGS.siren).toEqual(['déclenche la sirène', 'lance la sirène', 'active la sirène'])
+    expect(WORDINGS.operator).toEqual(['opérateur', 'écran opérateur', 'vue opérateur'])
+    expect(WORDINGS.twin).toEqual(['jumeau', 'jumeau numérique', 'écran jumeau'])
+    expect(WORDINGS.tutorial).toEqual(['tutoriel', 'tutoriel des gestes', 'gestes'])
+    expect(WORDINGS['replay-last']).toEqual([
+      'rejoue le dernier incident',
+      'relance le dernier incident',
+      'montre le dernier incident',
+    ])
 
     for (const command of Object.keys(WORDINGS) as Command[]) {
       for (const wording of WORDINGS[command]) {
@@ -99,10 +118,36 @@ describe('interpret', () => {
       }
     }
   })
+
+  it('takes the name of a screen for the way to it, and no more than its name', () => {
+    expect(interpret(ASLEEP, said('sentinelle jumeau'), 10).outcome).toEqual({ kind: 'command', command: 'twin' })
+    expect(interpret(ASLEEP, said('sentinelle opérateur'), 10).outcome).toEqual({ kind: 'command', command: 'operator' })
+
+    // A name without the wake word is a word of a conversation.
+    expect(interpret(ASLEEP, said('jumeau'), 10).outcome).toEqual({ kind: 'ignored' })
+    // Two names are none: which one is meant is not the interpreter's to guess.
+    expect(interpret(ASLEEP, said('sentinelle jumeau opérateur'), 10).outcome).toEqual({ kind: 'unknown' })
+  })
+
+  it('takes the replay of the last Incident whole, not half said', () => {
+    expect(interpret(ASLEEP, said('sentinelle rejoue le dernier incident'), 10).outcome).toEqual({
+      kind: 'command',
+      command: 'replay-last',
+    })
+    expect(interpret(ASLEEP, said('sentinelle rejoue le dernier'), 10).outcome).toEqual({ kind: 'unknown' })
+  })
+
+  it('has no wording that asks for two commands', () => {
+    const wordings = Object.values(WORDINGS).flat()
+
+    expect(new Set(wordings).size).toBe(wordings.length)
+  })
 })
 
 describe('GRAMMAR', () => {
   it('is all the engine may hear: the wake word, each wording, and anything else as unknown', () => {
-    expect(GRAMMAR).toEqual([WAKE_WORD, ...WORDINGS.siren, ...WORDINGS['siren-off'], UNKNOWN])
+    expect(GRAMMAR).toEqual([WAKE_WORD, ...Object.values(WORDINGS).flat(), UNKNOWN])
+    for (const command of SCREENS) expect(GRAMMAR).toEqual(expect.arrayContaining([...WORDINGS[command]]))
+    expect(GRAMMAR).toContain('rejoue le dernier incident')
   })
 })

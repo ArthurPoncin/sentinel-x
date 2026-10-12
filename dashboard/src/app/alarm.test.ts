@@ -63,4 +63,9 @@ describe('a voice command for the Alarm', () => {
   it('has no preset for a gesture that is not about the Alarm', () => {
     expect(presetOfGesture('page-left', '/')).toBeNull()
   })
+
+  it('has no preset for a voice command that is not about the Alarm', () => {
+    expect(presetOfVoice('twin', '/')).toBeNull()
+    expect(presetOfVoice('replay-last', '/')).toBeNull()
+  })
 })
