@@ -1,4 +1,5 @@
 import { NavLink, useLocation } from 'react-router'
+import { useAnnouncements } from '@/features/announcements'
 import { useSignOut } from '@/features/auth'
 import { useHandSwitch } from '@/features/gestures'
 import { type Screen, useVoiceSwitch } from '@/features/voice'
@@ -42,12 +43,14 @@ export function screens(handsOn: boolean) {
 // The side navigation, under the top bar: the two surfaces, the hand control's tutorial while it is on, and
 // the way out. Words, no icons. The top bar's ☰ (or Ctrl+B) folds it away on a wide screen; on a phone it is a
 // drawer that a choice closes. At its foot, the hand control's switch, off until the Operator has a hand
-// sensor on their desk, and the voice control's next to it, off until they want the microphone listened to.
+// sensor on their desk, the voice control's next to it, off until they want the microphone listened to, and
+// the announcements', off until they want the dashboard to talk.
 export function AppSidebar() {
   const { pathname } = useLocation()
   const signOut = useSignOut()
   const hands = useHandSwitch()
   const voice = useVoiceSwitch()
+  const announcements = useAnnouncements()
   const { isMobile, open, setOpenMobile } = useSidebar()
   const close = () => setOpenMobile(false)
 
@@ -81,6 +84,14 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton aria-pressed={voice.enabled} onClick={() => voice.setEnabled(!voice.enabled)}>
               Commande vocale : {voice.enabled ? 'activée' : 'désactivée'}
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              aria-pressed={announcements.enabled}
+              onClick={() => announcements.setEnabled(!announcements.enabled)}
+            >
+              Annonces vocales : {announcements.enabled ? 'activées' : 'désactivées'}
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
