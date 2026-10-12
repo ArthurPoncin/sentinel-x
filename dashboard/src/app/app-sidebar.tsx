@@ -1,6 +1,7 @@
 import { NavLink, useLocation } from 'react-router'
 import { useSignOut } from '@/features/auth'
 import { useHandSwitch } from '@/features/gestures'
+import { useVoiceSwitch } from '@/features/voice'
 import { cn } from '@/shared/lib/utils'
 import {
   Sidebar,
@@ -18,6 +19,11 @@ import {
 // Where the hand control's tutorial is: a screen of its own, there only while the hand control is on.
 export const TUTORIAL = '/gestes'
 
+// Whether the screen at `pathname` is the tutorial, a slash at its end or not: the router shows it for both.
+export function inTutorial(pathname: string): boolean {
+  return pathname.replace(/\/+$/, '') === TUTORIAL
+}
+
 export const NAV = [
   { to: '/', title: 'Operator view', hands: false },
   { to: '/twin', title: 'Digital Twin', hands: false },
@@ -31,12 +37,13 @@ export function screens(handsOn: boolean) {
 
 // The side navigation, under the top bar: the two surfaces, the hand control's tutorial while it is on, and
 // the way out. Words, no icons. The top bar's ☰ (or Ctrl+B) folds it away on a wide screen; on a phone it is a
-// drawer that a choice closes. At its foot, the hand control's switch: off until the Operator has a hand
-// sensor on their desk.
+// drawer that a choice closes. At its foot, the hand control's switch, off until the Operator has a hand
+// sensor on their desk, and the voice control's next to it, off until they want the microphone listened to.
 export function AppSidebar() {
   const { pathname } = useLocation()
   const signOut = useSignOut()
   const hands = useHandSwitch()
+  const voice = useVoiceSwitch()
   const { isMobile, open, setOpenMobile } = useSidebar()
   const close = () => setOpenMobile(false)
 
@@ -65,6 +72,11 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton aria-pressed={hands.enabled} onClick={() => hands.setEnabled(!hands.enabled)}>
               Commande gestuelle : {hands.enabled ? 'activée' : 'désactivée'}
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton aria-pressed={voice.enabled} onClick={() => voice.setEnabled(!voice.enabled)}>
+              Commande vocale : {voice.enabled ? 'activée' : 'désactivée'}
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>

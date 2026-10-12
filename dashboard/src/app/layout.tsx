@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useLocation, useMatches } from 'react-router'
 import { HandHud, useHandSwitch } from '@/features/gestures'
 import { ConnectionIndicator } from '@/features/live-feed'
+import { VoiceHud } from '@/features/voice'
 import { SidebarInset, SidebarProvider, useSidebar } from '@/shared/ui/sidebar'
 import { AppSidebar, TUTORIAL } from './app-sidebar'
 import { layoutMode, sidebarOpenFrom } from './layout-mode'
@@ -8,7 +9,8 @@ import { layoutMode, sidebarOpenFrom } from './layout-mode'
 // The bar the app was born with, across the whole window: the menu button, the brand, the two surfaces, and
 // whether the feed is live. Its words stay in English, as they were. On a phone the two surfaces are in the
 // menu only: the bar keeps the brand and the feed. While the hand control is on, it also says what the hand
-// sensor sees, next to the feed, and has the way to its tutorial.
+// sensor sees, next to the feed, and has the way to its tutorial. While the voice control is on, it says
+// where the ear is and what it last heard.
 function TopBar() {
   const { toggleSidebar, open, openMobile, isMobile } = useSidebar()
   const expanded = isMobile ? openMobile : open
@@ -42,6 +44,9 @@ function TopBar() {
       </nav>
       <span className="ml-auto md:ml-0">
         <HandHud />
+      </span>
+      <span className="min-w-0">
+        <VoiceHud />
       </span>
       <span className="whitespace-nowrap">
         <ConnectionIndicator />

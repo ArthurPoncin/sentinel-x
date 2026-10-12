@@ -363,6 +363,77 @@
   }
 }
 
+/* The voice control's witness, next to the hand's: a dot for where the ear is, and the last sentence heard. */
+.voice-hud {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  margin: -0.3rem 0;
+  padding: 0.2rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgb(19 26 34 / 85%);
+  color: var(--muted-foreground);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  transition:
+    color 0.2s,
+    border-color 0.2s;
+}
+
+.voice-hud-dot {
+  flex: none;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--muted-foreground);
+}
+
+.voice-hud[data-status='listening'] .voice-hud-dot {
+  background: var(--nominal);
+}
+
+.voice-hud[data-status='awake'] {
+  border-color: var(--elevated);
+  color: var(--foreground);
+}
+
+.voice-hud[data-status='awake'] .voice-hud-dot {
+  background: var(--elevated);
+  animation: voice-awake 1s ease-in-out infinite;
+}
+
+.voice-hud-last {
+  overflow: hidden;
+  padding-left: 0.5rem;
+  border-left: 1px solid var(--border);
+  text-overflow: ellipsis;
+}
+
+.voice-hud[data-outcome='command'] .voice-hud-last {
+  color: var(--foreground);
+}
+
+@keyframes voice-awake {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-hud[data-status='awake'] .voice-hud-dot {
+    animation: none;
+  }
+}
+
+/* On a narrow window the last sentence gives way: the dot and the state stay. */
+@media (width < 64rem) {
+  .voice-hud-last {
+    display: none;
+  }
+}
+
 /* What the tutorial's hands of light are shown in: a dark well lit from below, ruled with fine lines as a
    hologram is, and a band of light that goes down it. What is laid over it takes z-index 2. */
 .hologram {

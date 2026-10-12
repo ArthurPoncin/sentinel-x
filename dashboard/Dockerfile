@@ -7,6 +7,13 @@ WORKDIR /app
 COPY backend/src/contract.ts backend/src/contract.ts
 COPY dashboard/package.json dashboard/package-lock.json dashboard/
 RUN cd dashboard && npm ci
+# The voice control's recognition model, a static file of the image: the Operator's browser never fetches it
+# from anywhere else. Checked against its checksum by the script. Before the sources, which do not change it:
+# it is fetched once, not at each build.
+COPY dashboard/scripts/voice-model.sh dashboard/scripts/voice-model.sh
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl unzip \
+  && rm -rf /var/lib/apt/lists/* \
+  && sh dashboard/scripts/voice-model.sh
 COPY dashboard/ dashboard/
 RUN cd dashboard && npm run build
 
