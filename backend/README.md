@@ -8,6 +8,7 @@ The nervous system of the Command Post: ingests from two paths, persists history
 - **Two ingress paths, one pipeline:**
   - Subscribe to **Mosquitto** (`sentinel/<id>/telemetry`, `sentinel/<id>/alert`) over MQTTS, as the `api` MQTT user.
   - Expose **`POST /api/v1/alerts`** (mandatory entry point) — for the `vision` and `predictive` services, on the internal Docker network only.
+- **Raise its own Alerts:** watch what it refuses on the login and raise a `cyber` Alert on a brute force — see [Attack watch](#attack-watch).
 - Normalize both into the unified Alert pipeline → persist to the DB (telemetry + Alert history feeds the time-scrubber and the predictive model).
 - **Recompute `Status`** (`nominal`/`elevated`/`critical`) after every Alert.
 - **WebSocket** feed → live push to the dashboard (`telemetry`, `alert`, `status` frames).
@@ -19,6 +20,7 @@ Rules in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#security-model-bind
 - **Operator session** (`POST /api/v1/auth/login`, password hash in `.env`, cookie `HttpOnly; Secure; SameSite=Strict`) required on every other endpoint, on the WebSocket upgrade (+ `Origin` check) and behind `GET /api/v1/auth/check` (forward-auth for the camera feed).
 - **Never trust the payload:** `sentinel` comes from the MQTT topic, `source` from the channel; strict schema validation, 16 KB body limit.
 - **Rate limits:** login 5/min per IP, commands 2/s, alerts 20/s per token.
+- **Attack watch:** refusals on the login that add up to a brute force raise a `cyber` Alert, which no Sentinel and no service can post.
 
 ## Contract
 Schemas, topics, endpoints, Status derivation: [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#json-schemas-the-contract--lock-monday-change-only-by-team-agreement). Lock Monday with firmware (Sentinel) and AI.
@@ -107,6 +109,29 @@ curl -i -X POST https://192.168.X.1/api/v1/auth/login -H 'content-type: applicat
 - At most 5 logins a minute per address, right password or not: `429` with `Retry-After` past that. Behind the reverse proxy every browser comes from its address, so the limit is the Operator's as a whole.
 - `OPERATOR_AUTH=off` lets anyone in without logging in — every endpoint and `/ws` answer, `auth/check` says `204`. For development on a laptop only.
 
+## Attack watch
+The API is a producer of Alerts too. It counts the requests it refuses on the login, a wrong password (`401`) or a login past the limit (`429`), and makes a `cyber` Alert of them ([`src/cyber-watch.ts`](src/cyber-watch.ts), no dependency on the server, clock injected like the rate limit's).
+
+| Constant | Value | What it sets |
+|---|---|---|
+| `THRESHOLD` | 5 | Refusals within the window that raise the Alert: one mistyped password raises nothing |
+| `WINDOW_MS` | 10 s | The sliding window they are counted in |
+| `QUIET_MS` | 15 s | Without a refusal for this long, the Alert is cleared, on the API's own clock |
+
+```jsonc
+{
+  "alert_id": "cyber-login-9f2c41aa", "sentinel": "command-post", "source": "api",
+  "kind": "cyber", "severity": "warning", "state": "raised", "value": 14,
+  "detail": { "vector": "login", "attempts": 14 },
+  "ts": "2026-10-05T14:23:05Z"
+}
+```
+
+- While the attack goes on, each further refusal raises the Alert again under the same `alert_id`, `value` and `detail.attempts` up to date. An attack that resumes after the clearing gets another `alert_id`.
+- Always `warning`: the `Status` goes to `elevated`, never `critical`, and no command goes to the Sentinel.
+- It goes through the same pipeline as the others: recorded in the history, broadcast, `Status` recomputed, and an Incident opens and closes with it.
+- The watch lives in the process: a restart during an attack leaves its Alert raised in the history, as for any producer that stops before clearing.
+
 ## Mock feed
 `MOCK_FEED=true` plays a scripted scenario in a loop, one tick every `MOCK_FEED_INTERVAL_MS`, for the front-ends to work without a Sentinel, a broker or the AI services. Each tick is a telemetry snapshot, plus the Alerts the producers would send on it. They go through the same pipelines as the real ones: paired by `alert_id`, recorded in the history, broadcast, `Status` recomputed. Switching to the live feed changes nothing on the front.
 
@@ -134,7 +159,7 @@ MQTT_URL=mqtts://192.168.X.1:8883 MQTT_PASSWORD=… MQTT_CA_FILE=/path/to/team-c
 ```
 
 - The payload is the Telemetry snapshot of [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#telemetry-reading-snapshot--sentinelidtelemetry), validated strictly: every Reading present, no unknown field, `ts` in ISO 8601 UTC.
-- An Alert is the Alert of [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#alert--sentinelidalert-and-body-of-post-apiv1alerts), validated just as strictly. Only the kinds the Sentinel decides come in this way: `gas`, `thermal`, `presence`, `noise`. An `intrusion` or `predictive` published there is dropped.
+- An Alert is the Alert of [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#alert--sentinelidalert-and-body-of-post-apiv1alerts), validated just as strictly. Only the kinds the Sentinel decides come in this way: `gas`, `thermal`, `presence`, `noise`. An `intrusion`, `predictive` or `cyber` published there is dropped.
 - `sentinel` is taken from the topic, and an Alert's `source` is always `esp32`. Whatever the payload says there is overwritten, and both may be left out.
 - A payload that does not pass is dropped and logged with the reason (`MQTT: dropped a message on sentinel/sentinel-01/telemetry: … → at readings.air`); the subscription carries on.
 - The host in `MQTT_URL` must be one the broker certificate names (`IP:192.168.X.1` from the table network, `DNS:mosquitto` inside Compose).
@@ -171,7 +196,7 @@ curl -i -X POST http://127.0.0.1:8080/api/v1/alerts -H 'content-type: applicatio
 | `202` | Accepted: every client gets the `alert` frame, then the `status` frame it leads to |
 | `400` | Not an Alert — the `message` names each offending field. Unknown fields are rejected, and `detail` must be the one of its `kind` (`{}` for `gas`, `thermal`, `presence`, `noise`) |
 | `401` | No bearer token, or one no service holds — answered before the body is read, with `WWW-Authenticate: Bearer` |
-| `403` | A service posting a `kind` it does not own: `vision` → `intrusion`, `predictive` → `predictive`. The Sentinel's kinds only come in over MQTT |
+| `403` | A service posting a `kind` it does not own: `vision` → `intrusion`, `predictive` → `predictive`. The Sentinel's kinds only come in over MQTT, and `cyber` is raised by the API alone |
 | `413` | Body above 16 KB |
 | `429` | More than 20 Alerts in a second from this service's token, with `Retry-After` (seconds). The other service is not held back |
 

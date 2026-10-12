@@ -1,4 +1,4 @@
-import type { AlertKind, AlertSource, Severity, StatusLevel } from '@/shared/contract'
+import type { AlertKind, AlertSource, CyberVector, Severity, StatusLevel } from '@/shared/contract'
 
 // What the Operator reads for each contract value, the same on every panel. The UI is in French:
 // the Operator and the jury are.
@@ -9,6 +9,7 @@ export const KIND_LABEL: Record<AlertKind, string> = {
   noise: 'Bruit',
   intrusion: 'Intrusion',
   predictive: 'Dérive prédite',
+  cyber: 'Cyberattaque',
 }
 
 export const SEVERITY_LABEL: Record<Severity, string> = {
@@ -21,6 +22,14 @@ export const SOURCE_LABEL: Record<AlertSource, string> = {
   esp32: 'Sentinel',
   vision: 'IA vision',
   predictive: 'IA prédictive',
+  api: 'Command Post',
+}
+
+// The entry point an attack goes for, as it reads after « sur ».
+export const VECTOR_LABEL: Record<CyberVector, string> = {
+  login: 'le login',
+  'service-token': "l'entrée des Alerts",
+  'feed-origin': 'le flux en direct',
 }
 
 export const STATUS_LABEL: Record<StatusLevel, string> = {

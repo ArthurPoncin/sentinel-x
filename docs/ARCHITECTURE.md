@@ -85,6 +85,7 @@ Each node owns the Alerts it can decide **alone**, so the Sentinel stays autonom
 | `noise` | **Sentinel** | Share of the cycle with sound above the sensor's threshold, with hysteresis |
 | `intrusion` | **Command Post · `vision`** | TFLite person detection on the USB webcam; one Alert however many people it sees, which follows the nearest |
 | `predictive` | **Command Post · `predictive`** | Isolation Forest on temp+air drift |
+| `cyber` | **Command Post · `api`** | The requests the `api` itself refuses on one entry point, once they reach a threshold within a sliding window. Always `warning`: a refused attack is not a compromised site, the Alarm stays silent |
 | *(Status)* | **Command Post · `api`** | Not an Alert — aggregates all active Alerts into the Outpost `Status` |
 
 The Sentinel owns **hysteresis / debounce**: one Alert = one transition (a high/low threshold band, no flapping). It publishes telemetry continuously **and** Alerts on transition.
@@ -97,6 +98,7 @@ Two ingress paths funnel into one Alert pipeline in the `api`:
 - **`vision` / `predictive` → `POST /api/v1/alerts`** (the brief's mandatory JSON entry point), over the **internal Docker network**, with a per-service token.
 - **Broker → `predictive`**: the predictive service subscribes to live telemetry (`sentinel/+/telemetry`) with its own MQTT user, on the same broker reached as `mosquitto:8883` from the internal Docker network.
 - **`api`**: subscribes to MQTT, exposes the endpoints, normalizes both paths into its history (SQLite) + WebSocket → Twin. Recomputes `Status` after every Alert.
+- **`api` → itself**: its own `cyber` Alerts enter the same pipeline from the inside. Neither ingress path takes one: a Sentinel publishing a `cyber` Alert is dropped, a service posting one gets `403`.
 - **Commands**: dashboard → `POST /api/v1/commands` → MQTTS `command/<id>/actuator` → ESP32.
 
 ### MQTT topics
@@ -131,14 +133,14 @@ One publish per cycle (~1–2 s), all current Readings share one timestamp.
 
 ### Alert — `sentinel/<id>/alert` **and** body of `POST /api/v1/alerts`
 
-The **single unified Alert schema**, emitted by the Sentinel and by the AI services.
+The **single unified Alert schema**, emitted by the Sentinel, by the AI services and by the `api` itself.
 
 ```jsonc
 {
   "alert_id": "a1b2c3d4",     // stable id; pairs a raised with its later cleared
-  "sentinel": "sentinel-01",  // the api takes it from the MQTT topic, not from the body
-  "source": "esp32",          // esp32 | vision | predictive — set by the api from the authenticated channel
-  "kind": "gas",              // gas | thermal | presence | noise | intrusion | predictive
+  "sentinel": "sentinel-01",  // the api takes it from the MQTT topic, not from the body; "command-post" on a cyber Alert
+  "source": "esp32",          // esp32 | vision | predictive | api — set by the api from the authenticated channel
+  "kind": "gas",              // gas | thermal | presence | noise | intrusion | predictive | cyber
   "severity": "warning",      // info | warning | critical
   "state": "raised",          // raised | cleared  — the transition (an Alert is a change of state)
   "value": 420,               // triggering measurement (kind-dependent, optional)
@@ -164,18 +166,33 @@ The **single unified Alert schema**, emitted by the Sentinel and by the AI servi
 
 // predictive — the learned-model output, not a static threshold
 "detail": { "anomaly_score": 0.91, "drivers": ["temp_slope", "air_slope"] }
+
+// cyber — the entry point under attack (login | service-token | feed-origin) and how many requests
+// the api refused there since the attack began. `value` repeats `attempts`.
+"detail": { "vector": "login", "attempts": 14 }
 ```
 
 **Intrusion, without the optional fields** — an Alert that carries only `x_norm`, `confidence` and `bbox` is still valid: one intruder, in front of a camera that does not turn, stood just inside the fence. The history recorded before these fields existed replays as it was.
 
 **Predictive `drivers`** — a closed vocabulary, the names of the model's 7 features over its 120 s window: `temp`, `humidity`, `air` (the last Readings), `temp_slope`, `air_slope` (least-squares trend, per minute), `temp_mean`, `air_mean`. Listed: the features furthest from their nominal spread (robust z-score ≥ 3), at most 3, furthest first — or the furthest one alone if none is that far. `anomaly_score` is the Isolation Forest's score, 0–1 (~0.5 for the usual).
 
+**Cyber** — decided by the `api` alone, from what it refuses. An Alert is always `source: "api"`, `severity: "warning"`, and its `sentinel` is the fixed id `command-post`: the attack is on the Command Post, not on a Sentinel.
+
+| Rule | Value |
+|---|---|
+| Raised | 5 refusals on one vector within a sliding 10 s. One mistyped password raises nothing |
+| Raised again | each further refusal, same `alert_id`, `attempts` up to date |
+| Cleared | 15 s without a refusal, on the `api`'s own clock, without any request |
+| After a clearing | an attack that resumes opens a new Alert, with another `alert_id` |
+
+Refusals counted today, vector `login`: a wrong password (`401`) and a login past the rate limit (`429`). The vectors `service-token` and `feed-origin` are in the contract; nothing raises them yet.
+
 > An **Incident** spans from the first `raised` Alert until every open Alert has `cleared`. `alert_id` is how the time-scrubber groups and replays it.
 
 ### `POST /api/v1/alerts`
 
 - **Callers:** the `vision` and `predictive` services only, over the internal Docker network. The reverse proxy does **not** route this path to the table network.
-- **Auth:** `Authorization: Bearer <token>`, one token per service. Each token may post only its own `kind` (`vision` → `intrusion`, `predictive` → `predictive`); the `api` sets `source` from the token.
+- **Auth:** `Authorization: Bearer <token>`, one token per service. Each token may post only its own `kind` (`vision` → `intrusion`, `predictive` → `predictive`); the `api` sets `source` from the token. No token may post a `cyber` Alert.
 - **Body:** one Alert object (schema above), validated strictly: unknown fields rejected, enums enforced, max 16 KB.
 - **Response:** `202 Accepted` (persisted, broadcast over WebSocket, `Status` recomputed) · `400` invalid · `401` missing/bad token · `403` `kind` not allowed for this token · `413` too large · `429` rate-limited.
 
@@ -284,7 +301,11 @@ topic read sentinel/+/telemetry
 topic read sentinel/+/alert
 ```
 
-**Never trust the payload:** the `api` derives `sentinel` from the MQTT topic and `source` from the channel (MQTT → `esp32`, token → `vision` / `predictive`), and validates every body against the schemas above.
+**Never trust the payload:** the `api` derives `sentinel` from the MQTT topic and `source` from the channel (MQTT → `esp32`, token → `vision` / `predictive`), and validates every body against the schemas above. The source `api` is never set from a channel: only the `api` itself raises with it.
+
+### Attack detection
+
+The `api` watches its own refusals and raises a `cyber` Alert when they add up to an attack (rules under [`detail` by kind](#alert--sentinelidalert-and-body-of-post-apiv1alerts)). The Operator sees it like any other Alert: active Alerts, journal, toast, `Status` `elevated`, an Incident in the history. It changes nothing to what is refused: no address is banned, no session closed, no command sent to the Sentinel.
 
 ### Denial of service
 
