@@ -34,7 +34,7 @@ export type WindowName = keyof typeof WINDOW_NAMES
 // A window shown or closed, each a command of its own, and all of them closed at once.
 export type WindowCommand = `show-${WindowName}` | `close-${WindowName}` | 'close-all'
 
-export type Command = 'siren' | 'siren-off' | Screen | 'replay-last' | WindowCommand
+export type Command = 'siren' | 'siren-off' | Screen | 'replay-last' | 'report' | 'silence' | 'speak' | WindowCommand
 
 // The ways of asking for a window, and of sending one away: the name of the window follows.
 export const SHOW = ['affiche', 'ouvre', 'montre'] as const
@@ -61,6 +61,10 @@ export const WORDINGS: Readonly<Record<Command, readonly string[]>> = {
   twin: ['jumeau', 'jumeau numérique', 'écran jumeau'],
   tutorial: ['tutoriel', 'tutoriel des gestes', 'gestes'],
   'replay-last': ['rejoue le dernier incident', 'relance le dernier incident', 'montre le dernier incident'],
+  report: ['rapport', 'fais ton rapport', 'au rapport'],
+  // The announcements, hushed until they are asked for again.
+  silence: ['silence', 'coupe les annonces', 'arrête les annonces'],
+  speak: ['parle', 'reprends les annonces', 'remets les annonces'],
   ...ofWindows((verb, window) => VERBS[verb].map((word) => `${word} ${WINDOW_NAMES[window]}`)),
   'close-all': ['ferme tout', 'cache tout', 'ferme toutes les fenêtres'],
 }

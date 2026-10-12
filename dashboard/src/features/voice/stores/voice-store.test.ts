@@ -1,17 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import type { Failure } from '../api/ear'
 import { type Command, WAKE_WINDOW } from '../utils/interpret'
-import { createVoiceStore, VOICE_OFF } from './voice-store'
+import { createVoiceStore, ECHO_TAIL, type Missed, VOICE_OFF } from './voice-store'
 
 // A store that listens, with what it told of.
 function listening() {
   const store = createVoiceStore()
   const commands: Command[] = []
   const failures: Failure[] = []
+  const missed: Missed[] = []
   store.onCommand((command) => commands.push(command))
   store.onFailure((failure) => failures.push(failure))
+  store.onMissed((miss) => missed.push(miss))
   store.dispatch({ type: 'ear', state: 'listening' }, 0)
-  return { store, commands, failures }
+  return { store, commands, failures, missed }
 }
 
 const heard = (text: string, confidence = 1) => ({ type: 'heard' as const, heard: { text, confidence } })
@@ -120,6 +122,88 @@ describe('the voice store', () => {
     // Switched on again within the wake window: the wake word is to be said again.
     store.dispatch({ type: 'ear', state: 'listening' }, 11)
     store.dispatch(heard('coupe la sirène'), 12)
+    expect(commands).toEqual([])
+  })
+
+  it('tells of what it did not understand and of what it was not sure of, never of a conversation nearby', () => {
+    const { store, missed } = listening()
+
+    store.dispatch(heard('coupe la sirène'), 10)
+    expect(missed).toEqual([])
+
+    store.dispatch(heard('sentinelle la sirène'), 20)
+    expect(missed).toEqual(['unknown'])
+    // Still awake: the command is the Operator's, and the engine doubts it.
+    store.dispatch(heard('coupe la sirène', 0.1), 21)
+    expect(missed).toEqual(['unknown', 'unsure'])
+  })
+
+  it('tells of nothing for a wake word it is not sure of: it may be no one calling', () => {
+    const { store, missed } = listening()
+
+    store.dispatch(heard('sentinelle', 0.1), 10)
+    store.dispatch(heard('sentinelle coupe la sirène', 0.1), 20)
+
+    expect(missed).toEqual([])
+    expect(store.getState().last?.outcome).toEqual({ kind: 'unsure' })
+  })
+
+  it('tells of nothing for a noise in the wake window: there is nothing to answer', () => {
+    const { store, missed } = listening()
+
+    store.dispatch(heard('sentinelle'), 10)
+    store.dispatch(heard('[unk]'), 11)
+    store.dispatch(heard(''), 12)
+
+    expect(missed).toEqual([])
+  })
+
+  it('hears nothing while the dashboard talks: its own sentence is no command', () => {
+    const { store, commands, missed } = listening()
+
+    store.deafen(true, 10)
+    expect(store.deaf(11)).toBe(true)
+    // An announcement with the wake word and a wording in it, as the microphone gives it back.
+    store.dispatch(heard('sentinelle coupe la sirène'), 11)
+    store.dispatch(heard('sentinelle'), 12)
+    store.dispatch(heard('sentinelle [unk]'), 13)
+
+    expect(commands).toEqual([])
+    expect(missed).toEqual([])
+    expect(store.getState()).toEqual({ status: 'listening', last: null })
+  })
+
+  it('stays deaf a short while after the last word, then hears again', () => {
+    const { store, commands } = listening()
+    store.deafen(true, 10)
+    store.deafen(false, 14)
+
+    // The end of the sentence, which the engine gives once it is over.
+    store.dispatch(heard('sentinelle coupe la sirène'), 14 + ECHO_TAIL - 0.1)
+    expect(store.deaf(14 + ECHO_TAIL - 0.1)).toBe(true)
+    expect(commands).toEqual([])
+
+    expect(store.deaf(14 + ECHO_TAIL + 0.1)).toBe(false)
+    store.dispatch(heard('sentinelle coupe la sirène'), 14 + ECHO_TAIL + 0.1)
+    expect(commands).toEqual(['siren-off'])
+  })
+
+  it('is not deaf before the dashboard ever talked, nor made so by a voice that was not talking', () => {
+    const { store } = listening()
+    expect(store.deaf(0)).toBe(false)
+
+    store.deafen(false, 5)
+    expect(store.deaf(5)).toBe(false)
+  })
+
+  it('stays deaf over a switch off and on, while the dashboard still talks', () => {
+    const { store, commands } = listening()
+    store.deafen(true, 10)
+
+    store.reset()
+    store.dispatch({ type: 'ear', state: 'listening' }, 11)
+    store.dispatch(heard('sentinelle coupe la sirène'), 12)
+
     expect(commands).toEqual([])
   })
 })

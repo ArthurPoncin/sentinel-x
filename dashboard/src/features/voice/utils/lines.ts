@@ -25,6 +25,9 @@ const COMMANDS: Readonly<Record<Command, string>> = {
   twin: 'aller au jumeau numérique',
   tutorial: 'aller au tutoriel des gestes',
   'replay-last': 'rejouer le dernier incident',
+  report: 'faire le rapport',
+  silence: 'faire taire les annonces',
+  speak: 'rétablir les annonces',
   ...ofWindows((verb, window) => `${verb === 'show' ? 'afficher' : 'fermer'} ${WINDOW_NAMES[window]}`),
   'close-all': 'fermer toutes les fenêtres',
 }

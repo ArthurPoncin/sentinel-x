@@ -128,6 +128,9 @@ describe('interpret', () => {
       'relance le dernier incident',
       'montre le dernier incident',
     ])
+    expect(WORDINGS.report).toEqual(['rapport', 'fais ton rapport', 'au rapport'])
+    expect(WORDINGS.silence).toEqual(['silence', 'coupe les annonces', 'arrête les annonces'])
+    expect(WORDINGS.speak).toEqual(['parle', 'reprends les annonces', 'remets les annonces'])
 
     for (const command of Object.keys(WORDINGS) as Command[]) {
       for (const wording of WORDINGS[command]) {
@@ -155,6 +158,16 @@ describe('interpret', () => {
       command: 'replay-last',
     })
     expect(interpret(ASLEEP, said('sentinelle rejoue le dernier'), 10).outcome).toEqual({ kind: 'unknown' })
+  })
+
+  it('takes the report, the silence and its lift, each by its own word', () => {
+    expect(interpret(ASLEEP, said('sentinelle rapport'), 10).outcome).toEqual({ kind: 'command', command: 'report' })
+    expect(interpret(ASLEEP, said('sentinelle silence'), 10).outcome).toEqual({ kind: 'command', command: 'silence' })
+    expect(interpret(ASLEEP, said('sentinelle parle'), 10).outcome).toEqual({ kind: 'command', command: 'speak' })
+
+    // The siren's own verb, on something else: the announcements, not the Alarm.
+    expect(interpret(ASLEEP, said('sentinelle coupe les annonces'), 10).outcome).toEqual({ kind: 'command', command: 'silence' })
+    expect(interpret(ASLEEP, said('rapport'), 10).outcome).toEqual({ kind: 'ignored' })
   })
 
   it('shows and closes each window by its name', () => {
