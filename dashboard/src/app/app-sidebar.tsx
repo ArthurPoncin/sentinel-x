@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from 'react-router'
 import { useSignOut } from '@/features/auth'
 import { useHandSwitch } from '@/features/gestures'
-import { useVoiceSwitch } from '@/features/voice'
+import { type Screen, useVoiceSwitch } from '@/features/voice'
 import { cn } from '@/shared/lib/utils'
 import {
   Sidebar,
@@ -24,11 +24,15 @@ export function inTutorial(pathname: string): boolean {
   return pathname.replace(/\/+$/, '') === TUTORIAL
 }
 
+// Where the Digital Twin is.
+export const TWIN = '/twin'
+
+// The screens of the app, each with the command that names it to the voice.
 export const NAV = [
-  { to: '/', title: 'Operator view', hands: false },
-  { to: '/twin', title: 'Digital Twin', hands: false },
-  { to: TUTORIAL, title: 'Tutoriel des gestes', hands: true },
-] as const
+  { to: '/', title: 'Operator view', hands: false, voice: 'operator' },
+  { to: TWIN, title: 'Digital Twin', hands: false, voice: 'twin' },
+  { to: TUTORIAL, title: 'Tutoriel des gestes', hands: true, voice: 'tutorial' },
+] as const satisfies readonly { to: string; title: string; hands: boolean; voice: Screen }[]
 
 // The screens the menu shows: those of the hand control only while it is on.
 export function screens(handsOn: boolean) {

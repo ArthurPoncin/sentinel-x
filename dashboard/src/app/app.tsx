@@ -26,7 +26,10 @@ export function App() {
       <AuthGate>
         <SessionFeed>
           <HandControl navigate={(to) => void router.navigate(to)} pathname={() => router.state.location.pathname}>
-            <VoiceControl pathname={() => router.state.location.pathname}>
+            <VoiceControl
+              navigate={(to, state) => void router.navigate(to, { state })}
+              pathname={() => router.state.location.pathname}
+            >
               <RouterProvider router={router} />
             </VoiceControl>
           </HandControl>

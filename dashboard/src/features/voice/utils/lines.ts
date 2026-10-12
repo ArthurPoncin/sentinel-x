@@ -21,6 +21,10 @@ export function statusLine(status: Exclude<VoiceState['status'], 'off'>): string
 const COMMANDS: Readonly<Record<Command, string>> = {
   siren: 'déclencher la sirène',
   'siren-off': 'couper la sirène',
+  operator: "aller à l'écran opérateur",
+  twin: 'aller au jumeau numérique',
+  tutorial: 'aller au tutoriel des gestes',
+  'replay-last': 'rejouer le dernier incident',
 }
 
 function made(outcome: Outcome): string {

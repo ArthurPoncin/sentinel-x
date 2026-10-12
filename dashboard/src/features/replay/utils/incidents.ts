@@ -71,3 +71,12 @@ export function incidents(history: readonly Frame[]): Incident[] {
   const alerts = alertsOf(history)
   return spansOf(alerts).map((span, index) => summarize(alerts, span, index + 1))
 }
+
+// The Incident that closed last among `listed`, in whatever order: never one still going on. None while no
+// Incident has closed.
+export function lastClosed(listed: readonly Incident[]): Incident | null {
+  return listed.reduce<Incident | null>((last, incident) => {
+    if (incident.end === null) return last
+    return last?.end && Date.parse(last.end) >= Date.parse(incident.end) ? last : incident
+  }, null)
+}

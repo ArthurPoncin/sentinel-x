@@ -1,5 +1,5 @@
-import { useCallback, useMemo } from 'react'
-import { useLocation } from 'react-router'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useLocation, useNavigate } from 'react-router'
 import { ActiveAlertList, AttackList } from '@/features/alerts'
 import { CameraView } from '@/features/camera'
 import { useHandWind, useLiveHands } from '@/features/gestures'
@@ -10,8 +10,9 @@ import { type OperatorHands, OutpostTwin, toScene } from '@/features/twin'
 import { GlassWindows, useAimedWindow, useWindows } from '@/features/windows'
 import { captureMode } from '@/shared/config/capture-mode'
 import { feedEncrypted } from '@/shared/config/feed-url'
-import type { Alert } from '@/shared/contract'
+import type { Alert, Incident } from '@/shared/contract'
 import { decimal } from '@/shared/lib/format'
+import { askedReplay } from '../replay-asked'
 
 type Intrusion = Extract<Alert, { kind: 'intrusion' }>
 
@@ -43,10 +44,13 @@ type Intrusion = Extract<Alert, { kind: 'intrusion' }>
 // word.
 // A hand that aims lights the window under its sight, and its shot closes it: the window scatters in light, and
 // whoever stands behind it is not hit.
+// A replay asked for from another screen, the voice's « rejoue le dernier incident », starts as the Twin opens.
 // With `?capture` it is the Twin alone, on the same feed: no top bar, no sidebar, no caption, no scrubber, no window,
 // the whole stage held in frame, to be filmed in a vertical window for the teaser.
 export function TwinRoute() {
-  const capture = captureMode(useLocation())
+  const location = useLocation()
+  const navigate = useNavigate()
+  const capture = captureMode(location)
   const connection = useLiveFeed((state) => state.connection)
   const connectedOnce = useLiveFeed((state) => state.connectedOnce)
   const status = useLiveFeed((state) => state.status)
@@ -55,6 +59,17 @@ export function TwinRoute() {
   const history = useLiveFeed((state) => state.history)
   const player = usePlayer()
   const incidents = useIncidentsToReplay(history, player)
+  // The replay the way here asks for, taken once the Command Post has said whether it has its records. The way
+  // then carries it no more: the page loaded again is live.
+  const asked = useMemo(() => askedReplay(location.state), [location.state])
+  const taken = useRef<Incident | null>(null)
+  const { open, source } = incidents
+  useEffect(() => {
+    if (!asked || asked === taken.current || source === 'asking') return
+    taken.current = asked
+    void open(asked)
+    void navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null })
+  }, [asked, source, open, navigate, location.pathname, location.search])
   const live = useLiveHands()
   const operator = useMemo<OperatorHands | undefined>(
     () =>

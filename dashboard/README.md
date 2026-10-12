@@ -633,7 +633,7 @@ An extra for the demo: a Leap Motion Controller on the Operator's desk steers th
 
 ## Voice control — `features/voice`
 
-The Operator says « Sentinelle » then a command, and the Alarm is driven as by a gesture or a press on the panel (#162). Everything runs in the browser, offline: no request leaves the machine to hear a voice.
+The Operator says « Sentinelle » then a command, and the Alarm is driven as by a gesture or a press on the panel (#162), the app goes to the screen that is named, or the Twin replays the last Incident that closed (#163). Everything runs in the browser, offline: no request leaves the machine to hear a voice.
 
 - **Off by default** — the switch is at the foot of the menu, next to the hand control's, and the browser remembers it (`rememberedSwitch()`, shared with the hand control). The microphone is asked for as it is switched on, never before; refused, unplugged or taken by another application, even once it listens, the switch goes back to off and a toast says why (`failureLine()`).
 - **One ear a browser** — the tabs take turns on a lock (`navigator.locks`): with the Operator view and the Twin open, one of them listens and the command is sent once; the other says so in its top bar and takes over as the first is closed.
@@ -641,8 +641,10 @@ The Operator says « Sentinelle » then a command, and the Alarm is driven as by
 - **The model** — a static file of the dashboard, `public/voice/vosk-model-small-fr-0.22.tar.gz` (40 MB, not in git). `npm run voice:model` fetches it once on a development machine (`curl`, `unzip`, checked against its checksum); the image's build does the same. The engine keeps it in the browser (IndexedDB) after the first load.
 - **A pure interpreter** — `interpret(wake, heard, now)`: the text, its confidence and the wake state in, a command or nothing out. It holds the wake word, its window (`WAKE_WINDOW`, 6 s), the wordings (`WORDINGS`) and the confidence threshold (`THRESHOLD`). A command is taken in the sentence of the wake word or in the one that follows; out of vocabulary or under the threshold, nothing is done and the window stays open to say it again. A word it did not know inside a command leaves no command (« ne coupe pas la sirène »); around it, it is a noise. A sentence is as sure as its least sure word (`heardFrom()`).
 - **What a command does** is the app's (`app/voice-control.tsx`, `app/alarm.ts`): the same `firePreset()` as the gesture, the same toast with « Commande vocale », the same error. Nothing is sent in the gestures' tutorial.
+- **A screen's name** leads to it (`pageOfVoice()`): each screen of the menu has its command (`voice` in `NAV`), so the voice reaches all that a swipe of the hand reaches. Named from the screen itself, nothing happens, and it is no error. A name leads out of the tutorial too.
+- **The last Incident** — « rejoue le dernier incident » asks `GET /api/v1/incidents`, the list the scrubber already reads, for the Incident that closed last (`lastClosed()`), never one still going on, and goes to the Twin with it (`app/replay-asked.ts`): the Twin starts its replay as it opens, and the page loaded again is live. With no closed Incident, a toast says so and the screen stays where it is.
 - **The top bar** says where the ear is (`VoiceHud`: the model loading, listening, awake) and shows the last sentence heard with what was made of it.
-- **Commands** — « coupe / arrête / stoppe la sirène », « déclenche / lance / active la sirène ».
+- **Commands** — « coupe / arrête / stoppe la sirène », « déclenche / lance / active la sirène » ; « opérateur », « écran opérateur », « vue opérateur » ; « jumeau », « jumeau numérique », « écran jumeau » ; « tutoriel », « tutoriel des gestes », « gestes » ; « rejoue / relance / montre le dernier incident ». Every word of a wording has to be one of the model's: the engine drops the others from its grammar.
 - **Not yet** — checked in Chromium on a simulated microphone playing synthesized French sentences, not on the demo laptop: the recognition in a room's noise, `THRESHOLD` and the model's loading time are to be measured there (#161).
 
 ## TODO
