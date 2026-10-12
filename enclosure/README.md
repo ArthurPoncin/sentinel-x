@@ -24,6 +24,7 @@ Deux boîtiers, le Poste de commande et le Sentinel, plus le support du Leap Mot
 | `command-post-base.stl` | Socle : le Pi, la carte ULN2003 | le dessous |
 | `command-post-bezel.stl` | Façade : la fenêtre de l'écran, les quatre plots où il se visse | la face avant |
 | `command-post-tower.stl` | Tour de la caméra : le moteur sous son sommet | le sommet |
+| [`Rajout/Porte_clés_EPSI_monochrome_v3.stl`](Rajout/) | Porte-clés EPSI, 70 × 27 mm, collé dans son logement du mur droit du Poste de commande | le dessous |
 | `sentinel-base.stl` | Boîte du Sentinel : fond, murs, compartiments, support de l'ESP32, logements des trois WAGO | le fond |
 | `sentinel-lid.stl` | Couvercle du Sentinel, avec le cadre de l'enceinte | le dessus |
 | `leap-stand-stand.stl` | Support du Leap Motion | le dessous |
@@ -53,6 +54,7 @@ Sur la Creality K2 Plus du myDiL (350 mm de plateau : chaque pièce passe en une
 | Le PIR | 2 vis M2 × 6, ou un point de colle chaude |
 | Le MQ-2 | 4 vis M2,5 × 6, par les trous de ses coins |
 | Le micro, l'enceinte | Colle chaude |
+| Le porte-clés EPSI | Colle cyanoacrylate, ou adhésif double face fin, dans son logement |
 | Sous chaque boîtier et sous le Leap | 4 patins caoutchouc de 10 mm |
 
 ## Montage du Poste de commande
@@ -67,6 +69,7 @@ Sur la Creality K2 Plus du myDiL (350 mm de plateau : chaque pièce passe en une
 6. **Webcam.** La C920 se visse sur le pas de vis du support, son clip replié dessous, **sa lentille au-dessus du triangle gravé** sur la tour : elle regarde droit devant. C'est le zéro du moteur, à refaire avant chaque démarrage (il compte ses pas depuis là). Son câble entre dans la tour par le trou à l'arrière gauche, juste sous le support, et descend jusqu'à un port USB du Pi. Laisse-lui du mou : la caméra tourne d'un quart de tour de chaque côté.
 7. **Câblage**, comme sur [`docs/cablage/raspberry-pi.html`](../docs/cablage/raspberry-pi.html) : broches 31, 33, 35, 37 vers IN1 à IN4, 39 vers −, 4 vers + ; le moteur dans la prise blanche de l'ULN2003 ; l'écran sur le micro-HDMI 1. On n'enfiche pas l'écran sur le GPIO comme le prévoit SunFounder (avec son adaptateur HDMI en U) : son connecteur couvrirait les broches 1 à 26, dont la 4 du moteur. Il s'alimente par deux fils Dupont mâle-femelle, de la broche 2 (5 V) et de la broche 6 (GND) du Pi vers les mêmes broches de son connecteur noir, au dos ; ou par son micro-USB sur un port USB du Pi, avec un câble coudé (11 mm seulement jusqu'au mur droit). Si l'image est à l'envers, ajouter `,rotate=180` après `video=HDMI-A-2:800x480M@60D` dans `/boot/firmware/cmdline.txt`. Le câble USB de l'ESP32 et, si besoin, l'Ethernet passent dans l'encoche arrière gauche, l'alimentation USB-C dans l'encoche arrière droite. Toutes les fiches restent dedans : à l'arrière ne sortent que l'alimentation et le câble de l'ESP32, plus l'Ethernet s'il est branché.
 8. **Fermeture.** La tour vissée avant (ses vis sont au-dessus de la façade), la façade debout dans la rainure à l'avant du socle, on descend la coque par-dessus : la façade glisse dans les rainures des murs jusqu'à celle du toit. Quatre vis M3 × 12 par-dessous.
+9. **Porte-clés EPSI** dans son logement, sur le mur droit : le logo vers l'avant, le trou d'anneau vers l'arrière. Un point de colle cyanoacrylate, ou de l'adhésif double face fin.
 
 ## Montage du Sentinel
 

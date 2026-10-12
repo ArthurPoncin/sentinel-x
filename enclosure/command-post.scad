@@ -68,6 +68,9 @@ motor_tabs = [[-17.5, 8], [17.5, 8]];
 uln = [28, D - 22];        // ULN2003 board centre
 vent = pi_at([26, 30]);    // roof vent, over the Pi's processor and clear of the tower's foot
 uln_holes = [29.5, 27];
+// The EPSI key fob (70 x 27, its base 2 mm thick) glues on the right wall, into a pocket of its own outline.
+badge_stl = "Rajout/Porte_clés_EPSI_monochrome_v3.stl";
+badge_at = [76, 56];       // its centre on the right wall: Y, Z (the laser plate's, on the other side)
 corner = [[5, 24], [W - 5, 24], [5, D - 5], [W - 5, D - 5]];  // the base's screws, into the shell
 feet = [[14, 12], [W - 14, 12], [14, D - 14], [W - 14, D - 14]];
 
@@ -75,6 +78,9 @@ module front_cut(x, z, depth) translate([x, 1, z]) rotate([90, 0, 0]) linear_ext
 module back_cut(x, z, depth) translate([x, D - 1, z]) rotate([90, 0, 180]) linear_extrude(depth) children();
 module left_cut(y, z, depth) translate([1, y, z]) rotate([90, 0, -90]) linear_extrude(depth) children();
 module right_cut(y, z, depth) translate([W - 1, y, z]) rotate([90, 0, 90]) linear_extrude(depth) children();
+
+// The key fob's outline, centred, with play: the hull of its own STL seen from above.
+module badge_2d() offset(delta = clr) translate([-35, -13.5]) hull() projection() import(badge_stl);
 
 // The shell's outline, seen from above.
 module outline_2d() translate([-wall, 0]) rrect([W + 2 * wall, D + wall], r_out);
@@ -127,6 +133,8 @@ module shell() {
 
     // left wall: the laser-engraved plate (100 x 40) goes in this recess
     translate([-wall - eps, 26, 36]) cube([1 + eps, 100, 40]);
+    // right wall: the EPSI key fob's pocket, 1 mm deep, read from outside
+    translate([W + wall - 1, badge_at[0], badge_at[1]]) rotate([90, 0, 90]) linear_extrude(2) badge_2d();
   }
 }
 
@@ -279,6 +287,8 @@ module assembly() {
   color([0.12, 0.13, 0.15]) bezel();
   color("SlateGray") translate([tower_at[0], tower_at[1], z_tower]) tower();
   ghosts();
+  // the EPSI key fob, glued in its pocket
+  color("RoyalBlue") translate([W + wall - 1, badge_at[0], badge_at[1]]) rotate([90, 0, 90]) translate([-35, -13.5, 2]) import(badge_stl);
 }
 
 // The base, the bezel and what goes inside, the shell cut low to show them.
