@@ -4,6 +4,8 @@ import { type Command, type Outcome, UNKNOWN } from './interpret'
 
 // Where the ear is, in the Operator's words.
 const STATUS: Readonly<Record<Exclude<VoiceState['status'], 'off'>, string>> = {
+  // One ear for the whole browser: two would send each command twice.
+  waiting: "Commande vocale · à l'écoute dans un autre onglet",
   asking: 'Commande vocale · autorisez le micro',
   // Some tens of megabytes the first time, from the browser's cache after that.
   loading: 'Chargement du modèle vocal…',
@@ -48,6 +50,10 @@ export function failureLine(failure: Failure): string {
       return 'Le micro a été refusé : autorisez-le pour ce site dans le navigateur, puis réactivez la commande vocale.'
     case 'no-microphone':
       return 'Aucun micro trouvé sur ce poste.'
+    case 'unavailable':
+      return "Le micro ne répond pas : débranché, ou pris par une autre application. Réactivez la commande vocale une fois qu'il est libre."
+    case 'blocked':
+      return "Le navigateur n'a pas ouvert le son sans un geste sur la page : réactivez la commande vocale."
     case 'unsupported':
       return 'Ce navigateur ne donne pas accès au micro ici : la commande vocale demande une page en HTTPS.'
     case 'model':

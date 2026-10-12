@@ -15,7 +15,7 @@ if [ -f "$OUT" ]; then
 fi
 
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+trap 'rm -rf "$WORK" "$OUT.part"' EXIT
 
 curl -fsSL -o "$WORK/model.zip" "https://alphacephei.com/vosk/models/$MODEL.zip"
 echo "$SHA256  $WORK/model.zip" | sha256sum -c - >/dev/null
@@ -23,5 +23,7 @@ unzip -q "$WORK/model.zip" -d "$WORK"
 # The engine takes the folder inside the archive, whatever its name: `model`, as its documentation has it.
 mv "$WORK/$MODEL" "$WORK/model"
 mkdir -p "$(dirname "$OUT")"
-tar -czf "$OUT" -C "$WORK" model
+# Under its name only once it is whole: a run that was cut short leaves nothing the next one would take for it.
+tar -czf "$OUT.part" -C "$WORK" model
+mv "$OUT.part" "$OUT"
 echo "voice model: $OUT"

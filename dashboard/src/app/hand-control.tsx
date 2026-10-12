@@ -29,9 +29,12 @@ export function HandControl({ navigate, pathname, children }: Props) {
   const sentinel = useLiveFeed((state) => state.latestTelemetry?.sentinel ?? null)
 
   const act = async (action: Action) => {
-    // In the tutorial a gesture is tried, not meant: the page shows it was made, and nothing is done about it.
-    if (inTutorial(pathname())) return
-    if (action === 'page-left' || action === 'page-right') return navigate(pageAfter(pathname(), action))
+    if (action === 'page-left' || action === 'page-right') {
+      // In the tutorial a gesture is tried, not meant: the page shows it was made, and nothing is done about it.
+      if (!inTutorial(pathname())) navigate(pageAfter(pathname(), action))
+      return
+    }
+    // For the Alarm the tutorial's rule is the preset's own.
     const preset = presetOfGesture(action, pathname())
     if (preset) answer(await driveAlarm(sentinel, preset, 'hand'))
   }

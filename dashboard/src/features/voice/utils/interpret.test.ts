@@ -61,6 +61,15 @@ describe('interpret', () => {
     })
   })
 
+  it('takes no command with a word it did not know inside it: the sentence may say not to', () => {
+    // « Sentinelle, ne coupe pas la sirène », as a closed grammar hears it.
+    const negated = interpret(ASLEEP, said('sentinelle [unk] coupe [unk] la sirène'), 10)
+    expect(negated.outcome).toEqual({ kind: 'unknown' })
+
+    expect(interpret(ASLEEP, said('sentinelle déclenche [unk] la sirène'), 10).outcome).toEqual({ kind: 'unknown' })
+    expect(interpret(negated.wake, said('coupe [unk] la sirène'), 12).outcome).toEqual({ kind: 'unknown' })
+  })
+
   it('does nothing about a command it is not sure of, and says so', () => {
     const doubted = interpret(ASLEEP, said('sentinelle coupe la sirène', THRESHOLD - 0.01), 10)
     expect(doubted).toEqual({ wake: ASLEEP, outcome: { kind: 'unsure' } })
@@ -76,6 +85,15 @@ describe('interpret', () => {
 
   it('does not wake on a wake word it is not sure of', () => {
     expect(interpret(ASLEEP, said('sentinelle', 0.1), 10)).toEqual({ wake: ASLEEP, outcome: { kind: 'unsure' } })
+  })
+
+  it('does not wake on a wake word it is not sure of, whatever follows it', () => {
+    expect(interpret(ASLEEP, said('sentinelle [unk]', 0.2), 10)).toEqual({ wake: ASLEEP, outcome: { kind: 'unsure' } })
+    expect(interpret(ASLEEP, said('sentinelle la sirène', 0.2), 10)).toEqual({ wake: ASLEEP, outcome: { kind: 'unsure' } })
+
+    // Awake, it does not push the window further either.
+    const { wake } = interpret(ASLEEP, said('sentinelle'), 10)
+    expect(interpret(wake, said('sentinelle [unk]', 0.2), 12)).toEqual({ wake, outcome: { kind: 'unsure' } })
   })
 
   it('makes nothing of a noise, nor of a silence', () => {

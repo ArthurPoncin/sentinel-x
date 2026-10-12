@@ -50,6 +50,13 @@ export interface Interpreted {
   outcome: Outcome
 }
 
+// The words between the noises a sentence starts and ends with. A word the engine did not know among them
+// stays: it may be the « ne … pas » that turns the command around.
+function between(words: readonly string[]): readonly string[] {
+  const first = words.findIndex((word) => word !== UNKNOWN)
+  return first === -1 ? [] : words.slice(first, words.findLastIndex((word) => word !== UNKNOWN) + 1)
+}
+
 function commandOf(words: readonly string[]): Command | null {
   const sentence = words.join(' ')
   for (const command of Object.keys(WORDINGS) as Command[]) if (WORDINGS[command].includes(sentence)) return command
@@ -63,7 +70,7 @@ function understand(wake: Wake, heard: Heard, now: number): Interpreted {
   if (called === -1 && now > wake.until) return { wake: ASLEEP, outcome: { kind: 'ignored' } }
   // What is asked for comes after the wake word, or is the whole sentence that follows it.
   const asked = words.slice(called + 1)
-  const command = commandOf(asked.filter((word) => word !== UNKNOWN))
+  const command = commandOf(between(asked))
   // One wake word, one command.
   if (command) return { wake: ASLEEP, outcome: { kind: 'command', command } }
   if (called !== -1) {
@@ -75,12 +82,12 @@ function understand(wake: Wake, heard: Heard, now: number): Interpreted {
 }
 
 // What a sentence the engine heard asks for, `now` in seconds: a command only after the wake word, in the
-// same sentence or within the wake window, and only when the engine is sure of it. Pure: it knows neither
-// the microphone nor the engine.
+// same sentence or within the wake window, and only when the engine is sure of it; a wake word it is not
+// sure of opens no window either, whatever follows it. Pure: it knows neither the microphone nor the engine.
 export function interpret(wake: Wake, heard: Heard, now: number): Interpreted {
   const understood = understand(wake, heard, now)
-  const { kind } = understood.outcome
-  if ((kind !== 'command' && kind !== 'woken') || heard.confidence >= THRESHOLD) return understood
+  const acted = understood.outcome.kind === 'command' || understood.wake.until > wake.until
+  if (!acted || heard.confidence >= THRESHOLD) return understood
   // Nothing is done, and nothing is lost: what was open stays open, to say it again.
   return { wake: now > wake.until ? ASLEEP : wake, outcome: { kind: 'unsure' } }
 }
