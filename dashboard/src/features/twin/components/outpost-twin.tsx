@@ -14,6 +14,7 @@ import { usePixelRatio } from '../hooks/use-pixel-ratio'
 import { useStatusLight } from '../hooks/use-status-light'
 import { FIELD_OF_VIEW } from '../utils/framing'
 import type { OperatorHands } from '../utils/operator-hands'
+import type { Panes } from '../utils/panes'
 import type { SceneProps, StatusGrade } from '../utils/scene'
 import { createRange } from '../utils/shooting'
 import { SITE } from '../utils/site'
@@ -119,6 +120,9 @@ export interface OutpostTwinProps {
   // The Operator's hands over a hand sensor, when the hand control is on: a flat hand steers the camera, two
   // open ones zoom, and the Twin shows the hands in hologram in a corner of its view.
   operator?: OperatorHands
+  // What is laid over the Twin on the screen, for the sight of a hand that aims: it designates the pane it is
+  // over, and a shot there hits the pane and nothing behind it.
+  panes?: Panes
 }
 
 // The Outpost in 3D: a maquette of the site on its socle, lit like a product in a studio on a black
@@ -152,7 +156,7 @@ export interface OutpostTwinProps {
 // hands float in hologram in a corner of the view, a flat one steers the camera and two open ones, moved apart or
 // together, zoom. It fills its parent: give that
 // the size the Twin should have on screen.
-export function OutpostTwin({ scene, frames, wholeStage = false, operator }: OutpostTwinProps) {
+export function OutpostTwin({ scene, frames, wholeStage = false, operator, panes }: OutpostTwinProps) {
   const frame = useRef<HTMLDivElement>(null)
   const dpr = usePixelRatio(frame)
   // What the sight of a hand that aims and the intruder's figurines tell each other.
@@ -201,7 +205,7 @@ export function OutpostTwin({ scene, frames, wholeStage = false, operator }: Out
           operator={operator}
         />
         {operator && <HandHologram operator={operator} />}
-        {operator && <Gunsight operator={operator} range={range} intel={scene} />}
+        {operator && <Gunsight operator={operator} range={range} intel={scene} panes={panes} />}
         <Halo signal={scene.signalLost ? 0 : 1} />
       </Canvas>
       {/* Next to the image, not in it: a screen reader skips what an image holds. */}
