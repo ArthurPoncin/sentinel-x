@@ -39,6 +39,9 @@ export function screens(handsOn: boolean) {
   return NAV.filter(({ hands }) => handsOn || !hands)
 }
 
+// A switch's state, at the right of its name and smaller: the two hold on one line of the menu.
+const STATE = 'ml-auto shrink-0 text-xs text-muted-foreground'
+
 // The side navigation, under the top bar: the two surfaces, the hand control's tutorial while it is on, and
 // the way out. Words, no icons. The top bar's ☰ (or Ctrl+B) folds it away on a wide screen; on a phone it is a
 // drawer that a choice closes. At its foot, the hand control's switch, off until the Operator has a hand
@@ -75,12 +78,14 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton aria-pressed={hands.enabled} onClick={() => hands.setEnabled(!hands.enabled)}>
-              Commande gestuelle : {hands.enabled ? 'activée' : 'désactivée'}
+              <span>Commande gestuelle</span>
+              <span className={STATE}>{hands.enabled ? 'activée' : 'désactivée'}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton aria-pressed={voice.enabled} onClick={() => voice.setEnabled(!voice.enabled)}>
-              Commande vocale : {voice.enabled ? 'activée' : 'désactivée'}
+              <span>Commande vocale</span>
+              <span className={STATE}>{voice.enabled ? 'activée' : 'désactivée'}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
