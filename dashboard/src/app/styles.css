@@ -453,8 +453,8 @@
   outline-offset: 2px;
 }
 
-/* The glass windows are laid over the whole stage and seen in perspective from its middle: one on the left
-   and one on the right lean toward the Outpost between them. Only the windows take the pointer: the scene
+/* The glass windows are laid over the whole stage and seen in perspective from its middle: those on the left
+   and those on the right lean toward the Outpost between them. Only the windows take the pointer: the scene
    under the rest of the layer is still turned by a drag. */
 .stage {
   --glass-light: #9fdcff;
@@ -469,15 +469,41 @@
   pointer-events: none;
 }
 
-/* A panel of lit glass in its slot, in the upper corner of its side of the stage, under the label on the left
-   and under the scrubber on the right: over the black above the socle, clear of the Outpost in the middle and
-   of the caption and the bar below. The scene shows through it, blurred: measured on the stage's own
+/* A side of the stage, where its two slots are: one column against each edge, under the label on the left and
+   under the scrubber on the right, over the black above the socle, clear of the Outpost in the middle and of
+   the caption and the bar below. Its windows share its height and never cover each other. It is no plane of
+   its own: they are seen in the layer's perspective. */
+.glass-column {
+  position: absolute;
+  bottom: 4.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: clamp(14rem, 21vw, 21rem);
+  transform-style: preserve-3d;
+}
+
+.glass-column[data-side='left'] {
+  --tilt: 14deg;
+  top: 5.5rem;
+  left: 1.25rem;
+}
+
+.glass-column[data-side='right'] {
+  --tilt: -14deg;
+  top: 10.5rem;
+  right: 1rem;
+}
+
+/* A panel of lit glass in its slot: the upper one hangs from the top of its column, the lower one stands on its
+   foot, whether or not the other is taken. Where the two are taller than the column, what they show gives way:
+   a curve gets shorter, a list scrolls. The scene shows through the glass, blurred: measured on the stage's own
    canvas, the blur costs the Twin no frame (dashboard/README.md, the glass windows). Should it on another
    machine, drop `backdrop-filter` and darken the ground: the tint alone still reads as glass on the black. */
 .glass-window {
-  --tilt: 0deg;
-  position: absolute;
-  width: clamp(14rem, 21vw, 21rem);
+  display: flex;
+  flex-direction: column;
+  min-height: 7rem;
   transform: rotateY(var(--tilt));
   padding: 0 0.7rem 0.7rem;
   border: 1px solid var(--glass-edge);
@@ -494,27 +520,80 @@
   animation: glass-open 0.28s ease-out;
 }
 
-.glass-window[data-slot='left'] {
-  --tilt: 14deg;
-  top: 5.5rem;
-  left: 1.25rem;
+.glass-column[data-side='left'] .glass-window {
   transform-origin: left center;
 }
 
-.glass-window[data-slot='right'] {
-  --tilt: -14deg;
-  top: 10.5rem;
-  right: 1rem;
+.glass-column[data-side='right'] .glass-window {
   transform-origin: right center;
 }
 
+.glass-window[data-row='bottom'] {
+  margin-top: auto;
+}
+
+/* The picture keeps its shape: beside it, the other window of the column is the one that gives way. */
+.glass-window[data-window='camera'] {
+  flex-shrink: 0;
+}
+
+.glass-window-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--glass-edge) transparent;
+}
+
+.glass-window-body > * {
+  min-height: 0;
+}
+
+/* An Incident of the Incidents window: a line to press, which replays it. */
+.incident-choice {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 0.35rem;
+  background: rgb(159 220 255 / 6%);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.incident-choice:hover {
+  border-color: var(--glass-edge);
+  background: rgb(159 220 255 / 12%);
+}
+
+/* The focus ring stays inside the list, which cuts what goes past its edge. */
+.incident-choice:focus-visible {
+  outline-offset: -2px;
+}
+
+/* A closed window leaves its slot at once, for the one that may take it, and fades out where it was. */
 .glass-window[data-leaving] {
+  position: absolute;
+  top: 0;
+  width: 100%;
+  box-sizing: border-box;
   pointer-events: none;
   animation: glass-close 0.2s ease-in forwards;
 }
 
+.glass-window[data-leaving][data-row='bottom'] {
+  top: auto;
+  bottom: 0;
+}
+
 .glass-window > header {
   display: flex;
+  flex: none;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
