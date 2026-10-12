@@ -4,14 +4,18 @@ The api validates every Alert it receives and answers 400 to the slightest devia
 check theirs against this mirror in their tests, so a refusal is caught before it reaches the Pi.
 """
 
+import ipaddress
 import math
 import re
 from datetime import datetime, timezone
 
-KINDS = ("gas", "thermal", "presence", "noise", "intrusion", "predictive")
+KINDS = ("gas", "thermal", "presence", "noise", "intrusion", "predictive", "cyber")
 SEVERITIES = ("info", "warning", "critical")
 STATES = ("raised", "cleared")
-SOURCES = ("esp32", "vision", "predictive")
+# `api`: the Command Post's own API, the only one to raise `cyber` Alerts. No service posts them.
+SOURCES = ("esp32", "vision", "predictive", "api")
+# The entry point of the API an attack goes for.
+CYBER_VECTORS = ("login", "service-token", "feed-origin")
 
 # zod's z.iso.datetime(): UTC with a `Z`, no offset. Seconds required here, a stricter subset.
 _ISO_UTC = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
@@ -64,6 +68,16 @@ def _other_errors(where: str, other: object) -> list[str]:
     return errors
 
 
+def _is_address(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    try:
+        ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return True
+
+
 def _detail_errors(kind: str, detail: object) -> list[str]:
     if not isinstance(detail, dict):
         return ["detail: not an object"]
@@ -101,6 +115,19 @@ def _detail_errors(kind: str, detail: object) -> list[str]:
             errors.append("detail.anomaly_score: not a number")
         if "drivers" in detail and not (isinstance(drivers, list) and all(isinstance(d, str) for d in drivers)):
             errors.append("detail.drivers: not a list of strings")
+        return errors
+    if kind == "cyber":
+        expected = {"vector", "attempts"}
+        # Where the attempts come from, when the api knows it.
+        optional = {"address"}
+        errors = [f"detail.{key}: unknown field" for key in detail.keys() - expected - optional]
+        errors += [f"detail.{key}: missing" for key in sorted(expected - detail.keys())]
+        if "vector" in detail and detail["vector"] not in CYBER_VECTORS:
+            errors.append(f"detail.vector: not one of {', '.join(CYBER_VECTORS)}")
+        if "attempts" in detail and not (_is_id(detail["attempts"]) and detail["attempts"] >= 1):
+            errors.append("detail.attempts: not a whole number, 1 or more")
+        if "address" in detail and not _is_address(detail["address"]):
+            errors.append("detail.address: not an IPv4 or IPv6 address")
         return errors
     # The Sentinel's kinds carry no detail.
     return [f"detail.{key}: unknown field" for key in detail]

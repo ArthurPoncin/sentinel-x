@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Frame } from '../src/contract.js'
-import { gasAlert, intrusionAlert, predictiveAlert } from './support/alerts.js'
+import { cyberAlert, gasAlert, intrusionAlert, predictiveAlert } from './support/alerts.js'
 import { startServer, TOKEN } from './support/server.js'
 
 const marker: Frame = {
@@ -173,6 +173,15 @@ describe('POST /api/v1/alerts', () => {
 
     it('403 on a Sentinel Alert, which only comes in over MQTT', async () => {
       const response = await expectNothingChanged(({ postAlert }) => postAlert(gasAlert()))
+
+      expect(response.status).toBe(403)
+    })
+
+    it.each([
+      ['vision', TOKEN.vision],
+      ['predictive', TOKEN.predictive],
+    ])('403 on a cyber Alert posted by %s: only the API raises those, from the inside', async (_service, token) => {
+      const response = await expectNothingChanged(({ postAlert }) => postAlert(cyberAlert(), token))
 
       expect(response.status).toBe(403)
     })

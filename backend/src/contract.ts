@@ -18,11 +18,19 @@ export type Telemetry = z.infer<typeof TelemetrySchema>
 export const SeveritySchema = z.enum(['info', 'warning', 'critical'])
 export type Severity = z.infer<typeof SeveritySchema>
 
-export const AlertSourceSchema = z.enum(['esp32', 'vision', 'predictive'])
+// `api`: the Command Post's own API, for what it decides alone.
+export const AlertSourceSchema = z.enum(['esp32', 'vision', 'predictive', 'api'])
 export type AlertSource = z.infer<typeof AlertSourceSchema>
 
-export const AlertKindSchema = z.enum(['gas', 'thermal', 'presence', 'noise', 'intrusion', 'predictive'])
+export const AlertKindSchema = z.enum(['gas', 'thermal', 'presence', 'noise', 'intrusion', 'predictive', 'cyber'])
 export type AlertKind = z.infer<typeof AlertKindSchema>
+
+// The entry point of the API an attack goes for: what it refused there.
+export const CyberVectorSchema = z.enum(['login', 'service-token', 'feed-origin'])
+export type CyberVector = z.infer<typeof CyberVectorSchema>
+
+// The `sentinel` of a `cyber` Alert: the attack is on the Command Post, not on a Sentinel.
+export const COMMAND_POST = 'command-post'
 
 export const AlertStateSchema = z.enum(['raised', 'cleared'])
 export type AlertState = z.infer<typeof AlertStateSchema>
@@ -81,6 +89,16 @@ export const AlertSchema = z.discriminatedUnion('kind', [
     }),
   ),
   alertOf('predictive', z.strictObject({ anomaly_score: z.number(), drivers: z.array(z.string()) })),
+  // `attempts`: how many requests the API refused on this vector since the attack began. `value` repeats it.
+  // `address`: where the latest of them came from, when the API knows it.
+  alertOf(
+    'cyber',
+    z.strictObject({
+      vector: CyberVectorSchema,
+      attempts: z.number().int().positive(),
+      address: z.union([z.ipv4(), z.ipv6()]).optional(),
+    }),
+  ),
 ])
 export type Alert = z.infer<typeof AlertSchema>
 

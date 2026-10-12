@@ -244,6 +244,9 @@ function anchorOf(alert: Alert): GroundPoint | null {
       return { x: SITE.enclosure.x, z: SITE.enclosure.z }
     case 'noise':
       return null
+    // An attack is on the whole Outpost: nowhere on the ground to turn to.
+    case 'cyber':
+      return null
   }
 }
 

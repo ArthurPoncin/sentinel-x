@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Alert, Frame } from '../src/contract.js'
-import { gasAlert, intrusionAlert, presenceAlert } from './support/alerts.js'
+import { cyberAlert, gasAlert, intrusionAlert, presenceAlert } from './support/alerts.js'
 import { startBroker } from './support/broker.js'
 import { startServer } from './support/server.js'
 import type { TestClient } from './support/ws-client.js'
@@ -123,6 +123,7 @@ describe('Sentinel Alerts over MQTTS', () => {
       ['the detail of another kind', JSON.stringify({ ...published(), detail: { anomaly_score: 0.9 } })],
       ['an unknown field', JSON.stringify({ ...published(), firmware: '1.0.0' })],
       ['a kind only the vision service decides', JSON.stringify(asPublished(intrusionAlert()))],
+      ['a kind only the API decides', JSON.stringify(asPublished(cyberAlert()))],
     ])('%s', async (_label, payload) => {
       const { broker, connect } = await startOutpost()
       const client = await connect()

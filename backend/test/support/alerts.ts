@@ -45,3 +45,17 @@ export function predictiveAlert(overrides: Partial<Common> = {}): Alert {
     ...overrides,
   }
 }
+
+// A brute force on the login, as the API itself raises it.
+export function cyberAlert(overrides: Partial<Common> = {}): Alert {
+  return {
+    ...common,
+    alert_id: 'cyber-login-1',
+    sentinel: 'command-post',
+    source: 'api',
+    kind: 'cyber',
+    value: 14,
+    detail: { vector: 'login', attempts: 14 },
+    ...overrides,
+  }
+}

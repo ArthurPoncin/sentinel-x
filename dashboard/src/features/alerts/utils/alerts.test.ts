@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { Alert, Frame, Severity } from '@/shared/contract'
+import type { Alert, CyberVector, Frame, Severity } from '@/shared/contract'
 import { alertLog } from './alert-log'
-import { byUrgency, describeAlert, newlyRaised } from './describe'
+import { byUrgency, describeAlert, KIND_LABEL, newlyRaised, SOURCE_LABEL } from './describe'
 
 const at = (second: number) => new Date(Date.UTC(2026, 9, 5, 14, 0, second)).toISOString()
 
@@ -22,6 +22,21 @@ function intruder(x_norm: number, state: 'raised' | 'cleared' = 'raised', second
   }
 }
 
+// A brute force the API refuses, `attempts` refusals in.
+function attack(attempts: number, vector: CyberVector = 'login'): Alert {
+  return {
+    alert_id: 'cyber-login-1',
+    sentinel: 'command-post',
+    source: 'api',
+    kind: 'cyber',
+    severity: 'warning',
+    state: 'raised',
+    value: attempts,
+    detail: { vector, attempts },
+    ts: at(0),
+  }
+}
+
 const frame = (alert: Alert): Frame => ({ type: 'alert', payload: alert })
 
 describe('describeAlert', () => {
@@ -36,6 +51,28 @@ describe('describeAlert', () => {
         detail: { anomaly_score: 0.91, drivers: ['temp_slope', 'air_slope'] },
       }),
     ).toBe("Score d'anomalie 0,91 sur temp_slope, air_slope")
+  })
+
+  it('says which entry point an attack goes for, and how many attempts were refused', () => {
+    expect(describeAlert(attack(14))).toBe('14 tentatives refusées sur le login')
+    expect(describeAlert(attack(1))).toBe('1 tentative refusée sur le login')
+    expect(describeAlert(attack(6, 'service-token'))).toBe("6 tentatives refusées sur l'entrée des Alerts")
+    expect(describeAlert(attack(6, 'feed-origin'))).toBe('6 tentatives refusées sur le flux en direct')
+  })
+
+  it('says where the attempts come from when the Alert carries the address', () => {
+    const from = (attempts: number): Alert => {
+      const alert = attack(attempts)
+      return alert.kind === 'cyber' ? { ...alert, detail: { ...alert.detail, address: '192.168.4.66' } } : alert
+    }
+
+    expect(describeAlert(from(14))).toBe('14 tentatives refusées sur le login, depuis 192.168.4.66')
+    expect(describeAlert(from(1))).toBe('1 tentative refusée sur le login, depuis 192.168.4.66')
+  })
+
+  it('has a French label for the kind and the source of an attack', () => {
+    expect(KIND_LABEL.cyber).toBe('Cyberattaque')
+    expect(SOURCE_LABEL.api).toBe('Command Post')
   })
 })
 
@@ -58,6 +95,11 @@ describe('newlyRaised', () => {
     expect(newlyRaised([gas('a', 'warning')], [gas('a', 'critical')])).toHaveLength(1)
     expect(newlyRaised([gas('a', 'critical')], [gas('a', 'critical')])).toEqual([])
     expect(newlyRaised([gas('a', 'critical')], [gas('a', 'warning')])).toEqual([])
+  })
+
+  it('announces an attack once, however many attempts it goes on for', () => {
+    expect(newlyRaised([], [attack(5)])).toHaveLength(1)
+    expect(newlyRaised([attack(5)], [attack(6)])).toEqual([])
   })
 
   it('announces a moving intruder once', () => {

@@ -1,5 +1,6 @@
 import type { Alert, Severity } from '@/shared/contract'
 import { decimal } from '@/shared/lib/format'
+import { plural, VECTOR_LABEL } from '@/shared/lib/labels'
 
 export { KIND_LABEL, SEVERITY_LABEL, SOURCE_LABEL } from '@/shared/lib/labels'
 
@@ -20,6 +21,11 @@ export function describeAlert(alert: Alert): string {
       return alert.value === undefined ? 'Bruit fort' : `Son sur ${Math.round(alert.value * 100)} % du cycle`
     case 'presence':
       return 'Mouvement détecté par le PIR'
+    case 'cyber': {
+      const { attempts, vector, address } = alert.detail
+      const from = address === undefined ? '' : `, depuis ${address}`
+      return `${plural(attempts, 'tentative')} ${attempts > 1 ? 'refusées' : 'refusée'} sur ${VECTOR_LABEL[vector]}${from}`
+    }
   }
 }
 
