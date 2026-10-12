@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { createAlertPipeline } from '../src/alerts.js'
-import { AlertSchema, type Frame, TelemetrySchema } from '../src/contract.js'
+import { AlertSchema, COMMAND_POST, type Frame, TelemetrySchema } from '../src/contract.js'
+import { THRESHOLD } from '../src/cyber-watch.js'
 import { createMemoryHistory } from '../src/history.js'
 import { listIncidents } from '../src/incidents.js'
 import { type MockTick, mockTicks } from '../src/mock-feed.js'
 import { createTelemetryPipeline } from '../src/telemetry.js'
 
-// One loop of the scenario is 40 ticks.
-const LOOP = 40
+// One loop of the scenario is 52 ticks.
+const LOOP = 52
 
 function firstTicks(count: number, run = 'test'): MockTick[] {
   const ticks: MockTick[] = []
@@ -52,16 +53,17 @@ describe('mock feed script', () => {
       noise: 'esp32',
       intrusion: 'vision',
       predictive: 'predictive',
+      cyber: 'api',
     })
   })
 
-  it('walks the Status from nominal to elevated, critical and back, intruder included, in a loop', () => {
+  it('walks the Status from nominal to elevated, critical and back, intruder and attack included, in a loop', () => {
     const { frames } = play(firstTicks(2 * LOOP))
     const statuses = frames.flatMap((frame) => (frame.type === 'status' ? [frame.payload.status] : []))
     // Consecutive duplicates removed: an Alert that leaves the Status as it was still sends it.
     const changes = statuses.filter((status, index) => status !== statuses[index - 1])
 
-    const loop = ['elevated', 'critical', 'elevated', 'nominal', 'critical', 'nominal']
+    const loop = ['elevated', 'critical', 'elevated', 'nominal', 'critical', 'nominal', 'elevated', 'nominal']
     expect(changes).toEqual([...loop, ...loop])
   })
 
@@ -72,14 +74,43 @@ describe('mock feed script', () => {
     expect(last).toMatchObject({ payload: { status: 'nominal' } })
   })
 
-  it('makes three Incidents a loop: the gas leak, the clap and the intruder', () => {
+  it('makes four Incidents a loop: the gas leak, the clap, the intruder and the attack', () => {
     const { history } = play(firstTicks(LOOP))
 
     expect(listIncidents(history)).toMatchObject([
       { kinds: ['predictive', 'gas', 'presence', 'thermal'], peak: 'critical', alerts: 10, ongoing: false },
       { kinds: ['noise'], peak: 'info', alerts: 2, ongoing: false },
       { kinds: ['intrusion'], peak: 'critical', alerts: 5, ongoing: false },
+      { kinds: ['cyber'], peak: 'warning', alerts: 7, ongoing: false },
     ])
+  })
+
+  it('plays an attack on the login as the API would raise it: on the Command Post, raised again at each refusal, then cleared', () => {
+    const attack = alertsOf(firstTicks(LOOP)).flatMap((alert) => (alert.kind === 'cyber' ? [alert] : []))
+    const raised = attack.filter((alert) => alert.state === 'raised')
+    const counts = raised.map((alert) => alert.detail.attempts)
+
+    expect(raised.length).toBeGreaterThan(1)
+    expect(attack.map((alert) => alert.state)).toEqual([...raised.map(() => 'raised'), 'cleared'])
+    // One Alert, the same from its first raise to its clear.
+    expect(new Set(attack.map((alert) => alert.alert_id)).size).toBe(1)
+    for (const alert of attack) {
+      expect(alert).toMatchObject({ sentinel: COMMAND_POST, severity: 'warning', detail: { vector: 'login' } })
+      expect(alert.value).toBe(alert.detail.attempts)
+    }
+    // It starts on the watch's threshold, and each refusal after that counts.
+    expect(counts.at(0)).toBe(THRESHOLD)
+    expect(counts).toEqual([...new Set(counts)].sort((a, b) => a - b))
+    expect(attack.at(-1)?.detail.attempts).toBe(counts.at(-1))
+  })
+
+  it('leaves the Readings calm during the attack: nothing happens on the site', () => {
+    const during = firstTicks(LOOP).filter((tick) => tick.alerts.some((alert) => alert.kind === 'cyber'))
+
+    for (const { telemetry } of during) {
+      expect(telemetry.readings.air).toBeLessThan(200)
+      expect(telemetry.readings.pir).toBe(false)
+    }
   })
 
   it('records the telemetry and the Alerts it plays in the history', () => {

@@ -145,7 +145,7 @@ Each vector is counted apart, with its own Alert and `alert_id`. A request witho
 ## Mock feed
 `MOCK_FEED=true` plays a scripted scenario in a loop, one tick every `MOCK_FEED_INTERVAL_MS`, for the front-ends to work without a Sentinel, a broker or the AI services. Each tick is a telemetry snapshot, plus the Alerts the producers would send on it. They go through the same pipelines as the real ones: paired by `alert_id`, recorded in the history, broadcast, `Status` recomputed. Switching to the live feed changes nothing on the front.
 
-One loop, 40 ticks (40 s by default), every kind of Alert in it:
+One loop, 52 ticks (52 s by default), every kind of Alert in it:
 
 | Ticks | What happens | `Status` |
 |---|---|---|
@@ -157,8 +157,10 @@ One loop, 40 ticks (40 s by default), every kind of Alert in it:
 | 24–27 | `gas` and `predictive` cleared: the leak's Incident closes (10 Alerts) | `nominal` |
 | 28–29 | A clap: `sound` 0.82, `noise` raised (`info`) then cleared | `nominal` |
 | 32–36 | An `intrusion` coming in by the fence and walking in toward the plant: taller and taller in the image (`h_norm` 0.3 → 0.66), the camera turning to follow it (`pan` 0 → 14° → −20°), someone else behind it for the last two sightings (`others`), then gone | `critical` → `nominal` |
+| 40–48 | A brute force on the login, the site calm: `cyber` raised by the `api` on the watch's threshold (5 attempts), raised again each second up to 29, then cleared once it has gone quiet | `elevated` → `nominal` |
 
-- `alert_id`s are unique to each loop and each run (`mock-<run>-<loop>-<kind>`). The intruder keeps its `alert_id` while it moves: each new position is a `raised` that replaces the last.
+- `alert_id`s are unique to each loop and each run (`mock-<run>-<loop>-<kind>`). The intruder keeps its `alert_id` while it moves: each new position is a `raised` that replaces the last. So does the attack as its count goes up.
+- The attack is scripted, like the rest: the mock sends the Alert the [attack watch](#attack-watch) would raise, on `command-post`, without any login being refused.
 - Every frame validates against the contract, like those of the real producers.
 
 ## Sentinel telemetry and Alerts — MQTTS
@@ -305,7 +307,7 @@ curl http://127.0.0.1:8080/api/v1/incidents/1
 
 - Only the Incident's own Alerts are in: when it opens on the instant the one before closed, or closes on the instant the next opens, their Alerts are left out. The telemetry of those instants stays in.
 - The schemas are in [`src/contract.ts`](src/contract.ts): `IncidentsSchema`, `IncidentReplaySchema`, `IncidentSchema`.
-- The mock feed makes three Incidents per loop, like a real Outpost would.
+- The mock feed makes four Incidents per loop, like a real Outpost would.
 
 
 ## Actuator commands — `POST /api/v1/commands`

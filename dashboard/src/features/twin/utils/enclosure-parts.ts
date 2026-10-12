@@ -23,8 +23,16 @@ export type EnclosurePart = keyof typeof ENCLOSURE_PARTS
 // the radius of its foot on the ground and where its lens is from the mast's axis, `x` across its front, `y`
 // above the ground and `z` out of it. The camera hangs out of the front, on an arm and a servo that turns it:
 // its lens is on the axis it turns about, and nothing of the Enclosure is under it, so the field that goes
-// down from it does not go through the body.
-export const ENCLOSURE_SHAPE = { scale: 1.25, foot: 0.48, lens: { x: -0.38, y: 1.82, z: 0.57 } } as const
+// down from it does not go through the body. `top` is how high it stands, its crown and the tip of its antenna
+// included, and `reach` how far from the mast's axis the corners of its body are: what closes over the
+// Outpost must clear both.
+export const ENCLOSURE_SHAPE = {
+  scale: 1.25,
+  foot: 0.48,
+  lens: { x: -0.38, y: 1.82, z: 0.57 },
+  top: 2.6,
+  reach: 0.84,
+} as const
 
 // What the Enclosure has engraved on its body.
 export const ENGRAVING = { maker: 'AetherCorp', model: 'SENTINEL-X', serial: 'SN SX-01-2026-0001' } as const

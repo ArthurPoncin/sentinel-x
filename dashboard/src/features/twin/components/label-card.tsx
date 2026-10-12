@@ -34,7 +34,8 @@ export const CARD_RATIO = CARD.height / CARD.width
 const ANCHORS = { middle: [0.5, 0.5], foot: [0.5, 0] } as const
 
 export interface LabelCardProps {
-  // What it reads, or null: it has nothing to say, and keeps its last text while it fades out.
+  // What it reads, or null: it has nothing to say, and keeps its last text while it fades out. A line break
+  // in it makes two lines of it, smaller.
   text: string | null
   // The color of its text and of its edge.
   color: string
@@ -66,10 +67,16 @@ export function LabelCard({ text, color, width, position, anchor = 'middle', sho
     context.strokeStyle = color
     context.stroke()
     context.fillStyle = color
-    context.font = '700 58px ui-monospace, Menlo, Consolas, monospace'
     context.textAlign = 'center'
     context.textBaseline = 'middle'
-    context.fillText(written, width / 2, height / 2 + 2, width - 80)
+    const lines = written.split('\n')
+    // Two lines share the card's height: smaller, one above its middle and one below.
+    const size = lines.length > 1 ? 42 : 58
+    context.font = `700 ${size}px ui-monospace, Menlo, Consolas, monospace`
+    lines.forEach((line, index) => {
+      const offset = (index - (lines.length - 1) / 2) * (size + 6)
+      context.fillText(line, width / 2, height / 2 + 2 + offset, width - 80)
+    })
   })
 
   useFrame(() => {

@@ -192,7 +192,7 @@ The engineering report lists 19 controls: six are proven by the API's automated 
 
 ## Quick start
 
-**On a laptop, without hardware** (Node 22 or later). The API plays a scripted scenario in a loop: a gas leak, a clap, an intruder.
+**On a laptop, without hardware** (Node 22 or later). The API plays a scripted scenario in a loop: a gas leak, a clap, an intruder, an attack on the login.
 
 ```bash
 git clone https://github.com/ArthurPoncin/sentinel-x.git && cd sentinel-x
