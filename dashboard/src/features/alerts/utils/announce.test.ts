@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Alert, AlertKind, Severity, StatusLevel } from '@/shared/contract'
-import { announcements, sayAlert } from './announce'
+import { announcements, report, sayAlert } from './announce'
 
 const at = (second: number) => new Date(Date.UTC(2026, 9, 12, 14, 0, second)).toISOString()
 
@@ -115,5 +115,40 @@ describe('sayAlert', () => {
 
   it('says one attempt in the singular', () => {
     expect(sayAlert(attack(1))).toBe('Avertissement. Cyberattaque : 1 tentative refusée sur le login.')
+  })
+})
+
+describe('report', () => {
+  it('says the site is nominal when no Alert is active', () => {
+    expect(report(watched([]))).toEqual(['Site nominal : aucune alerte active.'])
+  })
+
+  it('says the Status and how many Alerts are active, then each of them', () => {
+    expect(report(watched([gas('a', 'warning')], 'elevated'))).toEqual([
+      'Statut vigilance : 1 alerte active.',
+      'Avertissement. Fuite de gaz : mesure à 420.',
+    ])
+  })
+
+  it('says the most severe Alert first, then the latest', () => {
+    const said = report(watched([gas('a', 'warning', 1), gas('b', 'warning', 5), intruder(0.4)], 'critical'))
+
+    expect(said).toEqual([
+      'Statut critique : 3 alertes actives.',
+      'Alerte critique. Intrusion : une personne détectée, confiance 88 pour cent.',
+      sayAlert(gas('b', 'warning', 5)),
+      sayAlert(gas('a', 'warning', 1)),
+    ])
+  })
+
+  it('says every active Alert, an old one as well: nothing of a report is news', () => {
+    const alerts = Array.from({ length: 6 }, (_, index) => gas(`g-${index}`, 'warning', index))
+
+    expect(report(watched(alerts, 'elevated'))).toHaveLength(1 + alerts.length)
+  })
+
+  it('says the Status as it is when it and the Alerts do not agree yet', () => {
+    expect(report(watched([], 'elevated'))).toEqual(['Statut vigilance : aucune alerte active.'])
+    expect(report(watched([gas('a', 'warning')]))).toEqual(['Statut nominal : 1 alerte active.', sayAlert(gas('a', 'warning'))])
   })
 })

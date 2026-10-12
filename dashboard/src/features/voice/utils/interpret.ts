@@ -19,7 +19,7 @@ export const SCREENS = ['operator', 'twin', 'tutorial'] as const
 
 export type Screen = (typeof SCREENS)[number]
 
-export type Command = 'siren' | 'siren-off' | Screen | 'replay-last'
+export type Command = 'siren' | 'siren-off' | Screen | 'replay-last' | 'report' | 'silence' | 'speak'
 
 // Each command, by each way of asking for it. Every word is one of the model's: the engine drops from its
 // grammar a word it has never heard.
@@ -30,6 +30,10 @@ export const WORDINGS: Readonly<Record<Command, readonly string[]>> = {
   twin: ['jumeau', 'jumeau numérique', 'écran jumeau'],
   tutorial: ['tutoriel', 'tutoriel des gestes', 'gestes'],
   'replay-last': ['rejoue le dernier incident', 'relance le dernier incident', 'montre le dernier incident'],
+  report: ['rapport', 'fais ton rapport', 'au rapport'],
+  // The announcements, hushed until they are asked for again.
+  silence: ['silence', 'coupe les annonces', 'arrête les annonces'],
+  speak: ['parle', 'reprends les annonces', 'remets les annonces'],
 }
 
 // Seconds after the wake word during which a command is taken: the time to say one, and for the engine to be

@@ -57,3 +57,17 @@ export function announcements(before: Watched, after: Watched): string[] {
   const said = byUrgency(newlyRaised(before.alerts, after.alerts)).map(sayAlert)
   return before.status === after.status ? said : [...said, STATUS_SAID[after.status]]
 }
+
+// The Status in a word, when it is asked for.
+const STATUS_NAMED: Record<StatusLevel, string> = { nominal: 'nominal', elevated: 'vigilance', critical: 'critique' }
+
+// The sentences of the report, when the Operator asks for it: the Status and how many Alerts are active, then
+// each of them, the most severe first. With none, that the site is nominal. Unlike an announcement, it says
+// what is, not what changed: an Alert raised an hour ago is in it.
+export function report({ alerts, status }: Watched): string[] {
+  if (alerts.length === 0) {
+    return [status === 'nominal' ? 'Site nominal : aucune alerte active.' : `Statut ${STATUS_NAMED[status]} : aucune alerte active.`]
+  }
+  const active = `${plural(alerts.length, 'alerte')} ${alerts.length > 1 ? 'actives' : 'active'}`
+  return [`Statut ${STATUS_NAMED[status]} : ${active}.`, ...byUrgency(alerts).map(sayAlert)]
+}

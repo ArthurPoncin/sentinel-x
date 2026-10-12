@@ -25,6 +25,9 @@ const COMMANDS: Readonly<Record<Command, string>> = {
   twin: 'aller au jumeau numérique',
   tutorial: 'aller au tutoriel des gestes',
   'replay-last': 'rejouer le dernier incident',
+  report: 'faire le rapport',
+  silence: 'faire taire les annonces',
+  speak: 'rétablir les annonces',
 }
 
 function made(outcome: Outcome): string {

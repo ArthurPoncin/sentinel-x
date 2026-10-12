@@ -33,6 +33,11 @@ describe('lastLine', () => {
     expect(line('sentinelle rejoue le dernier incident', { kind: 'command', command: 'replay-last' })).toBe(
       '« sentinelle rejoue le dernier incident » · commande : rejouer le dernier incident',
     )
+    expect(line('sentinelle rapport', { kind: 'command', command: 'report' })).toBe('« sentinelle rapport » · commande : faire le rapport')
+    expect(line('sentinelle silence', { kind: 'command', command: 'silence' })).toBe(
+      '« sentinelle silence » · commande : faire taire les annonces',
+    )
+    expect(line('sentinelle parle', { kind: 'command', command: 'speak' })).toBe('« sentinelle parle » · commande : rétablir les annonces')
     expect(line('sentinelle', { kind: 'woken' })).toBe('« sentinelle » · mot d\'éveil entendu')
     expect(line('coupe la sirène', { kind: 'ignored' })).toBe('« coupe la sirène » · sans « Sentinelle », rien n\'est fait')
     expect(line('sentinelle coupe la sirène', { kind: 'unsure' })).toBe(

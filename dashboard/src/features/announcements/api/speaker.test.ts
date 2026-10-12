@@ -137,4 +137,54 @@ describe('the speaker', () => {
     speaker.say(['c'])
     expect(browser.said()).toEqual(['a', 'c'])
   })
+
+  it('says whole what was asked for, however long: a report is not a burst', () => {
+    const browser = synthesis([HORTENSE])
+    const speaker = createSpeaker(browser.fake, utter)
+    const report = Array.from({ length: QUEUE_LIMIT + 4 }, (_, index) => `line ${index}`)
+
+    speaker.say(report, true)
+    for (const _ of report) browser.end()
+
+    expect(browser.said()).toEqual(report)
+  })
+
+  it('tells when it starts talking and when it is done, once each', () => {
+    const browser = synthesis([HORTENSE])
+    const talking: boolean[] = []
+    const speaker = createSpeaker(browser.fake, utter, (now) => talking.push(now))
+
+    speaker.say(['a', 'b'])
+    expect(talking).toEqual([true])
+    browser.end()
+    expect(talking).toEqual([true])
+    browser.end()
+    expect(talking).toEqual([true, false])
+  })
+
+  it('tells it is done as it is hushed, and is not set talking by the sentence it was cut in', () => {
+    const browser = synthesis([HORTENSE])
+    const talking: boolean[] = []
+    const speaker = createSpeaker(browser.fake, utter, (now) => talking.push(now))
+    speaker.say(['a', 'b'])
+    const cut = browser.last()
+
+    speaker.hush()
+    expect(talking).toEqual([true, false])
+
+    // The browser ends the sentence it cut later than it says: the next one is not skipped for it.
+    speaker.say(['c', 'd'])
+    cut?.onerror?.({} as SpeechSynthesisErrorEvent)
+    expect(browser.said()).toEqual(['a', 'c'])
+    expect(talking).toEqual([true, false, true])
+  })
+
+  it('never tells it talks without a French voice', () => {
+    const talking: boolean[] = []
+
+    createSpeaker(synthesis([ZIRA]).fake, utter, (now) => talking.push(now)).say(['a'])
+    createSpeaker(undefined, utter, (now) => talking.push(now)).say(['a'])
+
+    expect(talking).toEqual([])
+  })
 })
