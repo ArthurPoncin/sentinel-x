@@ -36,6 +36,9 @@ type Intrusion = Extract<Alert, { kind: 'intrusion' }>
 // curve, the active Alerts from the most urgent, and the Incidents, where choosing one replays it. They read
 // what the Twin shows, the live feed or the replayed instant; the camera's says in a replay that no picture is
 // replayed.
+// The window an Alert concerns opens by itself as it is raised, the camera's for an intrusion, the gas curve for
+// a leak, the temperature curve for an overheating or a predicted drift, and closes a few seconds after it has
+// cleared; one the Operator opened or asked for closes only at the Operator's word.
 // With `?capture` it is the Twin alone, on the same feed: no top bar, no sidebar, no caption, no scrubber, no window,
 // the whole stage held in frame, to be filmed in a vertical window for the teaser.
 export function TwinRoute() {
@@ -48,7 +51,6 @@ export function TwinRoute() {
   const history = useLiveFeed((state) => state.history)
   const player = usePlayer()
   const incidents = useIncidentsToReplay(history, player)
-  const [windows, sendToWindows] = useWindows()
   const live = useLiveHands()
   const operator = useMemo<OperatorHands | undefined>(
     () =>
@@ -77,6 +79,8 @@ export function TwinRoute() {
       player.frames ? stateAfter(player.frames) : { connection, connectedOnce, status, latestTelemetry, activeAlerts },
     [player.frames, connection, connectedOnce, status, latestTelemetry, activeAlerts],
   )
+  // The Alerts shown open and close their windows: at the replayed instants in a replay.
+  const [windows, sendToWindows] = useWindows(shown.activeAlerts, player.replay ? player.at : null)
   // Read from the page, as the feed's address is: a replay is no link, and shows no padlock.
   const encrypted = !player.replay && feedEncrypted(window.location)
   const scene = useMemo(() => toScene(shown, { encrypted }), [shown, encrypted])
