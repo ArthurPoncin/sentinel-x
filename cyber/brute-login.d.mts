@@ -10,6 +10,9 @@ export interface BruteForceOptions {
   durationMs: number
   // PEM file of the team CA to trust, added to the public roots (HTTPS targets). TLS stays verified.
   caFile?: string
+  // How long a single request waits for an answer before it is given up as unanswered, in
+  // milliseconds (default 10000). A stalled connection cannot keep the run from stopping by itself.
+  timeoutMs?: number
 }
 
 export interface BruteForceSummary {

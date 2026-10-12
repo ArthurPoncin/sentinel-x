@@ -1,5 +1,6 @@
 import { once } from 'node:events'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { createServer as createHttpServer } from 'node:http'
 import { createServer } from 'node:https'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -145,6 +146,23 @@ describe('a measured brute force on the login', () => {
     expect(summary.attempts).toBeGreaterThan(0)
     expect(summary.refused401).toBe(summary.attempts)
     expect(summary.other).toBe(0)
+  })
+
+  it('stops by itself even when the target accepts the connection but never answers', async () => {
+    // A server that takes every request and leaves it hanging, so neither a response nor an error
+    // would ever come: only the per-request timeout lets the run end.
+    const server = createHttpServer(() => {})
+    server.listen(0, '127.0.0.1')
+    await once(server, 'listening')
+    onTestFinished(() => void server.close())
+    const target = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+
+    const summary = await bruteForceLogin({ target, ratePerSec: 20, durationMs: 300, timeoutMs: 150 })
+
+    // Every attempt timed out unanswered, and the promise still resolved.
+    expect(summary.attempts).toBeGreaterThan(0)
+    expect(summary.other).toBe(summary.attempts)
+    expect(summary.refused401 + summary.refused429).toBe(0)
   })
 
   it('does not disable TLS verification: without the team CA the handshake fails', async () => {

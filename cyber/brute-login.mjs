@@ -10,21 +10,25 @@ import { rootCertificates } from 'node:tls'
 import { pathToFileURL } from 'node:url'
 
 const LOGIN_PATH = '/api/v1/auth/login'
+// A request that opens a connection but never gets answered is given up on after this, so the script
+// always stops by itself even when the target stalls. The timed-out attempt counts as unanswered.
+const REQUEST_TIMEOUT_MS = 10000
 
 // Posts one wrong password to the login and resolves with its HTTP status, or an error when the
-// request never got an answer (a refused TLS handshake among them).
-function postLogin(url, password, agent) {
+// request never got an answer (a refused TLS handshake or a stalled connection among them).
+function postLogin(url, password, agent, timeoutMs) {
   return new Promise((resolve) => {
     const client = url.protocol === 'https:' ? https : http
     const body = JSON.stringify({ password })
     const request = client.request(
       url,
-      { method: 'POST', agent, headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) } },
+      { method: 'POST', agent, timeout: timeoutMs, headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) } },
       (response) => {
         response.resume()
         resolve({ status: response.statusCode })
       },
     )
+    request.on('timeout', () => request.destroy(new Error(`no answer within ${timeoutMs}ms`)))
     request.on('error', (error) => resolve({ error }))
     request.end(body)
   })
@@ -41,7 +45,8 @@ function agentFor(target, caFile) {
 
 // Sends wrong logins to `target` at `ratePerSec` for `durationMs`, then stops by itself and resolves
 // with how many it sent and how many came back 401 or 429. `caFile` adds the team CA (HTTPS targets).
-export function bruteForceLogin({ target, ratePerSec, durationMs, caFile }) {
+// `timeoutMs` is how long a single request waits for an answer before it is given up as unanswered.
+export function bruteForceLogin({ target, ratePerSec, durationMs, caFile, timeoutMs = REQUEST_TIMEOUT_MS }) {
   const url = new URL(LOGIN_PATH, target)
   const agent = agentFor(url, caFile)
   const intervalMs = 1000 / ratePerSec
@@ -56,7 +61,7 @@ export function bruteForceLogin({ target, ratePerSec, durationMs, caFile }) {
   return new Promise((resolve) => {
     const inFlight = new Set()
     const fire = () => {
-      const attempt = postLogin(url, `wrong-${summary.attempts}`, agent).then((result) => {
+      const attempt = postLogin(url, `wrong-${summary.attempts}`, agent, timeoutMs).then((result) => {
         count(result)
         inFlight.delete(attempt)
       })
