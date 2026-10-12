@@ -647,6 +647,17 @@ The Operator says « Sentinelle » then a command, and the Alarm is driven as by
 - **Commands** — « coupe / arrête / stoppe la sirène », « déclenche / lance / active la sirène » ; « opérateur », « écran opérateur », « vue opérateur » ; « jumeau », « jumeau numérique », « écran jumeau » ; « tutoriel », « tutoriel des gestes », « gestes » ; « rejoue / relance / montre le dernier incident ». Every word of a wording has to be one of the model's: the engine drops the others from its grammar.
 - **Not yet** — checked in Chromium on a simulated microphone playing synthesized French sentences, not on the demo laptop: the recognition in a room's noise, `THRESHOLD` and the model's loading time are to be measured there (#161).
 
+## Announcements — `features/announcements`
+
+The dashboard says aloud, in French, each Alert raised and each change of Status, for who does not look at the screen, and writes the same sentences for a screen reader (#164). On every screen, not only where the toasts are.
+
+- **A pure choice of sentences** — `announcements(before, after)` (`features/alerts/utils/announce.ts`): the active Alerts and the Status before and after in, the ordered sentences out. The toasts' rule decides (`newlyRaised()`: raised or escalated, once per `alert_id`), the most severe first (`byUrgency()`), then the Status if it changed. `sayAlert()` rewrites each kind for the ear: « pour cent », « degrés », no address, none of the model's names for what drifts.
+- **A live region** — `AnnouncementsProvider` writes every sentence in a hidden `role="log"` `aria-live="polite"` region, the last `WRITTEN_LIMIT` (5) of them, whatever the switch says: an Operator with a screen reader of their own keeps the built-in voice off.
+- **The built-in voice** — the browser's speech synthesis (`api/speaker.ts`), with a French voice of the machine (`frenchVoice()`: one that speaks offline first, France's first). Without one, or without synthesis, nothing is said and the sentences stay written.
+- **Off by default** — its own switch at the foot of the menu, remembered by the browser (`rememberedSwitch()`); it owes nothing to the voice control. Switched off, the voice stops in the middle of its sentence.
+- **No pile** — one sentence at a time is handed to the browser; at most `QUEUE_LIMIT` (3) wait (`queued()`). Past that, those that waited longest go, then the least severe of the new ones.
+- **Not yet** — checked in Chromium on a stand-in synthesis, not heard on the demo laptop: the voice the trial keeps is to be named there (#161). The ear is not closed while the voice speaks.
+
 ## TODO
 - [x] App shell + live feed (WebSocket client, store, hook) — #10
 - [x] Operator login screen (`POST /api/v1/auth/login`, `GET /api/v1/auth/check`), back when the session ends — #48
