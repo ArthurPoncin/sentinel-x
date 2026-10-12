@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DUST } from './dust'
 import { ENCLOSURE_SHAPE } from './enclosure-parts'
+import { STAGE_RADIUS, TARGET } from './framing'
 import {
   alongPipe,
   type Block,
@@ -110,6 +111,45 @@ describe('the site', () => {
     for (const [part, outline] of Object.entries(outlines())) {
       expect(reach(outline), part).toBeLessThan(SITE.fence.radius - WALKWAY)
     }
+  })
+})
+
+describe('the shield', () => {
+  const { radius, height } = SITE.shield
+  // How high the dome is over a point of the ground `away` from the socle's centre.
+  const over = (away: number) => height * Math.sqrt(1 - (away / radius) ** 2)
+
+  it('comes down between the fence and the ring around the socle', () => {
+    expect(radius).toBeGreaterThan(SITE.fence.radius)
+    expect(radius).toBeLessThan(SITE.socle.radius - SITE.socle.ring)
+  })
+
+  it('closes over the fence, its pillars and all that stands inside it, the turbine at its highest included', () => {
+    const { fence, chimneys, turbine, hall, transformer, enclosure } = SITE
+    const { scale, top, reach: body } = ENCLOSURE_SHAPE
+
+    // The Enclosure on its mast, the tallest of all: the far corners of its body, as high as its antenna.
+    expect(over(fromCentre(enclosure) + body * scale)).toBeGreaterThan(top * scale + 0.2)
+
+    expect(over(fence.radius)).toBeGreaterThan(fence.gate.pillar.height)
+    for (const chimney of chimneys) expect(over(fromCentre(chimney) + chimney.radius)).toBeGreaterThan(chimney.height)
+    for (const block of [hall, transformer]) expect(over(reach(corners(block)))).toBeGreaterThan(block.height)
+    // A blade's tip, all the way round the rotor, which turns in the plane across the bearing it faces.
+    for (let turn = 0; turn < 2 * Math.PI; turn += Math.PI / 24) {
+      const aside = turbine.rotor.radius * Math.sin(turn)
+      const tip = {
+        x: turbine.x + aside * Math.cos(turbine.bearing),
+        z: turbine.z - aside * Math.sin(turbine.bearing),
+      }
+      expect(over(fromCentre(tip))).toBeGreaterThan(turbine.height + turbine.rotor.radius * Math.cos(turn) + 0.1)
+    }
+  })
+
+  it('holds in the stage the camera frames whole, with room over it for its label', () => {
+    const [, target] = TARGET
+
+    expect(Math.hypot(radius, target)).toBeLessThan(STAGE_RADIUS)
+    expect(height - target + 0.6).toBeLessThan(STAGE_RADIUS)
   })
 })
 

@@ -25,6 +25,11 @@ export const SITE = {
   // The disc of terrain everything stands on. Its top is the ground, at height 0. The Status's ring runs
   // around its rim, `ring` wide.
   socle: { radius: 3.2, thickness: 0.32, ring: 0.06 },
+  // The shield raised over the Outpost while its Command Post is attacked: a dome standing on the ground
+  // around the socle's centre, `radius` wide there and `height` at its top, taller than it is wide for the
+  // Enclosure on its mast. It closes over the fence and all that stands inside it, and comes down inside the
+  // Status's ring.
+  shield: { radius: 3.1, height: 4.2 },
   // The micro power plant, on the right of the site, where the Enclosure's shadow does not reach: the
   // generator hall, its two chimneys behind it, the transformer station behind the Enclosure. The hall's door
   // is on its front wall, its middle `along` from the wall's, toward x.

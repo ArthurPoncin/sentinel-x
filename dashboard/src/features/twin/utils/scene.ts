@@ -1,5 +1,6 @@
 import { STATUS_COLORS } from '@/shared/config/status-colors'
-import type { Alert, Severity, StatusLevel, Telemetry } from '@/shared/contract'
+import type { Alert, CyberVector, Severity, StatusLevel, Telemetry } from '@/shared/contract'
+import { plural } from '@/shared/lib/labels'
 import { detectionLabel } from './detection'
 import type { EnclosurePart } from './enclosure-parts'
 import { gasLevel } from './gas-level'
@@ -96,10 +97,15 @@ export interface SceneProps {
   // The floodlights on the perimeter: lit while a `presence` or an `intrusion` Alert is active, someone near
   // the site or inside it, dark otherwise.
   floodlights: { lit: boolean }
+  // The shield over the Outpost, a dome raised around the whole site while a `cyber` Alert is active: the last
+  // raised of them, the entry point of the API it says is attacked, how many attempts were refused there so
+  // far, and the label that reads both. Null while it is lowered: no attack is going on.
+  shield: { alertId: string; vector: CyberVector; attempts: number; label: string } | null
   // Where the last raised of the active Alerts happens on the site plan, its anchor: the intruder for an
   // `intrusion`, the gas pipe for a `gas`, the generator hall for a `thermal`, the gate for a `presence`, the
   // Enclosure for a `predictive`. A clap is heard, not seen anywhere: a `noise` Alert has none, and leaves the
-  // anchor to the Alert raised before it. The camera turns to the anchor as its Alert is raised
+  // anchor to the Alert raised before it. Nor has a `cyber` one, which is on the whole Outpost: the camera
+  // stands back for it instead. The camera turns to the anchor as its Alert is raised
   // (alert-framing.ts). Null while no Alert that has one is active.
   anchor: { alertId: string; at: GroundPoint } | null
   // The Enclosure's link to the Command Post, shown at its antenna.
@@ -137,6 +143,9 @@ export const NOISE_COLOR = '#cfe8ff'
 export const LINK_COLOR = '#ffffff'
 // What a drifting Probe pulses in: an orange of its own, to be told from the amber of an elevated Status.
 export const DRIFT_COLOR = '#ff6a1a'
+// What the shield is drawn in: an electric blue, which no Status shares. An attack refused is the Outpost
+// holding, and the dome must be told from the gas's red and the presence's amber it stands over.
+export const SHIELD_COLOR = '#3d9bff'
 
 // The Probes the predictive model watches, by their key in ENCLOSURE_PARTS.
 export type DriftingProbe = Extract<EnclosurePart, 'dht22' | 'mq2'>
@@ -156,6 +165,19 @@ export const DRIVER_PROBES: ReadonlyMap<string, DriftingProbe> = new Map([
 // What the label over the drifting Probes reads: the model's score, as the Alert gives it, to two decimals.
 export function driftLabel(score: number): string {
   return `dérive · score ${score.toFixed(2)}`
+}
+
+// The entry points of the API as the shield's label names them: short, for a card read from across the room.
+const SHIELD_VECTOR: Readonly<Record<CyberVector, string>> = {
+  login: 'login',
+  'service-token': 'entrée des Alerts',
+  'feed-origin': 'flux en direct',
+}
+
+// What the label over the shield reads, on two lines: the entry point attacked, then the attempts refused.
+export function shieldLabel(vector: CyberVector, attempts: number): string {
+  const refused = `${plural(attempts, 'tentative')} ${attempts > 1 ? 'refusées' : 'refusée'}`
+  return `attaque · ${SHIELD_VECTOR[vector]}\n${refused}`
 }
 
 // A Status that is not nominal colors what stands for it, the rim light and the ring around the socle, and
@@ -260,6 +282,7 @@ export function toScene(state: TwinState, feed: TwinFeed = { encrypted: false })
   let pan = 0
   let aim = 0
   let anchor: SceneProps['anchor'] = null
+  let shield: SceneProps['shield'] = null
   let present = false
   let shimmer = false
   // The highest severity among the Alerts the Sentinel fires its Alarm on. The contract does not carry the
@@ -281,6 +304,10 @@ export function toScene(state: TwinState, feed: TwinFeed = { encrypted: false })
       pan = panOf(alert)
       // From the bearing the camera rests on to the one it sights the intruder along.
       aim = SITE.enclosure.heading - sightBearing(x_norm, pan)
+    }
+    if (alert.kind === 'cyber') {
+      const { vector, attempts } = alert.detail
+      shield = { alertId: alert.alert_id, vector, attempts, label: shieldLabel(vector, attempts) }
     }
     if (alert.kind === 'gas' || alert.kind === 'thermal') {
       if (alarm === null || SEVERITIES.indexOf(alert.severity) > SEVERITIES.indexOf(alarm)) alarm = alert.severity
@@ -310,6 +337,7 @@ export function toScene(state: TwinState, feed: TwinFeed = { encrypted: false })
     intruder,
     presence: { active: present },
     floodlights: { lit: present || intruder !== null },
+    shield,
     anchor,
     // A feed that is not open encrypts nothing: no padlock before the first connection, nor on a signal lost.
     link: { encrypted: feed.encrypted && state.connection === 'open' },

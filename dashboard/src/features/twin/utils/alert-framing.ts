@@ -18,6 +18,14 @@ export interface Framing {
   since: number
 }
 
+// What the camera frames on its own, each on its own: the last Alert it turned to, and when it last stood back
+// for a wide shot, on the same clock. An Alert on the whole Outpost, an attack on its Command Post, happens
+// nowhere on the ground: the camera stands back for it instead of turning. Null before the first of each.
+export interface Shots {
+  framing: Framing | null
+  wide: number | null
+}
+
 // What turns the camera at an instant, when the Operator's hand does not.
 export interface CameraTurn {
   // Radians a second the camera goes round the site by to face the Alert's anchor: positive toward growing
@@ -49,6 +57,26 @@ export function newlyRaised(seen: readonly Frame[], frames: readonly Frame[]): s
   return raised
 }
 
+// The shots after the Alerts in `raised` came in at `now`: the camera turns to the scene's anchor when its
+// Alert is among them, and stands back when the one in `whole` is, the Alert that is on the whole Outpost.
+// One does not undo the other: an intruder seen during an attack turns the camera, which stays back. Otherwise
+// the shots it had: an Alert sent again is not raised, and frames nothing a second time.
+export function shotsAfter(
+  shots: Shots,
+  raised: readonly string[],
+  anchor: { alertId: string; at: GroundPoint } | null,
+  whole: string | null,
+  now: number,
+): Shots {
+  const onAnchor = anchor !== null && raised.includes(anchor.alertId)
+  const onWhole = whole !== null && raised.includes(whole)
+  if (!onAnchor && !onWhole) return shots
+  return {
+    framing: onAnchor ? { anchor: anchor.at, since: now } : shots.framing,
+    wide: onWhole ? now : shots.wide,
+  }
+}
+
 // The angle to turn by to go from one bearing to another the shortest way round, in radians: half a turn at
 // most either way, positive toward growing bearings.
 export function shortestTurn(from: number, to: number): number {
@@ -64,6 +92,18 @@ function pull(elapsed: number): number {
   if (share >= 1) return FRAMING_PULL
   // A smoothstep's speed over what it has left to go: 6s(1 − s) over (1 − s)²(1 + 2s).
   return Math.min(FRAMING_PULL, (6 * share) / ((1 - share) * (1 + 2 * share)) / FRAMING_TURN)
+}
+
+// The share of what is left to stand back that the camera closes a second at `now`, for a wide shot taken at
+// `wide`: it goes out to where the whole Outpost shows as it turns to an anchor, eased over FRAMING_TURN
+// seconds, and is held there for the hold. 0 without a wide shot, and once the Operator's hand has taken the
+// camera, while they hold it and once they have touched it since the Alert was raised. It then stays where it
+// stands: the Operator brings it back in.
+export function standBack(wide: number | null, touch: CameraTouch, now: number): number {
+  if (wide === null || touch.kind === 'holding') return 0
+  if (touch.kind === 'released' && touch.at >= wide) return 0
+  const elapsed = now - wide
+  return elapsed < FRAMING_TURN + FRAMING_HOLD ? pull(elapsed) : 0
 }
 
 // How the camera turns on its own at `now`, seen from `azimuth`, the bearing it stands at around the site. It

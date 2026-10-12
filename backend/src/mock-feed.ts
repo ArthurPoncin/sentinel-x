@@ -1,13 +1,15 @@
 import type { AlertPipeline } from './alerts.js'
-import type { Alert, Telemetry } from './contract.js'
+import { type Alert, COMMAND_POST, type Telemetry } from './contract.js'
+import { THRESHOLD } from './cyber-watch.js'
 import type { TelemetryPipeline } from './telemetry.js'
 
 type Ramp = readonly [from: number, to: number]
 
 const SENTINEL = 'sentinel-01'
 
-// An Alert as one of the producers would send it, before the tick stamps it.
-type ScriptedAlert = Omit<Alert, 'alert_id' | 'sentinel' | 'ts'> & { id: string }
+// An Alert as one of the producers would send it, before the tick stamps it. It is on the Sentinel unless it
+// says where else.
+type ScriptedAlert = Omit<Alert, 'alert_id' | 'sentinel' | 'ts'> & { id: string; sentinel?: string }
 
 interface Segment {
   ticks: number
@@ -65,6 +67,19 @@ const drift = (state: 'raised' | 'cleared'): ScriptedAlert => ({
   detail: { anomaly_score: 0.91, drivers: ['temp_slope', 'air_slope'] },
 })
 
+// What the API raises as it refuses login after login from another machine of the table Wi-Fi: `attempts`
+// refused so far.
+const attack = (state: 'raised' | 'cleared', attempts: number): ScriptedAlert => ({
+  id: 'attack',
+  sentinel: COMMAND_POST,
+  source: 'api',
+  kind: 'cyber',
+  severity: 'warning',
+  state,
+  value: attempts,
+  detail: { vector: 'login', attempts, address: '192.168.4.66' },
+})
+
 const simple = (
   kind: 'thermal' | 'presence' | 'noise',
   severity: 'info' | 'warning',
@@ -80,7 +95,9 @@ const calm = { air: [180, 190], temp: [31.0, 31.2], sound: [0.02, 0.04], pir: fa
 // - a clap next to the sound sensor;
 // - an intruder who comes in on the right of the camera's image, by the fence, and walks in toward the
 //   plant: the camera turns to them, then follows them to its left as they come nearer, someone else behind
-//   them for the last two sightings.
+//   them for the last two sightings;
+// - a brute force on the login, the site calm all along: the API raises its Alert on the watch's threshold,
+//   raises it again as the refusals add up, then clears it once the attack has gone quiet.
 const SCENARIO: Segment[] = [
   { ticks: 6, ...calm },
   { ticks: 4, air: [200, 260], temp: [31.4, 32.4], sound: [0.03, 0.03], pir: false, alerts: { 0: [drift('raised')] } },
@@ -131,6 +148,20 @@ const SCENARIO: Segment[] = [
     },
   },
   { ticks: 3, ...calm },
+  {
+    ticks: 9,
+    ...calm,
+    alerts: {
+      0: [attack('raised', THRESHOLD)],
+      1: [attack('raised', 9)],
+      2: [attack('raised', 14)],
+      3: [attack('raised', 20)],
+      4: [attack('raised', 25)],
+      5: [attack('raised', 29)],
+      8: [attack('cleared', 29)],
+    },
+  },
+  { ticks: 3, ...calm },
 ]
 
 export interface MockTick {
@@ -165,9 +196,9 @@ export function* mockTicks(run = Date.now().toString(36)): Generator<MockTick, n
             },
           },
           alerts: (segment.alerts?.[tick] ?? []).map(({ id, ...alert }) => ({
+            sentinel: SENTINEL,
             ...alert,
             alert_id: `mock-${run}-${loop}-${id}`,
-            sentinel: SENTINEL,
             ts,
           })) as Alert[],
         }
