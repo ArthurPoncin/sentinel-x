@@ -220,3 +220,35 @@ describe('the window an Alert concerns', () => {
     expect(windowsAfter(waiting, alerts(cleared + 1000))).toBe(waiting)
   })
 })
+
+describe('a window closed by a shot', () => {
+  const shot: WindowEvent = { type: 'close', id: 'camera', by: 'shot' }
+  const open_ = (state: WindowsState) => state.open.map(({ id }) => id)
+
+  it('closes as by any other, and is said to have been shot', () => {
+    const state = stateAfter(open(), open(2000, 'gas'), shot)
+    expect(open_(state)).toEqual(['gas'])
+    expect(state.shot).toEqual(['camera'])
+  })
+
+  it('is not said so when it was closed otherwise', () => {
+    expect(stateAfter(open(), close).shot).toEqual([])
+  })
+
+  it('changes nothing when the window was not open', () => {
+    expect(windowsAfter(NO_WINDOWS_STATE, shot)).toBe(NO_WINDOWS_STATE)
+  })
+
+  it('is no longer said so once open again, however it closes next', () => {
+    expect(stateAfter(open(), shot, open(3000)).shot).toEqual([])
+    expect(stateAfter(open(), shot, open(3000), close).shot).toEqual([])
+    const byAlert = stateAfter(open(), shot, alerts(3000, 'intrusion'), alerts(4000), alerts(4000 + CLOSE_AFTER_MS))
+    expect(byAlert).toMatchObject({ open: [], shot: [] })
+  })
+
+  it('does not open again, its Alert raised again, when an Alert had opened it', () => {
+    const closed = [alerts(1000, 'intrusion'), shot]
+    const state = stateAfter(...closed, alerts(2000, 'intrusion'), alerts(3000, 'intrusion'))
+    expect(state).toMatchObject({ open: [], shot: ['camera'] })
+  })
+})

@@ -7,7 +7,7 @@ import { stateAfter, useLiveFeed } from '@/features/live-feed'
 import { IncidentList, TimeScrubber, useIncidentsToReplay, usePlayer } from '@/features/replay'
 import { GasCurve, TemperatureCurve, toSeries } from '@/features/telemetry'
 import { type OperatorHands, OutpostTwin, toScene } from '@/features/twin'
-import { GlassWindows, useWindows } from '@/features/windows'
+import { GlassWindows, useAimedWindow, useWindows } from '@/features/windows'
 import { captureMode } from '@/shared/config/capture-mode'
 import { feedEncrypted } from '@/shared/config/feed-url'
 import type { Alert } from '@/shared/contract'
@@ -39,6 +39,8 @@ type Intrusion = Extract<Alert, { kind: 'intrusion' }>
 // The window an Alert concerns opens by itself as it is raised, the camera's for an intrusion, the gas curve for
 // a leak, the temperature curve for an overheating or a predicted drift, and closes a few seconds after it has
 // cleared; one the Operator opened or asked for closes only at the Operator's word.
+// A hand that aims lights the window under its sight, and its shot closes it: the window scatters in light, and
+// whoever stands behind it is not hit.
 // With `?capture` it is the Twin alone, on the same feed: no top bar, no sidebar, no caption, no scrubber, no window,
 // the whole stage held in frame, to be filmed in a vertical window for the teaser.
 export function TwinRoute() {
@@ -80,7 +82,9 @@ export function TwinRoute() {
     [player.frames, connection, connectedOnce, status, latestTelemetry, activeAlerts],
   )
   // The Alerts shown open and close their windows: at the replayed instants in a replay.
-  const [windows, sendToWindows] = useWindows(shown.activeAlerts, player.replay ? player.at : null)
+  const [windows, sendToWindows, shotWindows] = useWindows(shown.activeAlerts, player.replay ? player.at : null)
+  // The window under the sight of a hand that aims, and what the Twin's sight asks and tells of the windows.
+  const [aimedWindow, panes] = useAimedWindow(sendToWindows)
   // Read from the page, as the feed's address is: a replay is no link, and shows no padlock.
   const encrypted = !player.replay && feedEncrypted(window.location)
   const scene = useMemo(() => toScene(shown, { encrypted }), [shown, encrypted])
@@ -94,7 +98,13 @@ export function TwinRoute() {
 
   return (
     <section className="stage" data-capture={capture || undefined} data-replay={player.replay ? true : undefined}>
-      <OutpostTwin scene={scene} frames={player.frames ?? history} wholeStage={capture} operator={capture ? undefined : operator} />
+      <OutpostTwin
+        scene={scene}
+        frames={player.frames ?? history}
+        wholeStage={capture}
+        operator={capture ? undefined : operator}
+        panes={panes}
+      />
       {!capture && (
         <>
           <div className="stage-caption" data-stale={scene.signalLost}>
@@ -109,6 +119,8 @@ export function TwinRoute() {
           <GlassWindows
             windows={windows}
             send={sendToWindows}
+            aimed={aimedWindow}
+            shot={shotWindows}
             content={{
               camera: <CameraView intrusion={intrusion} replayed={player.replay !== null} />,
               gas: <GasCurve series={series} />,

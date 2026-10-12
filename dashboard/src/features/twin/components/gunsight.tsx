@@ -18,6 +18,7 @@ import {
 } from 'three'
 import { figureHeight } from '../utils/figure'
 import { HAND_COLORS, HOLOGRAM, hologramAnchor, hologramPoint, type OperatorHands, type Point } from '../utils/operator-hands'
+import { inView, onScreen, type Panes, paneSpot } from '../utils/panes'
 import { type Card, CALM_CARD, cardFor, type Intel, pointedAt } from '../utils/pointing'
 import { INTRUSION_COLOR } from '../utils/scene'
 import { BURST, burstMote, landsAt, type Range, SHOT, type Triple } from '../utils/shooting'
@@ -27,7 +28,7 @@ import { useCanvasTexture } from './label-card'
 // thumb is drawn back.
 const SIGHT = { depth: 2, radius: 0.034, line: 0.003, tick: 0.014, dot: 0.004, cocked: 0.62 } as const
 // How bright the sight, the trace of a shot and what it leaves emit, for the halo to take them for lights.
-const GLOW = { sight: 2.2, onSpot: 4, trace: 5, burst: 4 } as const
+const GLOW = { sight: 2.2, onSpot: 4, trace: 5, burst: 4, pane: 6 } as const
 // The share of the way to how it should look that the sight goes in a second.
 const SIGHT_PULL = 14
 // How thin the trace of a shot is, in scene units.
@@ -103,14 +104,36 @@ function SightCard({ card, side }: { card: Card | null; side: () => { across: 1 
 // reads of the gas tank or of the generator hall, how the Enclosure and its link are (`intel`). The thumb
 // brought down fires: a trace of light from the hologram's index to where the sight was, and motes of light
 // where it ends. An intruder's figurine that is hit comes apart in them, and `range` is told so: whoever draws
-// it leaves it out for a few seconds. Nothing of it is there without a hand that aims.
-export function Gunsight({ operator, range, intel }: { operator: OperatorHands; range: Range; intel: Intel }) {
+// it leaves it out for a few seconds. Over a pane laid on the view (`panes`), the sight designates it and reads
+// no card, and a shot stops there: the pane is told, it comes apart in the same motes over the whole of its
+// rectangle, and whoever stands behind it is not hit. Nothing of it is there without a hand that aims.
+export function Gunsight({
+  operator,
+  range,
+  intel,
+  panes,
+}: {
+  operator: OperatorHands
+  range: Range
+  intel: Intel
+  panes?: Panes
+}) {
   const sight = useRef<Group>(null)
   const trace = useRef<Mesh>(null)
   // The last shot shown, by its time: undefined until the first frame, so that one fired before is not.
   const shown = useRef<number | null | undefined>(undefined)
-  // What the last shot left, and for how many seconds: where its trace ends and its motes start.
-  const fired = useRef<{ age: number; from: Vector3; to: Vector3; at: Vector3; tall: number; wide: number; motes: number } | null>(null)
+  // What the last shot left, and for how many seconds: where its trace ends and its motes start. `pane` is
+  // half the pane it hit, across and up, when it hit one: its motes start all over it.
+  const fired = useRef<{
+    age: number
+    from: Vector3
+    to: Vector3
+    at: Vector3
+    tall: number
+    wide: number
+    motes: number
+    pane: { across: Vector3; up: Vector3 } | null
+  } | null>(null)
   const closed = useRef(1)
   // The card of what the sight is on, where it stands, and the side of the sight it is on.
   const [card, setCard] = useState<Card | null>(null)
@@ -140,12 +163,14 @@ export function Gunsight({ operator, range, intel }: { operator: OperatorHands; 
     },
     [parts],
   )
+  // A sight that goes away with its hand is on no pane any more.
+  useEffect(() => () => panes?.sighted(null), [panes])
   const scratch = useMemo(
     () => ({ way: new Vector3(), along: new Vector3(), mote: new Object3D(), tint: new Color(), lit: new Color(HAND_COLORS.idle) }),
     [],
   )
 
-  useFrame(({ camera }, delta) => {
+  useFrame(({ camera, gl }, delta) => {
     const { way, along, mote, tint, lit } = scratch
     const eye = camera.position.toArray() as [number, number, number]
     // The way a sight at (x, y) in the view looks from the eye, and what it is then on, if anything.
@@ -161,10 +186,27 @@ export function Gunsight({ operator, range, intel }: { operator: OperatorHands; 
       setCard(next)
     }
 
+    // The view on the screen, measured when first asked in this frame: the panes are in the screen's pixels.
+    let frame: DOMRect | null = null
+    const view = () => (frame ??= gl.domElement.getBoundingClientRect())
+    const paneAt = (x: number, y: number) => panes?.at(...onScreen(view(), x, y)) ?? null
+    // Where a pixel of the screen is in the scene, at the sight's depth.
+    const behind = (x: number, y: number) =>
+      new Vector3(...inView(view(), x, y), 0.5)
+        .unproject(camera)
+        .sub(camera.position)
+        .normalize()
+        .multiplyScalar(SIGHT.depth)
+        .add(camera.position)
+
     const aim = operator.aim()
     if (sight.current) sight.current.visible = aim !== null
     if (aim && sight.current) {
-      const { direction, on } = sighted(aim.x, aim.y)
+      const pane = paneAt(aim.x, aim.y)
+      panes?.sighted(pane?.id ?? null)
+      const { direction, on: under } = sighted(aim.x, aim.y)
+      // A pane hides what is behind it: the sight is on the pane, and reads nothing through it.
+      const on = pane ? null : under
       sight.current.position.set(...direction).multiplyScalar(SIGHT.depth).add(camera.position)
       sight.current.quaternion.copy(camera.quaternion)
       plate.current?.position.copy(sight.current.position)
@@ -175,8 +217,9 @@ export function Gunsight({ operator, range, intel }: { operator: OperatorHands; 
       closed.current += ((aim.cocked ? SIGHT.cocked : 1) - closed.current) * pull
       sight.current.scale.setScalar(closed.current)
       lit.lerp(tint.set(on?.kind === 'person' ? INTRUSION_COLOR : on ? CALM_CARD : HAND_COLORS.idle), pull)
-      parts.line.color.copy(lit).multiplyScalar(on?.kind === 'spot' ? GLOW.onSpot : GLOW.sight)
+      parts.line.color.copy(lit).multiplyScalar(on?.kind === 'spot' || pane ? GLOW.onSpot : GLOW.sight)
     } else {
+      panes?.sighted(null)
       tell(null)
     }
 
@@ -184,22 +227,44 @@ export function Gunsight({ operator, range, intel }: { operator: OperatorHands; 
     if (shown.current === undefined) shown.current = shot?.at ?? null
     if (shot && shot.at !== shown.current) {
       shown.current = shot.at
+      const pane = paneAt(shot.x, shot.y)
       const { direction, on } = sighted(shot.x, shot.y)
-      const hit = on?.kind === 'person' ? { id: on.person.id, x: on.person.at.x, z: on.person.at.z } : null
-      const to = hit ? new Vector3(hit.x, figureHeight() / 2, hit.z) : new Vector3(...landsAt(eye, direction))
-      fired.current = {
-        age: 0,
-        from: muzzle(shot.from, camera as PerspectiveCamera),
-        to,
-        at: hit ? new Vector3(hit.x, 0, hit.z) : to,
-        tall: hit ? figureHeight() : 0,
-        wide: hit ? FIGURE_WIDE : 0,
-        motes: hit ? BURST.motes : BURST.sparks,
+      // A shot that hits a pane stops there: no one behind it is hit.
+      const hit = !pane && on?.kind === 'person' ? { id: on.person.id, x: on.person.at.x, z: on.person.at.z } : null
+      const from = muzzle(shot.from, camera as PerspectiveCamera)
+      if (pane) {
+        const middle = behind((pane.left + pane.right) / 2, (pane.top + pane.bottom) / 2)
+        fired.current = {
+          age: 0,
+          from,
+          to: new Vector3(...direction).multiplyScalar(SIGHT.depth).add(camera.position),
+          at: middle,
+          tall: 0,
+          wide: 0,
+          motes: BURST.motes,
+          pane: {
+            across: behind(pane.right, (pane.top + pane.bottom) / 2).sub(middle),
+            up: behind((pane.left + pane.right) / 2, pane.top).sub(middle),
+          },
+        }
+        panes?.shot(pane.id)
+      } else {
+        const to = hit ? new Vector3(hit.x, figureHeight() / 2, hit.z) : new Vector3(...landsAt(eye, direction))
+        fired.current = {
+          age: 0,
+          from,
+          to,
+          at: hit ? new Vector3(hit.x, 0, hit.z) : to,
+          tall: hit ? figureHeight() : 0,
+          wide: hit ? FIGURE_WIDE : 0,
+          motes: hit ? BURST.motes : BURST.sparks,
+          pane: null,
+        }
       }
       if (hit) range.struck.set(hit.id, 0)
       const color = tint.set(hit ? INTRUSION_COLOR : HAND_COLORS.idle)
       parts.beam.color.copy(color).multiplyScalar(GLOW.trace)
-      ;(parts.motes.material as MeshBasicMaterial).color.copy(color).multiplyScalar(GLOW.burst)
+      ;(parts.motes.material as MeshBasicMaterial).color.copy(color).multiplyScalar(pane ? GLOW.pane : GLOW.burst)
     }
 
     const last = fired.current
@@ -216,6 +281,10 @@ export function Gunsight({ operator, range, intel }: { operator: OperatorHands; 
     for (let index = 0; index < last.motes; index++) {
       const { x, y, z, size } = burstMote(index, last.age, last.tall, last.wide)
       mote.position.set(last.at.x + x, last.at.y + y, last.at.z + z)
+      if (last.pane) {
+        const [across, up] = paneSpot(index)
+        mote.position.addScaledVector(last.pane.across, across).addScaledVector(last.pane.up, up)
+      }
       mote.scale.setScalar(size / 2)
       mote.updateMatrix()
       parts.motes.setMatrixAt(index, mote.matrix)

@@ -55,6 +55,10 @@ describe('the lessons', () => {
     expect(`${secret?.title} ${secret?.how} ${secret?.does}`).not.toMatch(/pistolet|pouce|tire/i)
   })
 
+  it('say in the one of the sight that it closes the windows too', () => {
+    expect(LESSONS.find(({ id }) => id === 'aim')?.does).toMatch(/ferme aussi les fenêtres/)
+  })
+
   it('are completed by a pose held for those that only take one', () => {
     for (const pose of ['flat', 'spread', 'fist', 'aim'] as const) {
       expect(completed({ pose, action: null, shot: false })).toEqual([pose])

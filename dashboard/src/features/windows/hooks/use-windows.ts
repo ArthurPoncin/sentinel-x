@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useReducer } from 'react'
 import type { Alert } from '@/shared/contract'
-import { NO_WINDOWS_STATE, type WindowEvent, type Windows, windowsAfter } from '../utils/windows'
+import { NO_WINDOWS_STATE, type WindowEvent, type WindowId, type Windows, windowsAfter } from '../utils/windows'
 
 // The open windows of a screen, and where to send what opens and closes them. The Alerts the screen shows open
 // and close theirs: `alerts` are the active ones, and `at` the instant shown when it is not now, in milliseconds
 // (the replayed instant of a replay), or null while live. Live, the clock closes a window whose Alert has
-// cleared; in a replay, the replayed instants do.
-export function useWindows(alerts: readonly Alert[], at: number | null): [Windows, (event: WindowEvent) => void] {
-  const [{ open }, send] = useReducer(windowsAfter, NO_WINDOWS_STATE)
+// cleared; in a replay, the replayed instants do. Last, the windows a shot closed, for whoever shows them go.
+export function useWindows(
+  alerts: readonly Alert[],
+  at: number | null,
+): [Windows, (event: WindowEvent) => void, readonly WindowId[]] {
+  const [{ open, shot }, send] = useReducer(windowsAfter, NO_WINDOWS_STATE)
   const kinds = useMemo(() => alerts.map((alert) => alert.kind), [alerts])
 
   useEffect(() => {
@@ -26,5 +29,5 @@ export function useWindows(alerts: readonly Alert[], at: number | null): [Window
     return () => clearTimeout(timer)
   }, [at, due, kinds])
 
-  return [open, send]
+  return [open, send, shot]
 }

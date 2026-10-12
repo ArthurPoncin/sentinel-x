@@ -3,7 +3,8 @@ import type { AlertKind } from '@/shared/contract'
 // The glass windows that float beside the Outpost on the Twin's screen. This is all there is to know of them:
 // which are open, who opened each, since when, and in which slot it sits. It takes events and gives the windows
 // after them: the mouse and the keyboard send them today, the Alerts open and close theirs by them, and whatever
-// opens or closes a window later sends the same ones. Pure: the instant comes with the event.
+// opens or closes a window later sends the same ones: a hand that aims at one and fires closes it. Pure: the
+// instant comes with the event.
 
 // The windows there are, each with its French name: what the bar and the window's title read.
 export const WINDOWS = {
@@ -66,16 +67,19 @@ export const NO_WINDOWS: Windows = []
 // What is held between two events: the open windows, and the windows an Alert concerned at the last look. An
 // Alert opens its window as it is raised, not for as long as it lasts: one the Operator closed stays closed while
 // the Alert goes on, raised again or not.
+// `shot` are the windows a shot closed, until each opens again: they go out as no other does.
 export interface WindowsState {
   open: Windows
   alerted: readonly WindowId[]
+  shot: readonly WindowId[]
 }
 
-export const NO_WINDOWS_STATE: WindowsState = { open: NO_WINDOWS, alerted: [] }
+export const NO_WINDOWS_STATE: WindowsState = { open: NO_WINDOWS, alerted: [], shot: [] }
 
 export type WindowEvent =
   | { type: 'open'; id: WindowId; by: Opener; at: number }
-  | { type: 'close'; id: WindowId }
+  // `by` a shot when a hand that aimed at it fired: it is closed as by any other, and said to have been shot.
+  | { type: 'close'; id: WindowId; by?: 'shot' }
   // The Alerts active at an instant, by their kinds: sent when they change, and when time has passed.
   | { type: 'alerts'; kinds: readonly AlertKind[]; at: number }
 
@@ -90,6 +94,11 @@ function opened(windows: Windows, id: WindowId, by: Opener, at: number): Windows
   const kept = oldest && windows.length >= MAX_WINDOWS ? newer : windows
   const slot = SLOTS.find((free) => kept.every((open) => open.slot !== free)) ?? SLOTS[0]
   return [...kept, { id, by, since: at, slot }]
+}
+
+// The windows a shot closed that are still closed: one that is open again was not shot, however it closes next.
+function stillShot(shot: readonly WindowId[], open: Windows): readonly WindowId[] {
+  return shot.some((id) => isOpen(open, id)) ? shot.filter((id) => !isOpen(open, id)) : shot
 }
 
 // An open window without the instant it was to close at.
@@ -114,7 +123,7 @@ function watched(state: WindowsState, alerted: readonly WindowId[], at: number):
     .filter((window) => window.until === undefined || window.until > at)
   const same = <T>(a: readonly T[], b: readonly T[]) => a.length === b.length && a.every((item, i) => item === b[i])
   if (same(open, state.open) && same(alerted, state.alerted)) return state
-  return { open: same(open, state.open) ? state.open : open, alerted }
+  return { open: same(open, state.open) ? state.open : open, alerted, shot: stillShot(state.shot, open) }
 }
 
 // The windows after an event. A window already open stays as it is, where it is: opening it again makes no
@@ -123,11 +132,17 @@ function watched(state: WindowsState, alerted: readonly WindowId[], at: number):
 export function windowsAfter(state: WindowsState, event: WindowEvent): WindowsState {
   const { open } = state
   switch (event.type) {
-    case 'close':
-      return isOpen(open, event.id) ? { ...state, open: open.filter((window) => window.id !== event.id) } : state
+    case 'close': {
+      if (!isOpen(open, event.id)) return state
+      const shot = event.by === 'shot' ? [...state.shot, event.id] : state.shot
+      return { ...state, open: open.filter((window) => window.id !== event.id), shot }
+    }
     case 'open': {
       const there = open.find((window) => window.id === event.id)
-      if (!there) return { ...state, open: opened(open, event.id, event.by, event.at) }
+      if (!there) {
+        const more = opened(open, event.id, event.by, event.at)
+        return { ...state, open: more, shot: stillShot(state.shot, more) }
+      }
       if (there.by === event.by || event.by === 'alert') return state
       return { ...state, open: open.map((window) => (window === there ? { ...staying(window), by: event.by } : window)) }
     }
