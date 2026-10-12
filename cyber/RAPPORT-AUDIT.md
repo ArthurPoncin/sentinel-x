@@ -90,6 +90,18 @@ Un bloc par faille trouvée (chez nous ou chez la cible). Dupliquer autant que n
 - **Recommandation :** le correctif.
 - **État :** corrigé pendant l'après-midi / à corriger / accepté (justifier).
 
+### Constat C1 — Limite de login partagée derrière le reverse-proxy
+
+- **Système :** notre Command Post
+- **Criticité :** moyenne
+- **Test lié :** D14
+- **Description :** la limite de connexion (5/min) était comptée sur l'adresse de la connexion. Derrière le reverse-proxy, cette adresse est celle du proxy pour tous les clients externes : la limite était donc partagée par tous. Un poste pouvait épuiser le quota et déclencher un `429` pour les autres, et l'Alert `cyber` ne pouvait pas nommer l'origine réelle de l'attaque.
+- **Preuve :** `brute-login.mjs` lancé depuis un laptop (D14) ; avant le correctif, le compteur et l'Alert portaient l'adresse du proxy, pas celle du laptop.
+- **Impact :** limite de login faussée et partagée (déni de service léger entre clients légitimes), et traçabilité de l'attaquant perdue.
+- **Recommandation :** ne faire confiance au `X-Forwarded-For` que du seul proxy déclaré (`TRUSTED_PROXY`), compter la limite par adresse client réelle, et porter cette adresse dans l'Alert.
+- **Contrôle ajouté :** chaque refus (`401` ou `429`) sur le login remonte en Alert `cyber`, avec le vecteur et l'adresse d'origine ; démontrable en direct avec `brute-login.mjs` (le Twin lève le bouclier au cinquième refus).
+- **État :** corrigé (#155, PR #177).
+
 ---
 
 ## 5. Audit offensif mené sur la table G\<cible\>

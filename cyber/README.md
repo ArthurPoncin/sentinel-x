@@ -51,6 +51,7 @@ Client only: OS firewall on, no service exposed on the table network, no persona
 - Tooling: Nmap, Wireshark, Metasploit — MitM, payload injection, DoS against *consenting workshop targets only*.
 - Produce the **security matrix** (hardening + TLS) and the **post-pentest audit report** for the engineering dossier.
 - Plan, grille de tests et règles d'engagement : [`PENTEST-PLAN.md`](PENTEST-PLAN.md). Modèle de rapport à remplir jeudi : [`RAPPORT-AUDIT.md`](RAPPORT-AUDIT.md).
+- Démo jury : [`brute-login.mjs`](brute-login.mjs) lance un brute force mesuré sur le login (test D14), puis s'arrête seul ; le Twin lève son Alert `cyber`. Scénario et options dans [`PENTEST-PLAN.md`](PENTEST-PLAN.md#scénario-de-démo-jury).
 
 ## TODO
 - [ ] Team CA + certs, MQTTS enforced (no 1883)
