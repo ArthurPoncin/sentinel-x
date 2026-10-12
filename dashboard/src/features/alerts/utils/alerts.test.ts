@@ -23,17 +23,17 @@ function intruder(x_norm: number, state: 'raised' | 'cleared' = 'raised', second
 }
 
 // A brute force the API refuses, `attempts` refusals in.
-function attack(attempts: number, vector: CyberVector = 'login'): Alert {
+function attack(attempts: number, vector: CyberVector = 'login', id = 'cyber-login-1', state: 'raised' | 'cleared' = 'raised'): Alert {
   return {
-    alert_id: 'cyber-login-1',
+    alert_id: id,
     sentinel: 'command-post',
     source: 'api',
     kind: 'cyber',
     severity: 'warning',
-    state: 'raised',
+    state,
     value: attempts,
     detail: { vector, attempts },
-    ts: at(0),
+    ts: at(attempts),
   }
 }
 
@@ -125,6 +125,32 @@ describe('alertLog', () => {
     const log = alertLog([intruder(0.1), intruder(0.1, 'cleared', 1), intruder(0.9, 'raised', 2)].map(frame))
 
     expect(log).toHaveLength(3)
+  })
+
+  it('keeps one entry for an attack raised again at each attempt, and its clearing', () => {
+    const attempts = Array.from({ length: 10 }, (_, i) => frame(attack(5 + i)))
+    const log = alertLog([...attempts, frame(attack(14, 'login', 'cyber-login-1', 'cleared'))])
+
+    expect(log.map((alert) => alert.state)).toEqual(['cleared', 'raised'])
+    expect(log[1]).toEqual(attack(5))
+  })
+
+  it('gives each of two attacks in a row its entry', () => {
+    const first = [attack(5), attack(6), attack(6, 'login', 'cyber-login-1', 'cleared')]
+    const second = [attack(7, 'login', 'cyber-login-2'), attack(8, 'login', 'cyber-login-2')]
+    const log = alertLog([...first, ...second].map(frame))
+
+    expect(log.map((alert) => `${alert.alert_id} ${alert.state}`)).toEqual([
+      'cyber-login-2 raised',
+      'cyber-login-1 cleared',
+      'cyber-login-1 raised',
+    ])
+  })
+
+  it('keeps the attacks on two entry points apart', () => {
+    const log = alertLog([attack(5), attack(5, 'feed-origin', 'cyber-feed-1'), attack(6), attack(6, 'feed-origin', 'cyber-feed-1')].map(frame))
+
+    expect(log.map((alert) => alert.alert_id)).toEqual(['cyber-feed-1', 'cyber-login-1'])
   })
 
   it('keeps the latest entries only', () => {

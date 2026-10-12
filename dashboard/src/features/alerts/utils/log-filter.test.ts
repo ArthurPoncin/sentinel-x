@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { Alert, Severity } from '@/shared/contract'
-import { filterLog, inHours, isFiltering, NO_FILTER, toggle } from './log-filter'
+import { type Alert, AlertKindSchema, type Severity } from '@/shared/contract'
+import { filterLog, inHours, isFiltering, KIND_OPTIONS, NO_FILTER, toggle } from './log-filter'
 
 // On the local wall clock, as the Operator reads it.
 const local = (hours: number, minutes: number, seconds = 0) => new Date(2026, 9, 5, hours, minutes, seconds).toISOString()
@@ -29,6 +29,18 @@ const intrusion: Alert = {
   state: 'raised',
   detail: { x_norm: 0.4, confidence: 0.88, bbox: [120, 80, 60, 180] },
   ts: local(14, 20),
+}
+
+const attack: Alert = {
+  alert_id: 'cyber-login-1',
+  sentinel: 'command-post',
+  source: 'api',
+  kind: 'cyber',
+  severity: 'warning',
+  state: 'raised',
+  value: 5,
+  detail: { vector: 'login', attempts: 5 },
+  ts: local(14, 40),
 }
 
 const log = [gas('g1', 'warning', local(14, 0)), gas('g1', 'warning', local(14, 30), 'cleared'), presence, intrusion]
@@ -75,6 +87,16 @@ describe('filterLog', () => {
     expect(filterLog(log, { ...NO_FILTER, kind: 'gas' }).map((alert) => alert.state)).toEqual(['raised', 'cleared'])
     expect(filterLog(log, { ...NO_FILTER, source: 'vision' })).toEqual([intrusion])
     expect(filterLog(log, { ...NO_FILTER, state: 'cleared' })).toEqual([log[1]])
+  })
+
+  it('narrows to the attacks', () => {
+    expect(filterLog([...log, attack], { ...NO_FILTER, kind: 'cyber' })).toEqual([attack])
+    expect(filterLog(log, { ...NO_FILTER, kind: 'cyber' })).toEqual([])
+  })
+
+  it('offers every kind of the contract under a French label, the attacks among them', () => {
+    expect(KIND_OPTIONS.map((option) => option.value)).toEqual(AlertKindSchema.options)
+    expect(KIND_OPTIONS).toContainEqual({ value: 'cyber', label: 'Cyberattaque' })
   })
 
   it('combines every filter', () => {

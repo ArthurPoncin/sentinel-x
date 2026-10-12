@@ -1,4 +1,5 @@
-import type { Alert, AlertKind, AlertSource, AlertState, Severity } from '@/shared/contract'
+import { type Alert, type AlertKind, AlertKindSchema, type AlertSource, type AlertState, type Severity } from '@/shared/contract'
+import { KIND_LABEL } from '@/shared/lib/labels'
 
 // What the Operator narrows the Alert log to. An empty list, 'all' or '' lets everything through.
 export interface LogFilter {
@@ -12,6 +13,12 @@ export interface LogFilter {
 }
 
 export const NO_FILTER: LogFilter = { from: '', to: '', severities: [], kind: 'all', source: 'all', state: 'all' }
+
+// What the filter by kind offers: every kind of the contract, as the Operator reads it.
+export const KIND_OPTIONS: readonly { value: AlertKind; label: string }[] = AlertKindSchema.options.map((kind) => ({
+  value: kind,
+  label: KIND_LABEL[kind],
+}))
 
 export function isFiltering(filter: LogFilter): boolean {
   return (
