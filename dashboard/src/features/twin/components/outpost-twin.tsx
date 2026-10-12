@@ -143,7 +143,8 @@ export interface OutpostTwinProps {
 // The antenna on the Enclosure's side sends an impulse of white light for each frame of telemetry received,
 // and a padlock reads « WSS » by it while the live feed is encrypted. An attack on the Command Post raises a
 // shield around the whole Outpost, a dome of blue light with the entry point attacked and the attempts refused
-// on a label over it, which comes back down once the attack is over.
+// on a label over it, struck by a wave of light at each attempt refused, which comes back down once the attack
+// is over.
 // The camera orbits the site, and turns to an Alert as it is raised: it faces where it happens for a few
 // seconds, then orbits again. For an attack, which happens nowhere on the ground, it stands back to show the
 // whole dome instead. Without its signal it all turns grey, the picture drops out like a screen's

@@ -1,7 +1,18 @@
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
-import { AdditiveBlending, Color, DoubleSide, type Mesh, ShaderMaterial, SphereGeometry } from 'three'
+import {
+  AdditiveBlending,
+  Color,
+  DoubleSide,
+  type Mesh,
+  ShaderMaterial,
+  SphereGeometry,
+  Vector2,
+  Vector4,
+} from 'three'
 import { useFade } from '../hooks/use-fade'
+import { useImpacts } from '../hooks/use-impacts'
+import { MAX_IMPACTS } from '../utils/impact'
 import { type SceneProps, SHIELD_COLOR } from '../utils/scene'
 import { SITE } from '../utils/site'
 import { LabelCard } from './label-card'
@@ -21,6 +32,15 @@ const CELLS = 9
 // Seconds a band of light takes to climb the dome, and how much it adds: the shield is live, not a glass bell.
 const SWEEP_PERIOD = 5
 const SWEEP = 0.12
+// What the wave of an impact adds where it is brightest, and how much of that off the lines of the weave: it
+// lights the cells it crosses, their walls most.
+const IMPACT = 2.4
+const IMPACT_FILM = 0.3
+// How wide the flash is where the dome is struck, as the straight line between two points of a dome of radius
+// 1: it is there as the wave leaves, and gone long before the wave is.
+const IMPACT_FLASH = 0.11
+// How much sharper the wave's front is than its back: it leaves a wake behind it, not ahead.
+const IMPACT_FRONT = 3
 // How wide its label is, in scene units, and how far over the top of the dome it stands.
 const LABEL_WIDTH = 2.3
 const LABEL_RISE = 0.12
@@ -45,6 +65,10 @@ const FRAGMENT = /* glsl */ `
   // How far the dome is raised, 0–1, and the seconds its band of light climbs by.
   uniform float raised;
   uniform float time;
+  // Each impact: where the dome was struck, as on half a sphere of radius 1, and how far its wave is from
+  // there; then how wide the wave's band is and how bright.
+  uniform vec4 impacts[${MAX_IMPACTS}];
+  uniform vec2 impactWaves[${MAX_IMPACTS}];
   varying vec3 vAt;
   varying vec3 vNormal;
   varying vec3 vToEye;
@@ -79,15 +103,35 @@ const FRAGMENT = /* glsl */ `
     // The crest glows as it climbs and as it comes down, and not once the dome is closed.
     float rim = exp(-pow((crest - up) / 0.05, 2.0)) * (1.0 - smoothstep(0.9, 1.0, raised));
 
+    // The waves of the impacts, each a band around the point struck. Together they never add more than one
+    // does: strikes one upon the other do not whiten the dome.
+    float struck = 0.0;
+    for (int impact = 0; impact < ${MAX_IMPACTS}; impact++) {
+      float away = distance(vAt, impacts[impact].xyz);
+      float glow = impactWaves[impact].y;
+      float off = (away - impacts[impact].w) / impactWaves[impact].x;
+      off *= off > 0.0 ? ${IMPACT_FRONT.toFixed(1)} : 1.0;
+      struck += glow * exp(-off * off) + pow(glow, 4.0) * exp(-pow(away / ${IMPACT_FLASH}, 2.0));
+    }
+
     float light = ${FILM} + ${WEAVE} * line + ${EDGE} * edge + ${FOOT} * foot + ${SWEEP} * sweep * (0.4 + line);
     if (!gl_FrontFacing) light *= ${FAR_SIDE};
+    // On the far side as on the near one: a strike behind the site is not a lesser one.
+    light += ${IMPACT.toFixed(1)} * min(struck, 1.0) * (${IMPACT_FILM} + line);
     light = light * smoothstep(0.0, 0.5, raised) + rim;
     gl_FragColor = vec4(color * ${GLOW.toFixed(1)} * light, 1.0);
   }
 `
 
 function createDome() {
-  const uniforms = { color: { value: new Color(SHIELD_COLOR) }, raised: { value: 0 }, time: { value: 0 } }
+  const uniforms = {
+    color: { value: new Color(SHIELD_COLOR) },
+    raised: { value: 0 },
+    time: { value: 0 },
+    impacts: { value: Array.from({ length: MAX_IMPACTS }, () => new Vector4()) },
+    // An impact that is not there has no light, and a band wide enough never to divide by zero.
+    impactWaves: { value: Array.from({ length: MAX_IMPACTS }, () => new Vector2(1, 0)) },
+  }
   const material = new ShaderMaterial({
     uniforms,
     vertexShader: VERTEX,
@@ -112,11 +156,14 @@ export interface ShieldProps {
 // Outpost, a honeycomb weave brighter on its outline, for as long as a `cyber` Alert is active. It rises from
 // the ground and comes back down to it in a fade, like everything in the Twin. Over its top, a card names the
 // entry point attacked and the attempts refused so far, and keeps its last text while it fades out.
+// Each attempt refused strikes it: a wave of light leaves a point of its surface, spreads over the weave and
+// fades out, as the Alert is raised and each time it is raised again. Waves are told apart, never piled up.
 // One see-through mesh, light added over what is behind it, unlit: the halo takes it for a light, the site
 // reads through it, and what stands in front of its far side hides it. Nothing is drawn while it is lowered.
 export function Shield({ shield }: ShieldProps) {
   const mesh = useRef<Mesh>(null)
   const raisedNow = useFade([shield ? 1 : 0])
+  const impactsNow = useImpacts(shield?.struckAt ?? null)
   const dome = useMemo(createDome, [])
   useEffect(
     () => () => {
@@ -130,6 +177,12 @@ export function Shield({ shield }: ShieldProps) {
     const raised = raisedNow()[0] ?? 0
     dome.uniforms.raised.value = raised
     dome.uniforms.time.value = clock.elapsedTime
+    const impacts = impactsNow()
+    dome.uniforms.impacts.value.forEach((slot, index) => {
+      const impact = impacts[index]
+      slot.set(...(impact?.at ?? [0, 0, 0]), impact?.radius ?? 0)
+      dome.uniforms.impactWaves.value[index]?.set(impact?.width ?? 1, impact?.glow ?? 0)
+    })
     if (mesh.current) mesh.current.visible = raised > 0.004
   })
 
