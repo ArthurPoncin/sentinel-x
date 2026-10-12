@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { RouterProvider } from 'react-router/dom'
 import { AuthGate, useSessionCheck } from '@/features/auth'
 import { LiveFeedProvider } from '@/features/live-feed'
+import { Announcements } from './announcements'
 import { HandControl } from './hand-control'
 import { feedUrl } from '@/shared/config/feed-url'
 import { Toaster } from '@/shared/ui/sonner'
@@ -30,7 +31,9 @@ export function App() {
               navigate={(to, state) => void router.navigate(to, { state })}
               pathname={() => router.state.location.pathname}
             >
-              <RouterProvider router={router} />
+              <Announcements>
+                <RouterProvider router={router} />
+              </Announcements>
             </VoiceControl>
           </HandControl>
         </SessionFeed>
