@@ -279,3 +279,32 @@ describe('a window closed by a shot', () => {
     expect(state).toMatchObject({ open: [], shot: ['camera'] })
   })
 })
+
+describe('closing every window at once', () => {
+  const closeAll: WindowEvent = { type: 'close-all' }
+
+  it('closes them all, the ones an Alert opened too', () => {
+    const state = stateAfter(open(1000, 'incidents'), alerts(2000, 'gas', 'intrusion'))
+    expect(state.open.map(({ id, by }) => [id, by])).toEqual([
+      ['incidents', 'operator'],
+      ['gas', 'alert'],
+      ['camera', 'alert'],
+    ])
+
+    expect(windowsAfter(state, closeAll).open).toEqual([])
+  })
+
+  it('leaves closed the window of an Alert that goes on', () => {
+    expect(after(alerts(1000, 'gas'), closeAll, alerts(2000, 'gas'))).toEqual([])
+    // Another Alert raised opens its own.
+    expect(after(alerts(1000, 'gas'), closeAll, alerts(2000, 'gas', 'intrusion')).map(({ id }) => id)).toEqual(['camera'])
+  })
+
+  it('says of none that it was shot', () => {
+    expect(stateAfter(open(), closeAll).shot).toEqual([])
+  })
+
+  it('changes nothing when none is open', () => {
+    expect(windowsAfter(NO_WINDOWS_STATE, closeAll)).toBe(NO_WINDOWS_STATE)
+  })
+})

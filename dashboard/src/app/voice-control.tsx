@@ -6,6 +6,7 @@ import { type Command, failureLine, VoiceControlProvider } from '@/features/voic
 import { answer, driveAlarm, presetOfVoice } from './alarm'
 import { NAV, TWIN } from './app-sidebar'
 import { replayAsked } from './replay-asked'
+import { windowsAsked, windowsOfVoice } from './windows-asked'
 
 // Where a voice command leads from `pathname`: to the screen it names. Nowhere when it names none, or the one
 // the app is on already, a slash at its end or not. Out of the tutorial too: a screen's name is not one of the
@@ -26,8 +27,9 @@ interface Props {
 // What the Operator's voice does, over the whole app: after the wake word, a command drives the Sentinel's
 // Alarm by the path a gesture and a press on the actuator panel take, with the same answers, not in the
 // tutorial, where it is only tried; the name of a screen leads to it; and the last Incident that closed is
-// replayed on the Twin, from the list the Command Post already gives. An ear that cannot listen says why, and
-// the switch is off again.
+// replayed on the Twin, from the list the Command Post already gives. A window of the Twin is shown by its name,
+// from any screen, and closed by it, or all of them at once: the Twin is told by the way to it. An ear that
+// cannot listen says why, and the switch is off again.
 export function VoiceControl({ navigate, pathname, children }: Props) {
   const sentinel = useLiveFeed((state) => state.latestTelemetry?.sentinel ?? null)
 
@@ -52,6 +54,8 @@ export function VoiceControl({ navigate, pathname, children }: Props) {
     if (command === 'replay-last') return void (await replayLast())
     const page = pageOfVoice(command, pathname())
     if (page) return navigate(page)
+    const windows = windowsOfVoice(command, pathname())
+    if (windows) return navigate(TWIN, windowsAsked(windows))
     const preset = presetOfVoice(command, pathname())
     if (preset) answer(await driveAlarm(sentinel, preset, 'voice'))
   }

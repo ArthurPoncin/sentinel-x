@@ -19,7 +19,38 @@ export const SCREENS = ['operator', 'twin', 'tutorial'] as const
 
 export type Screen = (typeof SCREENS)[number]
 
-export type Command = 'siren' | 'siren-off' | Screen | 'replay-last'
+// The glass windows of the Twin, each by the name it is called by: what follows « affiche » and « ferme ».
+export const WINDOW_NAMES = {
+  camera: 'la caméra',
+  gas: 'le gaz',
+  temperature: 'la température',
+  alerts: 'les alertes',
+  incidents: 'les incidents',
+  security: 'la sécurité',
+} as const
+
+export type WindowName = keyof typeof WINDOW_NAMES
+
+// A window shown or closed, each a command of its own, and all of them closed at once.
+export type WindowCommand = `show-${WindowName}` | `close-${WindowName}` | 'close-all'
+
+export type Command = 'siren' | 'siren-off' | Screen | 'replay-last' | WindowCommand
+
+// The ways of asking for a window, and of sending one away: the name of the window follows.
+export const SHOW = ['affiche', 'ouvre', 'montre'] as const
+export const CLOSE = ['ferme', 'cache'] as const
+
+// Something for each window's two commands: `of` gives it, told which of the two and for which window.
+export function ofWindows<T>(of: (verb: 'show' | 'close', window: WindowName) => T) {
+  const all = {} as Record<Exclude<WindowCommand, 'close-all'>, T>
+  for (const window of Object.keys(WINDOW_NAMES) as WindowName[]) {
+    all[`show-${window}`] = of('show', window)
+    all[`close-${window}`] = of('close', window)
+  }
+  return all
+}
+
+const VERBS = { show: SHOW, close: CLOSE }
 
 // Each command, by each way of asking for it. Every word is one of the model's: the engine drops from its
 // grammar a word it has never heard.
@@ -30,6 +61,8 @@ export const WORDINGS: Readonly<Record<Command, readonly string[]>> = {
   twin: ['jumeau', 'jumeau numérique', 'écran jumeau'],
   tutorial: ['tutoriel', 'tutoriel des gestes', 'gestes'],
   'replay-last': ['rejoue le dernier incident', 'relance le dernier incident', 'montre le dernier incident'],
+  ...ofWindows((verb, window) => VERBS[verb].map((word) => `${word} ${WINDOW_NAMES[window]}`)),
+  'close-all': ['ferme tout', 'cache tout', 'ferme toutes les fenêtres'],
 }
 
 // Seconds after the wake word during which a command is taken: the time to say one, and for the engine to be

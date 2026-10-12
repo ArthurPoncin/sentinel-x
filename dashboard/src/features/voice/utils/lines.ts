@@ -1,6 +1,6 @@
 import type { Failure } from '../api/ear'
 import type { VoiceState } from '../stores/voice-store'
-import { type Command, type Outcome, UNKNOWN } from './interpret'
+import { type Command, type Outcome, ofWindows, UNKNOWN, WINDOW_NAMES } from './interpret'
 
 // Where the ear is, in the Operator's words.
 const STATUS: Readonly<Record<Exclude<VoiceState['status'], 'off'>, string>> = {
@@ -25,6 +25,8 @@ const COMMANDS: Readonly<Record<Command, string>> = {
   twin: 'aller au jumeau numérique',
   tutorial: 'aller au tutoriel des gestes',
   'replay-last': 'rejouer le dernier incident',
+  ...ofWindows((verb, window) => `${verb === 'show' ? 'afficher' : 'fermer'} ${WINDOW_NAMES[window]}`),
+  'close-all': 'fermer toutes les fenêtres',
 }
 
 function made(outcome: Outcome): string {

@@ -13,6 +13,7 @@ import { feedEncrypted } from '@/shared/config/feed-url'
 import type { Alert, Incident } from '@/shared/contract'
 import { decimal } from '@/shared/lib/format'
 import { askedReplay } from '../replay-asked'
+import { askedWindows } from '../windows-asked'
 
 type Intrusion = Extract<Alert, { kind: 'intrusion' }>
 
@@ -45,6 +46,8 @@ type Intrusion = Extract<Alert, { kind: 'intrusion' }>
 // A hand that aims lights the window under its sight, and its shot closes it: the window scatters in light, and
 // whoever stands behind it is not hit.
 // A replay asked for from another screen, the voice's « rejoue le dernier incident », starts as the Twin opens.
+// The voice opens and closes the windows by their names, « affiche la caméra », « ferme la caméra », « ferme
+// tout »: one it opens is the Operator's, as one opened from the bar.
 // With `?capture` it is the Twin alone, on the same feed: no top bar, no sidebar, no caption, no scrubber, no window,
 // the whole stage held in frame, to be filmed in a vertical window for the teaser.
 export function TwinRoute() {
@@ -100,6 +103,13 @@ export function TwinRoute() {
   )
   // The Alerts shown open and close their windows: at the replayed instants in a replay.
   const [windows, sendToWindows, shotWindows] = useWindows(shown.activeAlerts, player.replay ? player.at : null)
+  // What the way here asks of the windows, the voice's « affiche la caméra »: done once, and carried no more.
+  const askedOfWindows = useMemo(() => askedWindows(location.state), [location.state])
+  useEffect(() => {
+    if (!askedOfWindows) return
+    sendToWindows(askedOfWindows.type === 'open' ? { ...askedOfWindows, by: 'operator', at: Date.now() } : askedOfWindows)
+    void navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null })
+  }, [askedOfWindows, sendToWindows, navigate, location.pathname, location.search])
   // The window under the sight of a hand that aims, and what the Twin's sight asks and tells of the windows.
   const [aimedWindow, panes] = useAimedWindow(sendToWindows)
   // Read from the page, as the feed's address is: a replay is no link, and shows no padlock.
