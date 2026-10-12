@@ -407,3 +407,164 @@
     display: none;
   }
 }
+
+/* The bar of the glass windows, at the foot of the stage on the right: one button a window, lit while it is
+   open. */
+.window-bar {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgb(19 26 34 / 85%);
+  font-size: 0.85rem;
+}
+
+.window-bar button {
+  padding: 0.3rem 0.9rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted-foreground);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    color 0.2s,
+    border-color 0.2s,
+    background-color 0.2s;
+}
+
+.window-bar button:hover {
+  color: var(--foreground);
+}
+
+.window-bar button[aria-pressed='true'] {
+  border-color: var(--glass-edge);
+  background: rgb(159 220 255 / 12%);
+  color: var(--glass-light);
+}
+
+.window-bar button:focus-visible,
+.glass-window button:focus-visible {
+  outline: 2px solid var(--glass-light);
+  outline-offset: 2px;
+}
+
+/* The glass windows are laid over the whole stage and seen in perspective from its middle: one on the left
+   and one on the right lean toward the Outpost between them. Only the windows take the pointer: the scene
+   under the rest of the layer is still turned by a drag. */
+.stage {
+  --glass-light: #9fdcff;
+  --glass-edge: rgb(159 220 255 / 40%);
+}
+
+.glass-windows {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  perspective: 1400px;
+  pointer-events: none;
+}
+
+/* A panel of lit glass in its slot, in the upper corner of its side of the stage, under the label on the left
+   and under the scrubber on the right: over the black above the socle, clear of the Outpost in the middle and
+   of the caption and the bar below. The scene shows through it, blurred: measured on the stage's own
+   canvas, the blur costs the Twin no frame (dashboard/README.md, the glass windows). Should it on another
+   machine, drop `backdrop-filter` and darken the ground: the tint alone still reads as glass on the black. */
+.glass-window {
+  --tilt: 0deg;
+  position: absolute;
+  width: clamp(14rem, 21vw, 21rem);
+  transform: rotateY(var(--tilt));
+  padding: 0 0.7rem 0.7rem;
+  border: 1px solid var(--glass-edge);
+  border-radius: 0.6rem;
+  background:
+    linear-gradient(to bottom, rgb(159 220 255 / 16%), transparent 3.2rem),
+    linear-gradient(160deg, rgb(16 49 79 / 50%), rgb(8 18 30 / 60%));
+  backdrop-filter: blur(10px);
+  box-shadow:
+    inset 0 1px 0 rgb(159 220 255 / 45%),
+    0 0 1.6rem rgb(90 180 255 / 28%),
+    0 1.2rem 2.5rem rgb(0 0 0 / 60%);
+  pointer-events: auto;
+  animation: glass-open 0.28s ease-out;
+}
+
+.glass-window[data-slot='left'] {
+  --tilt: 14deg;
+  top: 5.5rem;
+  left: 1.25rem;
+  transform-origin: left center;
+}
+
+.glass-window[data-slot='right'] {
+  --tilt: -14deg;
+  top: 10.5rem;
+  right: 1rem;
+  transform-origin: right center;
+}
+
+.glass-window[data-leaving] {
+  pointer-events: none;
+  animation: glass-close 0.2s ease-in forwards;
+}
+
+.glass-window > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0;
+}
+
+.glass-window h2 {
+  margin: 0;
+  color: var(--glass-light);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.glass-window > header button {
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid transparent;
+  border-radius: 0.35rem;
+  background: none;
+  color: var(--muted-foreground);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.glass-window > header button:hover {
+  border-color: var(--glass-edge);
+  color: var(--glass-light);
+}
+
+/* It comes forward out of the stage as it lights up, and goes back into it. */
+@keyframes glass-open {
+  from {
+    opacity: 0;
+    transform: rotateY(var(--tilt)) translateZ(-140px);
+  }
+}
+
+@keyframes glass-close {
+  to {
+    opacity: 0;
+    transform: rotateY(var(--tilt)) translateZ(-140px);
+  }
+}
+
+/* Still an animation, so that it still ends: a closed window is taken away when its own does. */
+@media (prefers-reduced-motion: reduce) {
+  .glass-window {
+    animation-duration: 1ms;
+  }
+}
