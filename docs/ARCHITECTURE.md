@@ -288,7 +288,8 @@ topic read sentinel/+/alert
 
 ### Denial of service
 
-- Rate limits in the `api`: login 5/min per IP, commands 2/s, alerts 20/s per token.
+- Rate limits in the `api`: login 5/min per real client address, commands 2/s, alerts 20/s per token.
+- The real address behind the reverse proxy: the `api` believes `X-Forwarded-For` from the `reverse-proxy` of the Compose network alone (`TRUSTED_PROXY`), and takes the address it added. From any other client the header is ignored, and without a reverse proxy the address of the connection is kept. A brute force uses up its own limit, not the Operator's.
 - Mosquitto `max_packet_size 4096`.
 - Log rotation on every container and on Mosquitto, so a message flood can't fill the SD card.
 

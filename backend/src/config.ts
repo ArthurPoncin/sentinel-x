@@ -41,6 +41,9 @@ const EnvSchema = z.object({
     .string()
     .refine(isPasswordHash, 'Expected the output of `npm run hash-password`: scrypt:<salt>:<key>')
     .optional(),
+  // Host name or address of the reverse proxy in front of the API, the only one whose
+  // X-Forwarded-For is believed. Unset: no one's, the address of the connection is kept.
+  TRUSTED_PROXY: z.string().regex(/^[\w.:-]+$/, 'Expected one host name or address').optional(),
 })
 
 // Read only when MQTT_URL is set: it turns MQTT on, and the rest comes with it.
@@ -78,6 +81,7 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     PREDICTIVE_TOKEN,
     OPERATOR_AUTH,
     OPERATOR_PASSWORD_HASH,
+    TRUSTED_PROXY,
   } = read(EnvSchema, env)
   // The token names the source: two services sharing one could post as each other.
   if (VISION_TOKEN !== undefined && VISION_TOKEN === PREDICTIVE_TOKEN) {
@@ -99,5 +103,6 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     corsOrigins: CORS_ORIGINS,
     serviceTokens: { vision: VISION_TOKEN, predictive: PREDICTIVE_TOKEN },
     operatorAuth: OPERATOR_AUTH === 'on' && OPERATOR_PASSWORD_HASH ? { passwordHash: OPERATOR_PASSWORD_HASH } : false,
+    trustedProxy: TRUSTED_PROXY ?? false,
   }
 }

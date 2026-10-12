@@ -46,6 +46,12 @@ describe('configuration from the environment', () => {
     expect(() => loadConfig({ ...operator, CORS_ORIGINS: 'https://192.168.4.1/twin' })).toThrow(/CORS_ORIGINS/)
   })
 
+  it('trusts no reverse proxy unless TRUSTED_PROXY names one', () => {
+    expect(loadConfig({ ...operator }).trustedProxy).toBe(false)
+    expect(loadConfig({ ...operator, TRUSTED_PROXY: 'reverse-proxy' }).trustedProxy).toBe('reverse-proxy')
+    expect(() => loadConfig({ ...operator, TRUSTED_PROXY: 'reverse-proxy, 10.0.0.0/8' })).toThrow(/TRUSTED_PROXY/)
+  })
+
   it('names the variable it cannot make sense of', () => {
     expect(() => loadConfig({ ...operator, MOCK_FEED: 'yes' })).toThrow(/MOCK_FEED/)
     expect(() => loadConfig({ ...operator, PORT: 'http' })).toThrow(/PORT/)

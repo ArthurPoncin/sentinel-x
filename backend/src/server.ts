@@ -15,6 +15,7 @@ import {
   sessionCookie,
   verifyPassword,
 } from './auth.js'
+import { createClientAddress } from './client-address.js'
 import { type CommandRelay, createCommandRelay } from './commands.js'
 import {
   type AlertKind,
@@ -60,6 +61,9 @@ export interface ServerConfig {
   // The Operator's password hash: a session is required on every other endpoint and on /ws.
   // `false` lets anyone in, for development only.
   operatorAuth: false | { passwordHash: string }
+  // The reverse proxy in front of the API, by host name or address: the only one whose
+  // X-Forwarded-For is believed. Left out or `false`: no one's, the connection's address is kept.
+  trustedProxy?: false | string
 }
 
 const ALERT_BODY_LIMIT = 16 * 1024
@@ -113,12 +117,14 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
   // The connection to the broker, once the server runs with one.
   let broker: MqttClient | undefined
 
-  // As in docs/ARCHITECTURE.md: login 5/min per IP, commands 2/s, alerts 20/s per token.
+  // As in docs/ARCHITECTURE.md: login 5/min per client address, commands 2/s, alerts 20/s per token.
   const limits = {
     login: createRateLimit(5, 60_000),
     commands: createRateLimit(2, 1000),
     alerts: createRateLimit(20, 1000),
   }
+
+  const clientAddress = createClientAddress(config.trustedProxy ?? false)
 
   const sessions = createSessions()
   const hasSession = (request: FastifyRequest) =>
@@ -138,7 +144,8 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
   })
 
   app.post('/api/v1/auth/login', { bodyLimit: LOGIN_BODY_LIMIT }, async (request, reply) => {
-    if (!withinLimit(limits.login, request.ip, reply)) return reply
+    const address = await clientAddress.of(request.ip, request.headers['x-forwarded-for'])
+    if (!withinLimit(limits.login, address, reply)) return reply
     const parsed = LoginSchema.safeParse(request.body)
     if (!parsed.success) return refuse(reply, 400, 'Bad Request', z.prettifyError(parsed.error))
     if (!config.operatorAuth) return reply.code(204).send()

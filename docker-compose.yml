@@ -50,6 +50,8 @@ services:
       MQTT_URL: mqtts://mosquitto:8883
       MQTT_USERNAME: api
       MQTT_CA_FILE: /certs/ca.crt
+      # The only one whose X-Forwarded-For the api believes: the login limit is per real address.
+      TRUSTED_PROXY: reverse-proxy
       # MOCK_FEED=true docker compose up -d: the scripted scenario until the Sentinel is there.
       # It is recorded in the history like the real thing.
       MOCK_FEED: ${MOCK_FEED:-false}
