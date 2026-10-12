@@ -42,6 +42,8 @@ build/
 npm-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+# The voice control's recognition model (40 MB): fetched by `npm run voice:model` and by the image's build
+dashboard/public/voice/*.tar.gz
 # Playwright (dashboard's smoke-render)
 test-results/
 playwright-report/

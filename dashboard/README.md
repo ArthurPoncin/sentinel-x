@@ -628,6 +628,19 @@ An extra for the demo: a Leap Motion Controller on the Operator's desk steers th
 - **Not in capture mode** — `/twin?capture` shows no hologram and takes no hand.
 - **Not yet** — the two-hand zoom and the pointed finger were checked in a browser on made-up hands, not on a real sensor: expect to tune `STRETCH_POWER`, `AIM`, `HAMMER_BACK` and `HAMMER_DOWN`.
 
+## Voice control — `features/voice`
+
+The Operator says « Sentinelle » then a command, and the Alarm is driven as by a gesture or a press on the panel (#162). Everything runs in the browser, offline: no request leaves the machine to hear a voice.
+
+- **Off by default** — the switch is at the foot of the menu, next to the hand control's, and the browser remembers it (`rememberedSwitch()`, shared with the hand control). The microphone is asked for as it is switched on, never before; refused, the switch goes back to off and a toast says why (`failureLine()`).
+- **The engine** — Vosk in WebAssembly ([`vosk-browser`](https://github.com/ccoreilly/vosk-browser)), in a worker, with its small French model and a closed grammar (`GRAMMAR`: the wake word, each wording, `[unk]` for anything else). It is behind `listen()` alone (`api/vosk-ear.ts`), which gives `EarEvent`s: another engine would give the same. The engine and its model are loaded as the voice control is switched on, and the top bar says so.
+- **The model** — a static file of the dashboard, `public/voice/vosk-model-small-fr-0.22.tar.gz` (40 MB, not in git). `npm run voice:model` fetches it once on a development machine (`curl`, `unzip`, checked against its checksum); the image's build does the same. The engine keeps it in the browser (IndexedDB) after the first load.
+- **A pure interpreter** — `interpret(wake, heard, now)`: the text, its confidence and the wake state in, a command or nothing out. It holds the wake word, its window (`WAKE_WINDOW`, 6 s), the wordings (`WORDINGS`) and the confidence threshold (`THRESHOLD`). A command is taken in the sentence of the wake word or in the one that follows; out of vocabulary or under the threshold, nothing is done and the window stays open to say it again. A sentence is as sure as its least sure word (`heardFrom()`).
+- **What a command does** is the app's (`app/voice-control.tsx`, `app/alarm.ts`): the same `firePreset()` as the gesture, the same toast with « Commande vocale », the same error. Nothing is sent in the gestures' tutorial.
+- **The top bar** says where the ear is (`VoiceHud`: the model loading, listening, awake) and shows the last sentence heard with what was made of it.
+- **Commands** — « coupe / arrête / stoppe la sirène », « déclenche / lance / active la sirène ».
+- **Not yet** — checked in Chromium on a simulated microphone playing synthesized French sentences, not on the demo laptop: the recognition in a room's noise, `THRESHOLD` and the model's loading time are to be measured there (#161).
+
 ## TODO
 - [x] App shell + live feed (WebSocket client, store, hook) — #10
 - [x] Operator login screen (`POST /api/v1/auth/login`, `GET /api/v1/auth/check`), back when the session ends — #48

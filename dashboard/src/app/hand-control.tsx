@@ -1,12 +1,8 @@
 import type { ReactNode } from 'react'
-import { toast } from 'sonner'
-import { firePreset, type PresetId } from '@/features/actuators'
 import { type Action, HandControlProvider } from '@/features/gestures'
 import { useLiveFeed } from '@/features/live-feed'
-import { screens, TUTORIAL } from './app-sidebar'
-
-// The Alarm's command a thumb stands for: raised, all is well and the siren stops; turned down, it sounds.
-const PRESET_OF: Partial<Record<Action, PresetId>> = { 'all-clear': 'siren-off', alarm: 'siren' }
+import { answer, driveAlarm, presetOfGesture } from './alarm'
+import { inTutorial, screens } from './app-sidebar'
 
 // The screen a swipe goes to from `pathname`: the next one in the menu as the hand sweeps to the left, a page
 // turned; the one before as it sweeps to the right. Past the last comes the first: with two screens, any swipe
@@ -17,11 +13,6 @@ export function pageAfter(pathname: string, action: 'page-left' | 'page-right'):
   const at = surfaces.findIndex(({ to }) => to === pathname)
   const step = action === 'page-left' ? 1 : -1
   return surfaces[(Math.max(at, 0) + step + surfaces.length) % surfaces.length]?.to ?? '/'
-}
-
-// Whether the screen at `pathname` is the tutorial, a slash at its end or not: the router shows it for both.
-export function inTutorial(pathname: string): boolean {
-  return pathname.replace(/\/+$/, '') === TUTORIAL
 }
 
 interface Props {
@@ -41,11 +32,8 @@ export function HandControl({ navigate, pathname, children }: Props) {
     // In the tutorial a gesture is tried, not meant: the page shows it was made, and nothing is done about it.
     if (inTutorial(pathname())) return
     if (action === 'page-left' || action === 'page-right') return navigate(pageAfter(pathname(), action))
-    const preset = PRESET_OF[action]
-    if (!preset) return
-    const fired = await firePreset(sentinel, preset)
-    if (!fired.success) return toast.error(fired.title, { description: fired.description })
-    toast.success(fired.label, { description: `Geste reconnu · commande transmise à ${fired.command.sentinel}` })
+    const preset = presetOfGesture(action, pathname())
+    if (preset) answer(await driveAlarm(sentinel, preset, 'hand'))
   }
 
   return <HandControlProvider onAction={(action) => void act(action)}>{children}</HandControlProvider>
