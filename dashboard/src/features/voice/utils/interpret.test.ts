@@ -9,6 +9,8 @@ import {
   UNKNOWN,
   WAKE_WINDOW,
   WAKE_WORD,
+  WINDOW_NAMES,
+  type WindowName,
   WORDINGS,
 } from './interpret'
 
@@ -168,6 +170,46 @@ describe('interpret', () => {
     expect(interpret(ASLEEP, said('rapport'), 10).outcome).toEqual({ kind: 'ignored' })
   })
 
+  it('shows and closes each window by its name', () => {
+    expect(WORDINGS['show-camera']).toEqual(['affiche la caméra', 'ouvre la caméra', 'montre la caméra'])
+    expect(WORDINGS['close-camera']).toEqual(['ferme la caméra', 'cache la caméra'])
+    expect(WINDOW_NAMES).toEqual({
+      camera: 'la caméra',
+      gas: 'le gaz',
+      temperature: 'la température',
+      alerts: 'les alertes',
+      incidents: 'les incidents',
+      security: 'la sécurité',
+    })
+
+    for (const window of Object.keys(WINDOW_NAMES) as WindowName[]) {
+      const name = WINDOW_NAMES[window]
+      expect(interpret(ASLEEP, said(`sentinelle affiche ${name}`), 10).outcome).toEqual({
+        kind: 'command',
+        command: `show-${window}`,
+      })
+      expect(interpret(ASLEEP, said(`sentinelle ferme ${name}`), 10).outcome).toEqual({
+        kind: 'command',
+        command: `close-${window}`,
+      })
+    }
+  })
+
+  it('closes every window at once', () => {
+    expect(WORDINGS['close-all']).toEqual(['ferme tout', 'cache tout', 'ferme toutes les fenêtres'])
+    expect(interpret(ASLEEP, said('sentinelle ferme tout'), 10).outcome).toEqual({ kind: 'command', command: 'close-all' })
+  })
+
+  it('does nothing about a window it has no name for, and says it did not understand', () => {
+    // « Sentinelle, affiche la météo », as a closed grammar hears it.
+    expect(interpret(ASLEEP, said('sentinelle affiche [unk]'), 10).outcome).toEqual({ kind: 'unknown' })
+    expect(interpret(ASLEEP, said('sentinelle affiche la [unk]'), 10).outcome).toEqual({ kind: 'unknown' })
+    expect(interpret(ASLEEP, said('sentinelle ferme [unk]'), 10).outcome).toEqual({ kind: 'unknown' })
+    // No name at all is no window either, and « ferme » alone is not « ferme tout ».
+    expect(interpret(ASLEEP, said('sentinelle affiche'), 10).outcome).toEqual({ kind: 'unknown' })
+    expect(interpret(ASLEEP, said('sentinelle ferme'), 10).outcome).toEqual({ kind: 'unknown' })
+  })
+
   it('has no wording that asks for two commands', () => {
     const wordings = Object.values(WORDINGS).flat()
 
@@ -180,5 +222,6 @@ describe('GRAMMAR', () => {
     expect(GRAMMAR).toEqual([WAKE_WORD, ...Object.values(WORDINGS).flat(), UNKNOWN])
     for (const command of SCREENS) expect(GRAMMAR).toEqual(expect.arrayContaining([...WORDINGS[command]]))
     expect(GRAMMAR).toContain('rejoue le dernier incident')
+    expect(GRAMMAR).toEqual(expect.arrayContaining(['affiche la sécurité', 'ferme les alertes', 'ferme tout']))
   })
 })

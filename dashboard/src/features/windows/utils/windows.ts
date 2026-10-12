@@ -3,8 +3,8 @@ import type { AlertKind } from '@/shared/contract'
 // The glass windows that float beside the Outpost on the Twin's screen. This is all there is to know of them:
 // which are open, who opened each, since when, and in which slot it sits. It takes events and gives the windows
 // after them: the mouse and the keyboard send them today, the Alerts open and close theirs by them, and whatever
-// opens or closes a window later sends the same ones: a hand that aims at one and fires closes it. Pure: the
-// instant comes with the event.
+// opens or closes a window later sends the same ones: a hand that aims at one and fires closes it, the voice
+// opens and closes them by their names. Pure: the instant comes with the event.
 
 // The windows there are, each with its French name: what the bar and the window's title read.
 export const WINDOWS = {
@@ -82,6 +82,8 @@ export type WindowEvent =
   | { type: 'open'; id: WindowId; by: Opener; at: number }
   // `by` a shot when a hand that aimed at it fired: it is closed as by any other, and said to have been shot.
   | { type: 'close'; id: WindowId; by?: 'shot' }
+  // Every window at once, whoever opened it.
+  | { type: 'close-all' }
   // The Alerts active at an instant, by their kinds: sent when they change, and when time has passed.
   | { type: 'alerts'; kinds: readonly AlertKind[]; at: number }
 
@@ -139,6 +141,9 @@ export function windowsAfter(state: WindowsState, event: WindowEvent): WindowsSt
       const shot = event.by === 'shot' ? [...state.shot, event.id] : state.shot
       return { ...state, open: open.filter((window) => window.id !== event.id), shot }
     }
+    case 'close-all':
+      // The Alerts going on are still known: none opens its window again for having lasted.
+      return open.length === 0 ? state : { ...state, open: NO_WINDOWS }
     case 'open': {
       const there = open.find((window) => window.id === event.id)
       if (!there) {

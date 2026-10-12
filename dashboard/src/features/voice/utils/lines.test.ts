@@ -38,6 +38,15 @@ describe('lastLine', () => {
       '« sentinelle silence » · commande : faire taire les annonces',
     )
     expect(line('sentinelle parle', { kind: 'command', command: 'speak' })).toBe('« sentinelle parle » · commande : rétablir les annonces')
+    expect(line('sentinelle affiche la caméra', { kind: 'command', command: 'show-camera' })).toBe(
+      '« sentinelle affiche la caméra » · commande : afficher la caméra',
+    )
+    expect(line('sentinelle ferme les alertes', { kind: 'command', command: 'close-alerts' })).toBe(
+      '« sentinelle ferme les alertes » · commande : fermer les alertes',
+    )
+    expect(line('sentinelle ferme tout', { kind: 'command', command: 'close-all' })).toBe(
+      '« sentinelle ferme tout » · commande : fermer toutes les fenêtres',
+    )
     expect(line('sentinelle', { kind: 'woken' })).toBe('« sentinelle » · mot d\'éveil entendu')
     expect(line('coupe la sirène', { kind: 'ignored' })).toBe('« coupe la sirène » · sans « Sentinelle », rien n\'est fait')
     expect(line('sentinelle coupe la sirène', { kind: 'unsure' })).toBe(
@@ -46,6 +55,9 @@ describe('lastLine', () => {
   })
 
   it('shows a word it did not know as a gap, and says it did not understand', () => {
+    expect(lastLine({ text: 'sentinelle affiche [unk]', outcome: { kind: 'unknown' } })).toBe(
+      '« sentinelle affiche … » · pas compris',
+    )
     expect(lastLine({ text: 'sentinelle [unk] la sirène', outcome: { kind: 'unknown' } })).toBe(
       '« sentinelle … la sirène » · pas compris',
     )

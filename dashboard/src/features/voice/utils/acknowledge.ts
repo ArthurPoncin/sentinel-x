@@ -1,14 +1,15 @@
-import type { Command } from './interpret'
+import { type Command, ofWindows, WINDOW_NAMES } from './interpret'
 
 // What the voice answers to: a command it carried out, or what kept it from one. Words that were no command,
-// a command it was not sure of, one only tried in the tutorial, a screen the app is on already, no Incident to
-// replay or none to be had, and an Alarm the Command Post did not relay.
+// a command it was not sure of, one only tried in the tutorial, a screen the app is on already, a window closed
+// where none is open, no Incident to replay or none to be had, and an Alarm the Command Post did not relay.
 export type Reply =
   | Command
   | 'unknown'
   | 'unsure'
   | 'only-tried'
   | 'already-there'
+  | 'no-window'
   | 'nothing-to-replay'
   | 'incidents-unreachable'
   | 'alarm-failed'
@@ -25,9 +26,16 @@ export const ACKNOWLEDGEMENTS: Readonly<Record<Reply, readonly [string, ...strin
   report: ['Rapport.', 'Voici le rapport.', 'État du site.'],
   silence: ['Annonces coupées.', 'Entendu, je me tais.'],
   speak: ['Annonces rétablies.', 'Entendu, je reprends les annonces.'],
+  ...ofWindows((verb, window): [string, ...string[]] =>
+    verb === 'show'
+      ? [`Voici ${WINDOW_NAMES[window]}.`, `J'affiche ${WINDOW_NAMES[window]}.`]
+      : [`Je ferme ${WINDOW_NAMES[window]}.`, 'Fenêtre fermée.'],
+  ),
+  'close-all': ['Tout est fermé.', 'Je ferme toutes les fenêtres.'],
   unknown: ["Je n'ai pas compris.", 'Commande inconnue.'],
   unsure: ['Je ne suis pas sûre, répétez.', 'Pouvez-vous répéter ?'],
-  'only-tried': ["Dans le tutoriel, la sirène n'est pas commandée."],
+  'only-tried': ['Dans le tutoriel, la commande est seulement essayée.'],
+  'no-window': ["Aucune fenêtre n'est ouverte ici."],
   'already-there': ['Vous y êtes déjà.', 'Cet écran est déjà affiché.'],
   'nothing-to-replay': ['Aucun incident à rejouer.'],
   'incidents-unreachable': ['Les incidents sont injoignables.'],

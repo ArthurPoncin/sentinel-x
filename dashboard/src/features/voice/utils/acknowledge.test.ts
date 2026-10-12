@@ -10,6 +10,7 @@ const NOT_DONE: readonly Reply[] = [
   'unsure',
   'only-tried',
   'already-there',
+  'no-window',
   'nothing-to-replay',
   'incidents-unreachable',
   'alarm-failed',

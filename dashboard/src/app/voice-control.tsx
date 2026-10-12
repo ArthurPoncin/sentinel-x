@@ -6,8 +6,9 @@ import { useLiveFeed } from '@/features/live-feed'
 import { fetchLastClosedIncident } from '@/features/replay'
 import { acknowledge, type Command, failureLine, type Reply, VoiceControlProvider } from '@/features/voice'
 import { type Answer, answer, driveAlarm, presetOfVoice } from './alarm'
-import { NAV, TWIN } from './app-sidebar'
+import { inTutorial, NAV, TWIN } from './app-sidebar'
 import { replayAsked } from './replay-asked'
+import { windowsAsked, windowsOfVoice } from './windows-asked'
 
 // Where a voice command leads from `pathname`: to the screen it names. Nowhere when it names none, or the one
 // the app is on already, a slash at its end or not. Out of the tutorial too: a screen's name is not one of the
@@ -35,10 +36,12 @@ interface Props {
 // What the Operator's voice does, over the whole app: after the wake word, a command drives the Sentinel's
 // Alarm by the path a gesture and a press on the actuator panel take, with the same answers, not in the
 // tutorial, where it is only tried; the name of a screen leads to it; and the last Incident that closed is
-// replayed on the Twin, from the list the Command Post already gives; « rapport » has the Status and the
-// active Alerts said; « silence » hushes the announcements, until they are asked for again. Each command
-// taken is answered in a short sentence, said and written, and so is one refused or not understood. The ear
-// is closed while the dashboard talks. An ear that cannot listen says why, and the switch is off again.
+// replayed on the Twin, from the list the Command Post already gives. A window of the Twin is shown by its name,
+// from any screen, and closed by it, or all of them at once: the Twin is told by the way to it. « Rapport » has
+// the Status and the active Alerts said; « silence » hushes the announcements, until they are asked for again.
+// Each command taken is answered in a short sentence, said and written, and so is one refused or not
+// understood. The ear is closed while the dashboard talks. An ear that cannot listen says why, and the switch
+// is off again.
 export function VoiceControl({ navigate, pathname, children }: Props) {
   const sentinel = useLiveFeed((state) => state.latestTelemetry?.sentinel ?? null)
   const alerts = useLiveFeed((state) => state.activeAlerts)
@@ -87,10 +90,20 @@ export function VoiceControl({ navigate, pathname, children }: Props) {
         answer(fired)
         return alarmSaid(command, fired)
       }
-      default: {
+      case 'operator':
+      case 'twin':
+      case 'tutorial': {
         const page = pageOfVoice(command, pathname())
         if (!page) return [acknowledge('already-there')]
         navigate(page)
+        return [acknowledge(command)]
+      }
+      default: {
+        if (inTutorial(pathname())) return [acknowledge('only-tried')]
+        const windows = windowsOfVoice(command, pathname())
+        // Closed from another screen than the Twin: there is none open there.
+        if (!windows) return [acknowledge('no-window')]
+        navigate(TWIN, windowsAsked(windows))
         return [acknowledge(command)]
       }
     }
