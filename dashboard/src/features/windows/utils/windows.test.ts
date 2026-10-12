@@ -28,8 +28,15 @@ const all = (): Windows => after(...WINDOW_IDS.map((id, rank) => open(1000 * (ra
 
 describe('the windows there are', () => {
   it('have each a French name', () => {
-    expect(WINDOW_IDS).toEqual(['camera', 'gas', 'temperature', 'alerts', 'incidents'])
-    expect(WINDOW_IDS.map((id) => WINDOWS[id].name)).toEqual(['Caméra', 'Gaz', 'Température', 'Alertes', 'Incidents'])
+    expect(WINDOW_IDS).toEqual(['camera', 'gas', 'temperature', 'alerts', 'incidents', 'security'])
+    expect(WINDOW_IDS.map((id) => WINDOWS[id].name)).toEqual([
+      'Caméra',
+      'Gaz',
+      'Température',
+      'Alertes',
+      'Incidents',
+      'Sécurité',
+    ])
   })
 
   it('have slots on either side of the Outpost, taken a side in turn', () => {
@@ -89,10 +96,16 @@ describe('windowsAfter', () => {
   })
 
   it('makes the window open for the longest give way past the limit, and gives its slot to the new one', () => {
-    const windows = all()
+    const windows = after(...WINDOW_IDS.slice(0, MAX_WINDOWS + 1).map((id, rank) => open(1000 * (rank + 1), id)))
     expect(windows).toHaveLength(MAX_WINDOWS)
     expect(isOpen(windows, 'camera')).toBe(false)
     expect(windows.at(-1)).toEqual({ id: 'incidents', by: 'operator', since: 5000, slot: 'left-top' })
+    expect(new Set(windows.map(({ slot }) => slot)).size).toBe(MAX_WINDOWS)
+  })
+
+  it('keeps the latest opened when every window of the catalogue is asked for in turn', () => {
+    const windows = all()
+    expect(windows.map(({ id }) => id)).toEqual(WINDOW_IDS.slice(-MAX_WINDOWS))
     expect(new Set(windows.map(({ slot }) => slot)).size).toBe(MAX_WINDOWS)
   })
 
@@ -116,8 +129,14 @@ describe('the window an Alert concerns', () => {
   const cleared = 20_000
   const due = cleared + CLOSE_AFTER_MS
 
-  it('is the camera for an intrusion, the gas for a leak, the temperature for heat or a predicted drift', () => {
-    expect(WINDOW_OF).toEqual({ intrusion: 'camera', gas: 'gas', thermal: 'temperature', predictive: 'temperature' })
+  it('is the camera for an intrusion, the gas for a leak, the temperature for heat or a predicted drift, the security one for an attack', () => {
+    expect(WINDOW_OF).toEqual({
+      intrusion: 'camera',
+      gas: 'gas',
+      thermal: 'temperature',
+      predictive: 'temperature',
+      cyber: 'security',
+    })
   })
 
   it('opens by itself when the Alert is raised, by the Alert, since that instant', () => {
@@ -125,14 +144,22 @@ describe('the window an Alert concerns', () => {
     expect(ids(after(alerts(1000, 'gas')))).toEqual(['gas'])
     expect(ids(after(alerts(1000, 'thermal')))).toEqual(['temperature'])
     expect(ids(after(alerts(1000, 'predictive')))).toEqual(['temperature'])
+    expect(ids(after(alerts(1000, 'cyber')))).toEqual(['security'])
   })
 
   it('is one window for two Alerts that concern the same', () => {
     expect(ids(after(alerts(1000, 'thermal', 'predictive')))).toEqual(['temperature'])
   })
 
-  it('is none for a presence, a noise or an attack', () => {
-    expect(after(alerts(1000, 'presence', 'noise', 'cyber'))).toEqual([])
+  it('is none for a presence or a noise', () => {
+    expect(after(alerts(1000, 'presence', 'noise'))).toEqual([])
+  })
+
+  it('closes the security window after the delay that follows the end of the attack, not while it is raised again', () => {
+    const attacked = after(alerts(1000, 'cyber'), alerts(2000, 'cyber'), alerts(cleared - 1, 'cyber'))
+    expect(attacked).toEqual([{ id: 'security', by: 'alert', since: 1000, slot: 'left-top' }])
+    expect(ids(after(alerts(1000, 'cyber'), alerts(cleared), alerts(due - 1)))).toEqual(['security'])
+    expect(after(alerts(1000, 'cyber'), alerts(cleared), alerts(due))).toEqual([])
   })
 
   it('stays while the Alert lasts, and for the delay after it has cleared', () => {
