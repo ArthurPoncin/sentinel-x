@@ -1,9 +1,11 @@
 import { useCallback, useMemo } from 'react'
 import { useLocation } from 'react-router'
+import { ActiveAlertList } from '@/features/alerts'
 import { CameraView } from '@/features/camera'
 import { useHandWind, useLiveHands } from '@/features/gestures'
 import { stateAfter, useLiveFeed } from '@/features/live-feed'
-import { TimeScrubber, usePlayer } from '@/features/replay'
+import { IncidentList, TimeScrubber, useIncidentsToReplay, usePlayer } from '@/features/replay'
+import { GasCurve, TemperatureCurve, toSeries } from '@/features/telemetry'
 import { type OperatorHands, OutpostTwin, toScene } from '@/features/twin'
 import { GlassWindows, useWindows } from '@/features/windows'
 import { captureMode } from '@/shared/config/capture-mode'
@@ -29,8 +31,11 @@ type Intrusion = Extract<Alert, { kind: 'intrusion' }>
 // With the hand control on, a flat hand over the sensor steers the camera and the hands float in hologram in a
 // corner of the view, green as a thumb is raised and red as one is turned down; two open hands moved apart or
 // together zoom, a fist held to one side winds a replay.
-// Glass windows float beside the Outpost, opened and closed from a bar at the foot of the stage: the camera's
-// shows its annotated stream, as the Operator's screen does, and says in a replay that no picture is replayed.
+// Glass windows float beside the Outpost, opened and closed from a bar at the foot of the stage, in slots of
+// their own on either side of it, four at most: the camera's annotated stream, the gas curve, the temperature
+// curve, the active Alerts from the most urgent, and the Incidents, where choosing one replays it. They read
+// what the Twin shows, the live feed or the replayed instant; the camera's says in a replay that no picture is
+// replayed.
 // With `?capture` it is the Twin alone, on the same feed: no top bar, no sidebar, no caption, no scrubber, no window,
 // the whole stage held in frame, to be filmed in a vertical window for the teaser.
 export function TwinRoute() {
@@ -42,6 +47,7 @@ export function TwinRoute() {
   const activeAlerts = useLiveFeed((state) => state.activeAlerts)
   const history = useLiveFeed((state) => state.history)
   const player = usePlayer()
+  const incidents = useIncidentsToReplay(history, player)
   const [windows, sendToWindows] = useWindows()
   const live = useLiveHands()
   const operator = useMemo<OperatorHands | undefined>(
@@ -75,6 +81,8 @@ export function TwinRoute() {
   const encrypted = !player.replay && feedEncrypted(window.location)
   const scene = useMemo(() => toScene(shown, { encrypted }), [shown, encrypted])
   const readings = shown.latestTelemetry?.readings
+  // The curves of what is shown: up to the replayed instant in a replay.
+  const series = useMemo(() => toSeries(player.frames ?? history), [player.frames, history])
   const intrusion = useMemo(
     () => shown.activeAlerts.find((alert): alert is Intrusion => alert.kind === 'intrusion') ?? null,
     [shown.activeAlerts],
@@ -93,11 +101,17 @@ export function TwinRoute() {
               {readings ? `${decimal(readings.humidity, 0)} %` : '—'}
             </p>
           </div>
-          <TimeScrubber history={history} player={player} />
+          <TimeScrubber player={player} incidents={incidents} />
           <GlassWindows
             windows={windows}
             send={sendToWindows}
-            content={{ camera: <CameraView intrusion={intrusion} replayed={player.replay !== null} /> }}
+            content={{
+              camera: <CameraView intrusion={intrusion} replayed={player.replay !== null} />,
+              gas: <GasCurve series={series} />,
+              temperature: <TemperatureCurve series={series} />,
+              alerts: <ActiveAlertList alerts={shown.activeAlerts} wrap />,
+              incidents: <IncidentList incidents={incidents} />,
+            }}
           />
         </>
       )}

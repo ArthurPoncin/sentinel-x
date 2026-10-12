@@ -4,9 +4,12 @@ export { useWindows } from './hooks/use-windows'
 // Pure, for whoever opens and closes the windows.
 export {
   isOpen,
+  MAX_WINDOWS,
   NO_WINDOWS,
   type OpenWindow,
   type Opener,
+  SIDES,
+  SLOT_PLACE,
   SLOTS,
   type Slot,
   WINDOW_IDS,
