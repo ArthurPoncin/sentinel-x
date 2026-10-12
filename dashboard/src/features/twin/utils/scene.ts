@@ -99,8 +99,10 @@ export interface SceneProps {
   floodlights: { lit: boolean }
   // The shield over the Outpost, a dome raised around the whole site while a `cyber` Alert is active: the last
   // raised of them, the entry point of the API it says is attacked, how many attempts were refused there so
-  // far, and the label that reads both. Null while it is lowered: no attack is going on.
-  shield: { alertId: string; vector: CyberVector; attempts: number; label: string } | null
+  // far, and the label that reads both. `struckAt` is the instant it was last struck, in ms since the epoch:
+  // an attempt refused is a `cyber` Alert raised, for the first time or again, and the last of them on any of
+  // the active ones is the last strike. Null while it is lowered: no attack is going on.
+  shield: { alertId: string; vector: CyberVector; attempts: number; label: string; struckAt: number } | null
   // Where the last raised of the active Alerts happens on the site plan, its anchor: the intruder for an
   // `intrusion`, the gas pipe for a `gas`, the generator hall for a `thermal`, the gate for a `presence`, the
   // Enclosure for a `predictive`. A clap is heard, not seen anywhere: a `noise` Alert has none, and leaves the
@@ -307,7 +309,8 @@ export function toScene(state: TwinState, feed: TwinFeed = { encrypted: false })
     }
     if (alert.kind === 'cyber') {
       const { vector, attempts } = alert.detail
-      shield = { alertId: alert.alert_id, vector, attempts, label: shieldLabel(vector, attempts) }
+      const struckAt = Math.max(Date.parse(alert.ts), shield?.struckAt ?? Number.NEGATIVE_INFINITY)
+      shield = { alertId: alert.alert_id, vector, attempts, label: shieldLabel(vector, attempts), struckAt }
     }
     if (alert.kind === 'gas' || alert.kind === 'thermal') {
       if (alarm === null || SEVERITIES.indexOf(alert.severity) > SEVERITIES.indexOf(alarm)) alarm = alert.severity

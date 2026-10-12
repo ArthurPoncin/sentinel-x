@@ -708,6 +708,24 @@ describe('toScene', () => {
     expect(toScene(state({ activeAlerts: [attack('c1', 31)] })).shield?.attempts).toBe(31)
   })
 
+  it('gives the shield the instant it was last struck: that of the Alert, moved by each time it is raised again', () => {
+    const raised = { ...attack('c1', 5), ts: '2026-07-11T10:00:00.000Z' }
+    const again = { ...attack('c1', 9), ts: '2026-07-11T10:00:01.250Z' }
+
+    expect(toScene(state({ activeAlerts: [raised] })).shield?.struckAt).toBe(Date.parse(raised.ts))
+    expect(toScene(state({ activeAlerts: [again] })).shield?.struckAt).toBe(Date.parse(again.ts))
+  })
+
+  it('takes the last strike among several cyber Alerts, whichever of them it was on', () => {
+    const login = { ...attack('c1', 12), ts: '2026-07-11T10:00:04.000Z' }
+    const token = { ...attack('c2', 6, 'service-token'), ts: '2026-07-11T10:00:02.000Z' }
+
+    expect(toScene(state({ activeAlerts: [login, token] })).shield).toMatchObject({
+      alertId: 'c2',
+      struckAt: Date.parse(login.ts),
+    })
+  })
+
   it('keeps the shield raised until the last of several cyber Alerts is cleared, and shows the last raised', () => {
     const [login, token] = [attack('c1', 12), attack('c2', 6, 'service-token')]
 

@@ -23,7 +23,7 @@ type Intrusion = Extract<Alert, { kind: 'intrusion' }>
 // labels them with its score, a presence blinks the PIR dome and sweeps the fence in amber, and it or an
 // intrusion lights the floodlights on the perimeter,
 // a clap sends a wave from the Enclosure over the socle, an attack on the Command Post raises a shield around
-// the whole Outpost, labelled with the entry point attacked and the attempts refused. The camera turns to each
+// the whole Outpost, labelled with the entry point attacked and the attempts refused, each of which strikes it. The camera turns to each
 // Alert as it is raised, then orbits again, and stands back for an attack. The Enclosure's antenna sends an impulse for each frame of telemetry, and a padlock reads
 // « WSS » by it while the live feed is encrypted: not on a plain one, not in a replay. When the feed drops, it all turns grey: nothing here
 // is live any more. The time-scrubber replays a past Incident or the scripted scenario in it, second by second,

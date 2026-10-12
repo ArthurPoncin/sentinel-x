@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { hashPassword } from '../src/auth.js'
-import { type Alert, COMMAND_POST, type Frame, HistorySchema, IncidentsSchema } from '../src/contract.js'
+import { type Alert, COMMAND_POST, type Frame, HistorySchema, IncidentReplaySchema, IncidentsSchema } from '../src/contract.js'
 import { QUIET_MS, THRESHOLD } from '../src/cyber-watch.js'
 import { intrusionAlert, predictiveAlert } from './support/alerts.js'
 import { startBroker } from './support/broker.js'
@@ -160,6 +160,31 @@ describe('a brute force on the login', () => {
     const [first, , second] = alertsOf(feed)
     expect(second).toMatchObject({ kind: 'cyber', state: 'raised', value: THRESHOLD })
     expect(second?.alert_id).not.toBe(first?.alert_id)
+  })
+
+  it('replays the Incident with every time the Alert was raised again, in order, each at its own instant', async () => {
+    const { asOperator, clock, feed, guess } = await startOutpost()
+
+    await guess(THRESHOLD)
+    for (let again = 0; again < 3; again++) {
+      clock.now += 700
+      await guess(1)
+    }
+    clock.now += QUIET_MS
+    await vi.waitFor(() => expect(alertsOf(feed)).toHaveLength(5), { timeout: 3000 })
+
+    const replay = IncidentReplaySchema.parse(await (await asOperator('/api/v1/incidents/1')).json())
+    const alerts = replay.records.flatMap((record) => (record.type === 'alert' ? [record.payload] : []))
+    const raised = START + 60_000
+
+    expect(alerts.map(({ state, value, ts }) => [state, value, Date.parse(ts) - raised])).toEqual([
+      ['raised', THRESHOLD, 0],
+      ['raised', THRESHOLD + 1, 700],
+      ['raised', THRESHOLD + 2, 1400],
+      ['raised', THRESHOLD + 3, 2100],
+      ['cleared', THRESHOLD + 3, 2100 + QUIET_MS],
+    ])
+    expect(new Set(alerts.map((alert) => alert.alert_id)).size).toBe(1)
   })
 
   it('opens an Incident and closes it with the clearing, cyber among its kinds', async () => {

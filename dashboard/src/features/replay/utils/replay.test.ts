@@ -142,3 +142,69 @@ describe('the scrubber over a replay', () => {
     expect(framesAt(replay, replay.from)).toMatchObject([{ type: 'telemetry', payload: { ts: at('14:22:56') } }])
   })
 })
+
+describe('the replay of an attack', () => {
+  function attack(time: string, state: 'raised' | 'cleared', attempts: number): Frame {
+    return {
+      type: 'alert',
+      payload: {
+        alert_id: 'cyber-login-1',
+        sentinel: 'command-post',
+        source: 'api',
+        kind: 'cyber',
+        severity: 'warning',
+        state,
+        value: attempts,
+        detail: { vector: 'login', attempts },
+        ts: at(time),
+      },
+    }
+  }
+
+  const ATTACK: Incident = {
+    incident_id: 1,
+    start: at('14:23:00'),
+    end: at('14:23:20'),
+    ongoing: false,
+    alerts: 4,
+    kinds: ['cyber'],
+    peak: 'warning',
+  }
+  const replay = replayOf(
+    [
+      telemetry('14:22:59'),
+      attack('14:23:00', 'raised', 5),
+      attack('14:23:01.400', 'raised', 9),
+      telemetry('14:23:02'),
+      attack('14:23:03', 'raised', 14),
+      attack('14:23:20', 'cleared', 14),
+    ],
+    ATTACK,
+  )
+  // What the Twin reads of the attack at a second of the replay: the last its Alert said by then.
+  const attackAt = (second: number) => {
+    const last = framesAt(replay, instantAt(replay, second)).findLast((frame) => frame.type === 'alert')
+    return last?.type === 'alert' ? [last.payload.state, last.payload.value, timeOf(last) - replay.from] : null
+  }
+
+  it('holds every time the Alert was raised again, in order', () => {
+    const alerts = replay.frames.flatMap((frame) => (frame.type === 'alert' ? [frame.payload.value] : []))
+
+    expect(alerts).toEqual([5, 9, 14, 14])
+  })
+
+  it('gives each of them back at the second it happened, and takes it back when wound back before it', () => {
+    const seconds = [2, 3, 4, 5, 6, 22, 23].map(attackAt)
+
+    expect(seconds).toEqual([
+      null,
+      ['raised', 5, LEAD_MS],
+      ['raised', 5, LEAD_MS],
+      ['raised', 9, LEAD_MS + 1400],
+      ['raised', 14, LEAD_MS + 3000],
+      ['raised', 14, LEAD_MS + 3000],
+      ['cleared', 14, LEAD_MS + 20_000],
+    ])
+    expect(attackAt(3)).toEqual(['raised', 5, LEAD_MS])
+  })
+})
