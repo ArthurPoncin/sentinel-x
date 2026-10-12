@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react'
-import { AlertKindSchema, AlertSourceSchema, SeveritySchema } from '@/shared/contract'
+import { AlertSourceSchema, SeveritySchema } from '@/shared/contract'
 import { cn } from '@/shared/lib/utils'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
-import { KIND_LABEL, SEVERITY_LABEL, SOURCE_LABEL } from '../utils/describe'
-import { isFiltering, type LogFilter, NO_FILTER, toggle } from '../utils/log-filter'
+import { SEVERITY_LABEL, SOURCE_LABEL } from '../utils/describe'
+import { isFiltering, KIND_OPTIONS, type LogFilter, NO_FILTER, toggle } from '../utils/log-filter'
 
 const STATE_LABEL = { all: 'Toutes', raised: 'Levées', cleared: 'Résolues' } as const
 
@@ -65,9 +65,9 @@ export function AlertLogFilters({ filter, onChange }: { filter: LogFilter; onCha
           onChange={(e) => set({ kind: e.target.value as LogFilter['kind'] })}
         >
           <option value="all">Tous</option>
-          {AlertKindSchema.options.map((kind) => (
-            <option key={kind} value={kind}>
-              {KIND_LABEL[kind]}
+          {KIND_OPTIONS.map(({ value, label }) => (
+            <option key={value} value={value}>
+              {label}
             </option>
           ))}
         </select>
