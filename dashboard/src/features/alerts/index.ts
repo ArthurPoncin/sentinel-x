@@ -2,3 +2,4 @@
 export { ActiveAlertList, ActiveAlerts } from './components/active-alerts'
 export { AlertLog } from './components/alert-log'
 export { AlertToasts } from './components/alert-toasts'
+export { AttackList, type AttackListProps } from './components/attack-list'

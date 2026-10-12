@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import { useLocation } from 'react-router'
-import { ActiveAlertList } from '@/features/alerts'
+import { ActiveAlertList, AttackList } from '@/features/alerts'
 import { CameraView } from '@/features/camera'
 import { useHandWind, useLiveHands } from '@/features/gestures'
 import { stateAfter, useLiveFeed } from '@/features/live-feed'
@@ -33,9 +33,10 @@ type Intrusion = Extract<Alert, { kind: 'intrusion' }>
 // together zoom, a fist held to one side winds a replay.
 // Glass windows float beside the Outpost, opened and closed from a bar at the foot of the stage, in slots of
 // their own on either side of it, four at most: the camera's annotated stream, the gas curve, the temperature
-// curve, the active Alerts from the most urgent, and the Incidents, where choosing one replays it. They read
-// what the Twin shows, the live feed or the replayed instant; the camera's says in a replay that no picture is
-// replayed.
+// curve, the active Alerts from the most urgent, the Incidents, where choosing one replays it, and the attacks
+// going on in figures: the entry point attacked, where it comes from, the attempts refused, since when. They
+// read what the Twin shows, the live feed or the replayed instant; the camera's says in a replay that no
+// picture is replayed.
 // With `?capture` it is the Twin alone, on the same feed: no top bar, no sidebar, no caption, no scrubber, no window,
 // the whole stage held in frame, to be filmed in a vertical window for the teaser.
 export function TwinRoute() {
@@ -111,6 +112,13 @@ export function TwinRoute() {
               temperature: <TemperatureCurve series={series} />,
               alerts: <ActiveAlertList alerts={shown.activeAlerts} wrap />,
               incidents: <IncidentList incidents={incidents} />,
+              security: (
+                <AttackList
+                  alerts={shown.activeAlerts}
+                  frames={player.frames ?? history}
+                  at={player.replay ? player.at : undefined}
+                />
+              ),
             }}
           />
         </>

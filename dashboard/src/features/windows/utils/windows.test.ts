@@ -21,8 +21,15 @@ const all = (): Windows => after(...WINDOW_IDS.map((id, rank) => open(1000 * (ra
 
 describe('the windows there are', () => {
   it('have each a French name', () => {
-    expect(WINDOW_IDS).toEqual(['camera', 'gas', 'temperature', 'alerts', 'incidents'])
-    expect(WINDOW_IDS.map((id) => WINDOWS[id].name)).toEqual(['Caméra', 'Gaz', 'Température', 'Alertes', 'Incidents'])
+    expect(WINDOW_IDS).toEqual(['camera', 'gas', 'temperature', 'alerts', 'incidents', 'security'])
+    expect(WINDOW_IDS.map((id) => WINDOWS[id].name)).toEqual([
+      'Caméra',
+      'Gaz',
+      'Température',
+      'Alertes',
+      'Incidents',
+      'Sécurité',
+    ])
   })
 
   it('have slots on either side of the Outpost, taken a side in turn', () => {
@@ -82,10 +89,16 @@ describe('windowsAfter', () => {
   })
 
   it('makes the window open for the longest give way past the limit, and gives its slot to the new one', () => {
-    const windows = all()
+    const windows = after(...WINDOW_IDS.slice(0, MAX_WINDOWS + 1).map((id, rank) => open(1000 * (rank + 1), id)))
     expect(windows).toHaveLength(MAX_WINDOWS)
     expect(isOpen(windows, 'camera')).toBe(false)
     expect(windows.at(-1)).toEqual({ id: 'incidents', by: 'operator', since: 5000, slot: 'left-top' })
+    expect(new Set(windows.map(({ slot }) => slot)).size).toBe(MAX_WINDOWS)
+  })
+
+  it('keeps the latest opened when every window of the catalogue is asked for in turn', () => {
+    const windows = all()
+    expect(windows.map(({ id }) => id)).toEqual(WINDOW_IDS.slice(-MAX_WINDOWS))
     expect(new Set(windows.map(({ slot }) => slot)).size).toBe(MAX_WINDOWS)
   })
 

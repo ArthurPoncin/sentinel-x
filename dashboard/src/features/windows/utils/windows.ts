@@ -10,6 +10,7 @@ export const WINDOWS = {
   temperature: { name: 'Température' },
   alerts: { name: 'Alertes' },
   incidents: { name: 'Incidents' },
+  security: { name: 'Sécurité' },
 } as const
 
 export type WindowId = keyof typeof WINDOWS
