@@ -16,7 +16,8 @@ export function presetOfGesture(action: Action, pathname: string): PresetId | nu
   return inTutorial(pathname) ? null : (OF_GESTURE[action] ?? null)
 }
 
-// What a voice command said at `pathname` asks of the Alarm. The tutorial's rule holds for the voice too.
+// What a voice command said at `pathname` asks of the Alarm, nothing when it is about something else. The
+// tutorial's rule holds for the voice too.
 export function presetOfVoice(command: Command, pathname: string): PresetId | null {
   return inTutorial(pathname) ? null : (OF_VOICE[command] ?? null)
 }

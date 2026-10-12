@@ -18,6 +18,10 @@ export interface GlassWindowsProps {
   send: (event: WindowEvent) => void
   // What each window shows: whoever lays the windows over a screen brings it.
   content: Record<WindowId, ReactNode>
+  // The window the sight of a hand that aims is on: it lights up.
+  aimed?: WindowId | null
+  // The windows a shot closed: they scatter in light as they go.
+  shot?: readonly WindowId[]
 }
 
 const toggleId = (id: WindowId) => `window-toggle-${id}`
@@ -38,8 +42,9 @@ function useLeaving(windows: Windows): [readonly OpenWindow[], (id: WindowId) =>
 // The glass windows of the Twin's screen, laid over the scene: a bar that opens and closes each, and the open
 // ones in their slots beside the Outpost, tilted toward it. What a window shows scrolls inside it where it is
 // taller than its slot. They are HTML, not part of the 3D scene: each is a
-// named region the keyboard reaches, closed by its button or by Escape.
-export function GlassWindows({ windows, send, content }: GlassWindowsProps) {
+// named region the keyboard reaches, closed by its button or by Escape. A hand that aims lights the one its
+// sight is on, and the one it shoots goes out in a burst of light.
+export function GlassWindows({ windows, send, content, aimed = null, shot = [] }: GlassWindowsProps) {
   const [leaving, left] = useLeaving(windows)
   // Closed from inside the window: the focus was in what goes away, and goes back to what brings it back.
   const close = (id: WindowId) => {
@@ -83,7 +88,8 @@ export function GlassWindows({ windows, send, content }: GlassWindowsProps) {
                     className="glass-window"
                     data-window={id}
                     data-row={SLOT_PLACE[slot].row}
-                    data-leaving={gone || undefined}
+                    data-aimed={(!gone && aimed === id) || undefined}
+                    data-leaving={gone ? (shot.includes(id) ? 'shot' : 'closed') : undefined}
                     inert={gone}
                     aria-label={`Fenêtre ${WINDOWS[id].name}`}
                     onAnimationEnd={(event) => {

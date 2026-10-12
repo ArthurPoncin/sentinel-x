@@ -3,6 +3,7 @@ import { failureLine, lastLine, statusLine } from './lines'
 
 describe('statusLine', () => {
   it('says where the ear is, from the microphone to the wake word', () => {
+    expect(statusLine('waiting')).toMatch(/dans un autre onglet/)
     expect(statusLine('asking')).toMatch(/autorisez le micro/)
     expect(statusLine('loading')).toMatch(/Chargement du modèle vocal/)
     expect(statusLine('listening')).toMatch(/À l'écoute · dites « Sentinelle »/)
@@ -50,6 +51,8 @@ describe('failureLine', () => {
   it('says why the voice control went back to off', () => {
     expect(failureLine('refused')).toMatch(/micro a été refusé/)
     expect(failureLine('no-microphone')).toMatch(/Aucun micro/)
+    expect(failureLine('unavailable')).toMatch(/micro ne répond pas/)
+    expect(failureLine('blocked')).toMatch(/sans un geste/)
     expect(failureLine('unsupported')).toMatch(/navigateur/)
     expect(failureLine('model')).toMatch(/modèle vocal/)
   })
