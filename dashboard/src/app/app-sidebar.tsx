@@ -96,7 +96,8 @@ export function AppSidebar() {
               aria-pressed={announcements.enabled}
               onClick={() => announcements.setEnabled(!announcements.enabled)}
             >
-              Annonces vocales : {announcements.enabled ? 'activées' : 'désactivées'}
+              <span>Annonces vocales</span>
+              <span className={STATE}>{announcements.enabled ? 'activées' : 'désactivées'}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
