@@ -1,12 +1,17 @@
 import { useCallback, useMemo } from 'react'
 import { useLocation } from 'react-router'
+import { CameraView } from '@/features/camera'
 import { useHandWind, useLiveHands } from '@/features/gestures'
 import { stateAfter, useLiveFeed } from '@/features/live-feed'
 import { TimeScrubber, usePlayer } from '@/features/replay'
 import { type OperatorHands, OutpostTwin, toScene } from '@/features/twin'
+import { GlassWindows, useWindows } from '@/features/windows'
 import { captureMode } from '@/shared/config/capture-mode'
 import { feedEncrypted } from '@/shared/config/feed-url'
+import type { Alert } from '@/shared/contract'
 import { decimal } from '@/shared/lib/format'
+
+type Intrusion = Extract<Alert, { kind: 'intrusion' }>
 
 // The Digital Twin's screen: the 3D Outpost graded by the Status, its Enclosure showing the Status, reacting
 // to gas and sounding the Alarm, a haze around its gas pipe, its generator hall reacting to heat, on the whole
@@ -23,8 +28,10 @@ import { decimal } from '@/shared/lib/format'
 // With the hand control on, a flat hand over the sensor steers the camera and the hands float in hologram in a
 // corner of the view, green as a thumb is raised and red as one is turned down; two open hands moved apart or
 // together zoom, a fist held to one side winds a replay.
-// With `?capture` it is the Twin alone, on the same feed: no top bar, no sidebar, no caption, no scrubber, the whole stage
-// held in frame, to be filmed in a vertical window for the teaser.
+// Glass windows float beside the Outpost, opened and closed from a bar at the foot of the stage: the camera's
+// shows its annotated stream, as the Operator's screen does, and says in a replay that no picture is replayed.
+// With `?capture` it is the Twin alone, on the same feed: no top bar, no sidebar, no caption, no scrubber, no window,
+// the whole stage held in frame, to be filmed in a vertical window for the teaser.
 export function TwinRoute() {
   const capture = captureMode(useLocation())
   const connection = useLiveFeed((state) => state.connection)
@@ -34,6 +41,7 @@ export function TwinRoute() {
   const activeAlerts = useLiveFeed((state) => state.activeAlerts)
   const history = useLiveFeed((state) => state.history)
   const player = usePlayer()
+  const [windows, sendToWindows] = useWindows()
   const live = useLiveHands()
   const operator = useMemo<OperatorHands | undefined>(
     () =>
@@ -66,6 +74,10 @@ export function TwinRoute() {
   const encrypted = !player.replay && feedEncrypted(window.location)
   const scene = useMemo(() => toScene(shown, { encrypted }), [shown, encrypted])
   const readings = shown.latestTelemetry?.readings
+  const intrusion = useMemo(
+    () => shown.activeAlerts.find((alert): alert is Intrusion => alert.kind === 'intrusion') ?? null,
+    [shown.activeAlerts],
+  )
 
   return (
     <section className="stage" data-capture={capture || undefined} data-replay={player.replay ? true : undefined}>
@@ -81,6 +93,11 @@ export function TwinRoute() {
             </p>
           </div>
           <TimeScrubber history={history} player={player} />
+          <GlassWindows
+            windows={windows}
+            send={sendToWindows}
+            content={{ camera: <CameraView intrusion={intrusion} replayed={player.replay !== null} /> }}
+          />
         </>
       )}
     </section>

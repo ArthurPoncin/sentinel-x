@@ -84,7 +84,13 @@ src/
 │   ├── telemetry/           # #21 #11 — ReadingTiles, Gas / Climate / Sound charts, toSeries()
 │   ├── alerts/              # #11 — ActiveAlerts, AlertLog (+ filters: filterLog()), AlertToasts
 │   ├── incidents/           # ThreatOverview, IncidentTable, useIncidents() on GET /api/v1/incidents
-│   ├── camera/              # #14 — CameraPanel on /camera, intruder marker from x_norm
+│   ├── camera/              # #14 — CameraPanel on /camera, intruder marker from x_norm · #168 — CameraView: the same
+│   │                        # picture with no card around it, for a glass window
+│   ├── windows/             # #168 — the glass windows of the Twin's screen
+│   │   ├── components/      # GlassWindows: the bar and the open windows, over the scene
+│   │   ├── hooks/           # useWindows(): the open windows and where to send events
+│   │   ├── utils/           # windowsAfter(windows, event) · WINDOWS, SLOTS · isOpen(windows, id)
+│   │   └── index.ts
 │   ├── actuators/           # #14 — ActuatorPanel, POST /api/v1/commands
 │   ├── replay/              # #15 — the time-scrubber and scenario mode
 │   │   ├── api/             # fetchIncidents(), fetchIncidentReplay(id): the Command Post's recorded Incidents
@@ -510,6 +516,28 @@ const shown = player.frames ? stateAfter(player.frames) : liveState   // replaye
 - **Scenario mode** — **Play the scenario** plays `scenario(now)`: the reference scenario, scripted (60 s: 5 s of calm, the 50 s Incident, 5 s of calm), one telemetry snapshot a second with the gas rising to 680 and the PIR on while someone is there. It plays the same every time without the network, and is labelled REPLAY like any other.
 - **Not in capture mode** — `/twin?capture` shows neither the label nor the scrubber.
 - **Not yet** — the last N minutes of history (`GET /api/v1/history`) as one free timeline, rather than Incident by Incident.
+
+## Glass windows — `features/windows`
+
+On the Twin's screen, windows of glass float beside the Outpost. The first one (#168) is the camera's: its annotated stream, as the Operator's screen shows it. A bar at the foot of the stage, on the right, opens and closes it.
+
+```tsx
+import { CameraView } from '@/features/camera'
+import { GlassWindows, useWindows } from '@/features/windows'
+
+const [windows, send] = useWindows()
+<GlassWindows windows={windows} send={send} content={{ camera: <CameraView intrusion={intrusion} replayed={replaying} /> }} />
+```
+
+- **HTML, not 3D.** The windows are elements laid over the canvas and tilted in perspective by CSS (`.glass-windows`, `.glass-window` in `app/styles.css`). Nothing is added to the scene, and they reuse the components there are: the route hands each window its content.
+- **The state** — `windowsAfter(windows, event)` (`utils/windows.ts`), pure and tested. An open window is `{ id, by, since, slot }`: which, opened by whom, since when, in which slot. The events are `open` (with who asks and the instant) and `close`. Opening a window already open gives back the same windows: no second one, and the first keeps its slot. The mouse and the keyboard send these events today; whatever opens or closes a window later sends the same.
+- **The slots** — `SLOTS`, fixed: `left` then `right`, in the upper corners of the stage, under the LIVE label and under the scrubber. A window takes the first free one. At 1366 × 768 with the sidebar open, the camera's window takes the first 311 px of a stage of 1126: the Outpost in the middle is not covered, nor the label, the scrubber, the caption or the bar.
+- **Mouse and keyboard** — the bar is a toolbar (« Fenêtres ») of toggle buttons (`aria-pressed`). A window is a named region (« Fenêtre Caméra ») with a close button; Tab goes from the bar into it, Escape closes it from inside, and the focus then goes back to its button in the bar. Only the windows take the pointer: beside them the scene still turns under a drag.
+- **Opening and closing** — 0.28 s to come forward out of the stage as it lights up, 0.2 s to go back. A closed window stays on screen, inert, for as long as its fade lasts. With `prefers-reduced-motion` both are immediate.
+- **In a replay** the window says « pas d'image rejouée »: the stream is not recorded, and the camera is not asked. Back to live, the stream is shown again.
+- **Capture mode** — no bar and no window with `?capture`.
+- **Cost** — the glass blurs the scene behind it (`backdrop-filter`), over a canvas redrawn on every frame. Measured on the Iris Xe at 1920 × 1080, production bundle, mock feed, the orbit turning, a still image standing for the stream: the window closed, open, and open on a tinted ground with no blur, in turn within one page, 5 s each. Frame rate uncapped, two series of six turns: 68.1, 82.7 and 70.0 images a second, then 54.7, 57.7 and 54.3. Capped by the screen, eight turns: 42.2, 41.9 and 42.6. The three states are within what two runs of the same state differ by; 11 to 21 other Chromiums shared the GPU, hence the low figures. The blur costs nothing that shows there. That the 60 hold on the demo laptop is still to check on it: should they not, remove `backdrop-filter` and darken the ground of `.glass-window`.
+- **Not yet** — the other windows, the limit on how many are open, the ones an Alert opens, the voice and the hand.
 
 ## Hand control — `features/gestures`
 
