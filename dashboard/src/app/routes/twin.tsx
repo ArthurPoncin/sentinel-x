@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import { useLocation } from 'react-router'
-import { ActiveAlertList } from '@/features/alerts'
+import { ActiveAlertList, AttackList } from '@/features/alerts'
 import { CameraView } from '@/features/camera'
 import { useHandWind, useLiveHands } from '@/features/gestures'
 import { stateAfter, useLiveFeed } from '@/features/live-feed'
@@ -33,12 +33,14 @@ type Intrusion = Extract<Alert, { kind: 'intrusion' }>
 // together zoom, a fist held to one side winds a replay.
 // Glass windows float beside the Outpost, opened and closed from a bar at the foot of the stage, in slots of
 // their own on either side of it, four at most: the camera's annotated stream, the gas curve, the temperature
-// curve, the active Alerts from the most urgent, and the Incidents, where choosing one replays it. They read
-// what the Twin shows, the live feed or the replayed instant; the camera's says in a replay that no picture is
-// replayed.
+// curve, the active Alerts from the most urgent, the Incidents, where choosing one replays it, and the attacks
+// going on in figures: the entry point attacked, where it comes from, the attempts refused, since when. They
+// read what the Twin shows, the live feed or the replayed instant; the camera's says in a replay that no
+// picture is replayed.
 // The window an Alert concerns opens by itself as it is raised, the camera's for an intrusion, the gas curve for
-// a leak, the temperature curve for an overheating or a predicted drift, and closes a few seconds after it has
-// cleared; one the Operator opened or asked for closes only at the Operator's word.
+// a leak, the temperature curve for an overheating or a predicted drift, the security one for an attack, and
+// closes a few seconds after it has cleared; one the Operator opened or asked for closes only at the Operator's
+// word.
 // A hand that aims lights the window under its sight, and its shot closes it: the window scatters in light, and
 // whoever stands behind it is not hit.
 // With `?capture` it is the Twin alone, on the same feed: no top bar, no sidebar, no caption, no scrubber, no window,
@@ -127,6 +129,13 @@ export function TwinRoute() {
               temperature: <TemperatureCurve series={series} />,
               alerts: <ActiveAlertList alerts={shown.activeAlerts} wrap />,
               incidents: <IncidentList incidents={incidents} />,
+              security: (
+                <AttackList
+                  alerts={shown.activeAlerts}
+                  frames={player.frames ?? history}
+                  at={player.replay ? player.at : undefined}
+                />
+              ),
             }}
           />
         </>

@@ -13,6 +13,7 @@ export const WINDOWS = {
   temperature: { name: 'Température' },
   alerts: { name: 'Alertes' },
   incidents: { name: 'Incidents' },
+  security: { name: 'Sécurité' },
 } as const
 
 export type WindowId = keyof typeof WINDOWS
@@ -27,6 +28,7 @@ export const WINDOW_OF: Partial<Record<AlertKind, WindowId>> = {
   gas: 'gas',
   thermal: 'temperature',
   predictive: 'temperature',
+  cyber: 'security',
 }
 
 // How long a window an Alert opened stays once the Alert has cleared, in milliseconds.

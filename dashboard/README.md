@@ -84,11 +84,12 @@ src/
 │   ├── telemetry/           # #21 #11 — ReadingTiles, Gas / Climate / Sound charts, toSeries() · #169 — GasCurve,
 │   │                        # TemperatureCurve: a curve with no card around it, for a glass window
 │   ├── alerts/              # #11 — ActiveAlerts, AlertLog (+ filters: filterLog()), AlertToasts · #169 — ActiveAlertList:
-│   │                        # the active Alerts with no card around them
+│   │                        # the active Alerts with no card around them · #171 — AttackList: the attacks going on
+│   │                        # in figures, from attacks(active, frames)
 │   ├── incidents/           # ThreatOverview, IncidentTable, useIncidents() on GET /api/v1/incidents
 │   ├── camera/              # #14 — CameraPanel on /camera, intruder marker from x_norm · #168 — CameraView: the same
 │   │                        # picture with no card around it, for a glass window
-│   ├── windows/             # #168, #169, #170, #173 — the glass windows of the Twin's screen
+│   ├── windows/             # #168, #169, #170, #171, #173 — the glass windows of the Twin's screen
 │   │   ├── components/      # GlassWindows: the bar and the open windows, over the scene
 │   │   ├── hooks/           # useWindows(alerts, at): the open windows and where to send events; the Alerts open and close theirs
 │   │   │                    # useAimedWindow(send) (#173): the window under a hand's sight, and what the Twin's sight asks of them
@@ -565,9 +566,10 @@ On the Twin's screen, windows of glass float beside the Outpost. A bar at the fo
 | `temperature` | Température | The temperature curve, live (#169) |
 | `alerts` | Alertes | The active Alerts, the most urgent first, or « Rien à signaler. » (#169) |
 | `incidents` | Incidents | The recorded Incidents, newest first; pressing one replays it on the Twin (#169) |
+| `security` | Sécurité | The attacks going on, each in figures, or « Aucune attaque en cours. » (#171) |
 
 ```tsx
-import { ActiveAlertList } from '@/features/alerts'
+import { ActiveAlertList, AttackList } from '@/features/alerts'
 import { CameraView } from '@/features/camera'
 import { IncidentList } from '@/features/replay'
 import { GasCurve, TemperatureCurve, toSeries } from '@/features/telemetry'
@@ -585,6 +587,7 @@ const series = toSeries(player.frames ?? history)   // what the Twin shows: live
     temperature: <TemperatureCurve series={series} />,
     alerts: <ActiveAlertList alerts={shown.activeAlerts} wrap />,
     incidents: <IncidentList incidents={incidents} />,
+    security: <AttackList alerts={shown.activeAlerts} frames={player.frames ?? history} at={replaying ? player.at : undefined} />,
   }}
 />
 ```
@@ -598,19 +601,21 @@ const series = toSeries(player.frames ?? history)   // what the Twin shows: live
   | `intrusion` | `camera` |
   | `gas` | `gas` |
   | `thermal`, `predictive` | `temperature` |
-  | `presence`, `noise`, `cyber` | none |
+  | `cyber` | `security` (#171) |
+  | `presence`, `noise` | none |
 
   The window opens as the Alert is raised, `by: 'alert'`, through the same limit as any other: with four open, the one open for the longest gives way. It closes `CLOSE_AFTER_MS` (5 s) after no Alert concerns it any more (`until` is that instant), and stays if one does again meanwhile. An Alert opens its window as it is raised, not for as long as it lasts: one the Operator closed, or that gave way, stays closed while the Alert goes on, raised again or not, and opens again for the next one. A window the Operator opened is left alone when its Alert clears. An `open` by the Operator on a window an Alert opened makes it the Operator's: it then closes only at the Operator's word. The bar's button closes an open window, whoever opened it, so that `open` comes from the voice once it is there. `useWindows(alerts, at)` sends `alerts` when the active Alerts change; live, a timer sends it again at the instant a window is due to close; in a replay, each replayed second does, so the windows open and close at the replayed instants. Wound back, or a replay started, a window whose Alert is not active at that instant closes within the delay.
 - **The slots** — `SLOTS`, fixed, two to a side, taken a side in turn and the upper ones first: `left-top`, `right-top`, `left-bottom`, `right-bottom` (`SLOT_PLACE` says where each is). Each side is a column (`.glass-column`) against its edge of the stage, under the LIVE label on the left and under the scrubber on the right, down to the caption and the bar: the upper window hangs from its top, the lower one stands on its foot, so two open windows never cover each other. Where the two are taller than the column, what they show gives way: a curve gets shorter (down to 96 px), a list scrolls inside its window; the camera's picture keeps its shape.
 - **At the demo laptop's size** — checked in a browser at 1366 × 768 with the sidebar open, on the mock feed, live and in a replay: the stage is 1126 × 719, each column takes 291 px of it (260 to 551 and 1059 to 1350), and with four windows open none overlaps another, nor the label, the scrubber, the caption or the bar. The Outpost in the middle is not covered.
 - **What they read** — what the Twin shows: the live feed, or the replayed instant during a replay. The curves are then those of the replay up to that instant, and the Alerts those active at it. The Incidents are the time-scrubber's own list (`useIncidentsToReplay`, called once by the route): the Command Post's records, or those this window saw when it cannot be reached.
+- **The security window** — beside the shield, its figures (`AttackList`, on `attacks(active, frames)` in `features/alerts/utils/attacks.ts`, pure and tested). One entry for each `cyber` Alert active, in the order they began: « Attaque sur le login », then « Origine » with the address when the Command Post knows it, « Tentatives refusées », which follows the Alert as it is raised again, and « Depuis » with the hour it began and how long it has lasted. An Alert raised again carries the instant of its last attempt, so the start is read from the frames: the first raise under its `alert_id`; once the feed's last 1000 frames no longer hold it, the Alert's own instant stands for it. Live, the duration is counted to the present, every second; in a replay, to the replayed instant, on the replay's frames. Checked in a browser at 1366 × 768 on a scripted feed: none, one attack, two at once, both cleared, then the Incident replayed; the bar's six buttons take 539 px and stay clear of the caption.
 - **Mouse and keyboard** — the bar is a toolbar (« Fenêtres ») of toggle buttons (`aria-pressed`). A window is a named region (« Fenêtre Caméra », « Fenêtre Gaz »…) with a close button; Tab goes from the bar into it, Escape closes it from inside, and the focus then goes back to its button in the bar. Only the windows take the pointer: beside them the scene still turns under a drag.
 - **Opening and closing** — 0.28 s to come forward out of the stage as it lights up, 0.2 s to go back. A closed window stays on screen, inert, for as long as its fade lasts. With `prefers-reduced-motion` both are immediate.
 - **In a replay** the camera's window says « pas d'image rejouée »: the stream is not recorded, and the camera is not asked. Back to live, the stream is shown again.
 - **Capture mode** — no bar and no window with `?capture`.
 - **Cost** — the glass blurs the scene behind it (`backdrop-filter`), over a canvas redrawn on every frame. Measured on the Iris Xe at 1920 × 1080, production bundle, mock feed, the orbit turning, a still image standing for the stream: the window closed, open, and open on a tinted ground with no blur, in turn within one page, 5 s each. Frame rate uncapped, two series of six turns: 68.1, 82.7 and 70.0 images a second, then 54.7, 57.7 and 54.3. Capped by the screen, eight turns: 42.2, 41.9 and 42.6. The three states are within what two runs of the same state differ by; 11 to 21 other Chromiums shared the GPU, hence the low figures. The blur costs nothing that shows there. That the 60 hold on the demo laptop is still to check on it: should they not, remove `backdrop-filter` and darken the ground of `.glass-window`. Not measured again with four windows open (#169).
 - **By hand (#173)** — no new gesture: the sight of a hand that aims ([hand control](#hand-control--featuresgestures)) designates the window it is over, and its shot closes it. The sight and the windows are on the same screen, so the test is on rectangles: `useAimedWindow(send)` measures the open windows as they stand (`getBoundingClientRect`, tilt included) and `windowAt(rects, x, y)`, pure and tested, gives the one that holds the sight, the one whose middle is nearest where two rectangles meet: never two at once. The route hands the Twin what the hook gives as `panes`; `Gunsight` turns the sight into pixels of the screen (`onScreen`, `utils/panes.ts`) and asks on every frame. The designated window lights up (`data-aimed`). A shot on it sends `close` with `by: 'shot'`: the state keeps it in `shot` until it opens again, the window flares and blurs out (`data-leaving="shot"`, 0.4 s) while the scene's motes, the same as for a figurine that is hit (`burstMote`), fly off from all over its rectangle (`paneSpot`). The shot stops there: a figurine behind the window is not hit, and the sight reads no card through a window. Closed as by the Operator, a window an Alert had opened does not open again while that Alert goes on. Checked in a browser at 1366 × 768 with a scripted hand on the bridge's socket (the dashboard's own `modelHand('point')` and `modelHand('fire')`): the bridge's simulated hand does not aim. Not checked with the sensor.
-- **Not yet** — the security window (and with it the one a `cyber` Alert opens) and the voice.
+- **Not yet** — the voice.
 
 ## Hand control — `features/gestures`
 
