@@ -79,7 +79,7 @@ export const LESSONS: readonly Lesson[] = [
     id: 'aim',
     title: 'Index pointé',
     how: "Paume vers le bas, index tendu vers l'écran. Le bout du doigt déplace un viseur, comme une souris en l'air.",
-    does: 'Sur le Twin, visez la cuve de gaz, le hall, le boîtier ou un intrus : une fiche dit ce que le système en sait.',
+    does: "Sur le Twin, visez la cuve de gaz, le hall, le boîtier ou un intrus : une fiche dit ce que le système en sait. Elle ferme aussi les fenêtres : visez-en une, elle s'illumine, puis tirez.",
     demo: DEMOS.aim,
     from: ABOVE,
   },
@@ -93,7 +93,7 @@ export const LESSONS: readonly Lesson[] = [
     secret: {
       title: 'Pistolet',
       how: "Index pointé, pouce écarté : le chien est armé. Rabattez le pouce le long de l'index.",
-      does: "Tire où est le viseur. Sur le Twin, l'intrus touché se désintègre, puis revient.",
+      does: "Tire où est le viseur. Sur le Twin, l'intrus touché se désintègre, puis revient, et la fenêtre visée se ferme.",
       demo: DEMOS.pistol,
     },
   },
