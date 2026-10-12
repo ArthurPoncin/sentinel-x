@@ -36,6 +36,6 @@ shot() {  # file part camera png
 shot command-post assembly "72,62,92,62,0,32,720" poste-de-commande
 shot command-post assembly "72,62,92,62,0,212,720" poste-de-commande-arriere
 shot command-post inside "72,62,38,52,0,212,520" poste-de-commande-interieur
-shot sentinel assembly "73,75,25,58,0,22,470" sentinel
-shot sentinel inside "73,80,10,18,0,0,420" sentinel-interieur
+shot sentinel assembly "63,66,25,58,0,22,420" sentinel
+shot sentinel inside "63,68,10,18,0,0,360" sentinel-interieur
 shot leap-stand assembly "0,0,6,55,0,25,220" support-leap

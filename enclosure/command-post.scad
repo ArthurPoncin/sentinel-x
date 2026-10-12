@@ -9,9 +9,10 @@ include <common.scad>
 
 part = "assembly";
 
-/* [Screen: Joy-IT RB-LCD-5, 5" HDMI 800x480 (Waveshare's drawing), seen from the front, its HDMI socket on top] */
+/* [Screen: 5" HDMI 800x480, the Waveshare 5inch HDMI LCD Rev2.1 board (SunFounder's, Joy-IT's), after Waveshare's 3D model; seen from the front, its HDMI socket on top] */
 scr = [121.1, 78];         // circuit board, width x height
-scr_holes = [115.1, 83.9]; // its four holes, on ears past the top and bottom edges: M2.5 screws into the bezel's posts
+scr_holes = [115.1, 83.9]; // its four holes, on rounded ears past the top and bottom edges: M2.5 screws into the bezel's posts
+scr_ear = 4.2;             // from a hole's centre to the rounded end of its ear
 scr_view = [110.7, 67.4];  // visible area, cut out of the bezel
 scr_view_off = [0, 2.2];   // centre of the visible area from the board's centre: right, up
 scr_glass = 6.2;           // from the glass's face to the board's: the posts' length
@@ -31,8 +32,8 @@ pi_so = 6;     // standoffs
 pcb_t = 1.5;
 y_pi = 38;     // the Pi's GPIO edge from the front: the screen's room is in front of it
 
-// The board's centre's height: its posts stand clear of the base plate, the HDMI adapter under the roof.
-scr_z = scr_holes[1] / 2 + 3.4;
+// The board's centre's height: its lower ears end 1 mm over the base plate, the HDMI adapter goes under the roof.
+scr_z = scr_holes[1] / 2 + scr_ear + 1;
 W = max(143, scr[0] + 24);                     // interior width
 H = max(88, scr_z + scr[1] / 2 + hdmi_room); // interior height, base plate to roof
 D = y_pi + pi[1] + 44;      // interior depth: behind the Pi, the plugs of its USB-C and micro-HDMI, and the ULN2003
@@ -64,8 +65,8 @@ sup_z = tower_h + 1;       // the support's foot, from the tower's: the shaft go
 motor_c = [0, 8];
 motor_tabs = [[-17.5, 8], [17.5, 8]];
 
-fan = [W - 26, D - 26];    // 30 mm fan, optional
 uln = [28, D - 22];        // ULN2003 board centre
+vent = pi_at([26, 30]);    // roof vent, over the Pi's processor and clear of the tower's foot
 uln_holes = [29.5, 27];
 corner = [[5, 24], [W - 5, 24], [5, D - 5], [W - 5, D - 5]];  // the base's screws, into the shell
 feet = [[14, 12], [W - 14, 12], [14, D - 14], [W - 14, D - 14]];
@@ -93,11 +94,6 @@ module shell() {
         translate([0, y[0], H - lip_in]) cube([W, y[1] - y[0], lip_in]);
       }
       for (c = corner) translate([c[0], c[1], 0]) cylinder(h = H, d = 8);
-      // the fan's frame: it presses against it, the air goes through the grille
-      translate([fan[0], fan[1], H - 3]) linear_extrude(3 + eps) difference() {
-        crect([33, 33], 3);
-        circle(d = 28.5);
-      }
     }
     for (c = corner) translate([c[0], c[1], -eps]) cylinder(h = 12, d = 2.5, $fn = 24);
 
@@ -107,12 +103,11 @@ module shell() {
     for (a = tower_screws) translate([tower_at[0], tower_at[1], H - 1]) rotate(a) translate([r_screw, 0, 0])
       cylinder(h = roof + 2, d = 3.4, $fn = 24);
 
-    // fan grille and its four screws
-    translate([fan[0], fan[1], H - 1]) linear_extrude(roof + 2) intersection() {
+    // the warm air out, over the Pi's processor: it comes in under the Pi, through the base
+    translate([vent[0], vent[1], H - 1]) linear_extrude(roof + 2) intersection() {
       circle(d = 27);
       for (i = [-3 : 3]) translate([i * 4, 0]) square([2.2, 30], center = true);
     }
-    for (sx = [-1, 1], sy = [-1, 1]) translate([fan[0] + 12 * sx, fan[1] + 12 * sy, H - 3 - eps]) cylinder(h = 5, d = 2.5, $fn = 24);
 
     // air in, low on both sides, behind the Pi
     left_cut(102, 18, wall + 2) slot_row(7, 20, 3, 6);
@@ -196,8 +191,8 @@ module tower() {
       }
       // the screws' bosses, along the wall at the foot; their tops slope into the wall, to print upside down
       for (a = tower_screws) rotate(a) translate([r_screw, 0, 0]) hull() {
-        cylinder(h = 12, d = 7);
-        translate([2.5, 0, 19]) cylinder(h = eps, d = 1);
+        cylinder(h = 12, d = 6);
+        translate([1.5, 0, 19]) cylinder(h = eps, d = 1);
       }
     }
     for (a = tower_screws) rotate(a) translate([r_screw, 0, -eps]) cylinder(h = 10, d = 2.5, $fn = 24);
@@ -242,14 +237,18 @@ module ghosts(on_top = true) {
     for (y = [9, 27]) translate([x_sd - pi[0] - 2.5, y_pi + pi[1] - y - 7.5, pi_so + pcb_t]) cube([17, 15, 16]);
   }
   color("Black") translate([x_sd - 57.9, y_pi + 1.5, pi_so + pcb_t]) cube([50.8, 5, 8.5]);
-  // the screen: glass and panel, the board with its ears, the GPIO header and the HDMI socket on its back
+  // the screen: the touch glass, the panel, the board with its rounded ears, the GPIO header and the HDMI socket on its back
   translate([W / 2, y_slot + 0.2 + bz_t, scr_z]) {
-    color([0.05, 0.05, 0.08]) translate([-60.35, 0, -38.1]) cube([120.7, 4.2, 76]);
+    color([0.3, 0.32, 0.35]) translate([-0.2 - 58.85, 0, 0.4 - 37]) cube([117.7, 1.1, 74]);
+    color([0.05, 0.05, 0.08]) translate([-60.35, 1.1, -37.9]) cube([120.7, 3.1, 75.8]);
     color("DarkGreen") translate([-scr[0] / 2, scr_glass, -scr[1] / 2]) cube([scr[0], 1.6, scr[1]]);
-    color("DarkGreen") for (sx = [-1, 1], sz = [-1, 1]) translate([sx * scr_holes[0] / 2, scr_glass + 0.8, sz * (scr[1] + scr_holes[1] + 2.4) / 4])
-      difference() {
-        cube([6, 1.6, (scr_holes[1] + 2.4 - scr[1]) / 2], center = true);
-        cube([3, 4, 3], center = true);
+    color("DarkGreen") for (sx = [-1, 1], sz = [-1, 1]) translate([sx * scr_holes[0] / 2, scr_glass + 1.6, sz * scr_holes[1] / 2])
+      rotate([90, 0, 0]) linear_extrude(1.6) mirror([0, sz < 0 ? 1 : 0]) difference() {
+        hull() {
+          translate([-3, -(scr_holes[1] - scr[1]) / 2]) square([6, eps]);
+          translate([0, scr_ear - 3]) circle(r = 3);
+        }
+        circle(d = 3);
       }
     color("Black") translate([-15.6, scr_glass + 1.6, -16.25]) cube([33, 13.5, 5]);
     color("Silver") translate([scr_hdmi[0] - scr_hdmi[1] / 2, scr_glass + 1.6, scr[1] / 2 - 11.5]) cube([scr_hdmi[1], 6.2, 12.1]);
