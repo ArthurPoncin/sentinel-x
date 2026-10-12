@@ -21,6 +21,7 @@ import {
   type AlertKind,
   type BrokerState,
   CommandRequestSchema,
+  type CyberVector,
   type Health,
   type History,
   HistoryQuerySchema,
@@ -136,6 +137,10 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
   // The API's own Alerts: it tells the watch what it refuses, and emits what the watch makes of it.
   const cyber = createCyberWatch(config.now)
   const emit = (raised: ReturnType<typeof cyber.settle>) => raised.forEach(alerts.accept)
+  const addressOf = (request: FastifyRequest) => clientAddress.of(request.ip, request.headers['x-forwarded-for'])
+  // Tells the watch of a request the API is refusing on `vector`.
+  const watch = async (vector: CyberVector, request: FastifyRequest) =>
+    emit(cyber.refused(vector, await addressOf(request)))
 
   const sessions = createSessions()
   const hasSession = (request: FastifyRequest) =>
@@ -147,6 +152,7 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
     if (route === '/ws') {
       const host = request.headers['x-forwarded-host'] ?? request.headers.host
       if (!isAllowedOrigin(request.headers.origin, Array.isArray(host) ? host[0] : host, config.corsOrigins)) {
+        await watch('feed-origin', request)
         return refuse(reply, 403, 'Forbidden', 'This origin may not open the feed')
       }
     }
@@ -155,7 +161,7 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
   })
 
   app.post('/api/v1/auth/login', { bodyLimit: LOGIN_BODY_LIMIT }, async (request, reply) => {
-    const address = await clientAddress.of(request.ip, request.headers['x-forwarded-for'])
+    const address = await addressOf(request)
     if (!withinLimit(limits.login, address, reply)) {
       emit(cyber.refused('login', address))
       return reply
@@ -198,6 +204,7 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
     onRequest: async (request: FastifyRequest, reply: FastifyReply) => {
       request.service = serviceOf(request.headers.authorization, config.serviceTokens)
       if (!request.service) {
+        await watch('service-token', request)
         reply.header('www-authenticate', 'Bearer')
         return refuse(reply, 401, 'Unauthorized', 'A service token is required')
       }
@@ -205,7 +212,7 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
     },
   }
 
-  app.post('/api/v1/alerts', alertRoute, (request, reply) => {
+  app.post('/api/v1/alerts', alertRoute, async (request, reply) => {
     // The token names the source, whatever the body says.
     const service = request.service as Service
     const parsed = normalizeAlert(request.body, { source: service })
@@ -213,6 +220,7 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
 
     const alert = parsed.data
     if (KIND_OF_SERVICE[service] !== alert.kind) {
+      await watch('service-token', request)
       return refuse(reply, 403, 'Forbidden', `${service} may not post "${alert.kind}" Alerts here`)
     }
 

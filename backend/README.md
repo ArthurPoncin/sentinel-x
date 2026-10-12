@@ -8,7 +8,7 @@ The nervous system of the Command Post: ingests from two paths, persists history
 - **Two ingress paths, one pipeline:**
   - Subscribe to **Mosquitto** (`sentinel/<id>/telemetry`, `sentinel/<id>/alert`) over MQTTS, as the `api` MQTT user.
   - Expose **`POST /api/v1/alerts`** (mandatory entry point) — for the `vision` and `predictive` services, on the internal Docker network only.
-- **Raise its own Alerts:** watch what it refuses on the login and raise a `cyber` Alert on a brute force — see [Attack watch](#attack-watch).
+- **Raise its own Alerts:** watch what it refuses on the login, on the Alerts entry and at the opening of the feed, and raise a `cyber` Alert on an attack — see [Attack watch](#attack-watch).
 - Normalize both into the unified Alert pipeline → persist to the DB (telemetry + Alert history feeds the time-scrubber and the predictive model).
 - **Recompute `Status`** (`nominal`/`elevated`/`critical`) after every Alert.
 - **WebSocket** feed → live push to the dashboard (`telemetry`, `alert`, `status` frames).
@@ -20,7 +20,7 @@ Rules in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#security-model-bind
 - **Operator session** (`POST /api/v1/auth/login`, password hash in `.env`, cookie `HttpOnly; Secure; SameSite=Strict`) required on every other endpoint, on the WebSocket upgrade (+ `Origin` check) and behind `GET /api/v1/auth/check` (forward-auth for the camera feed).
 - **Never trust the payload:** `sentinel` comes from the MQTT topic, `source` from the channel; strict schema validation, 16 KB body limit.
 - **Rate limits:** login 5/min per client address, commands 2/s, alerts 20/s per token.
-- **Attack watch:** refusals on the login that add up to a brute force raise a `cyber` Alert, which no Sentinel and no service can post.
+- **Attack watch:** refusals on the login, on the service tokens or on the feed's origin that add up to an attack raise a `cyber` Alert, which no Sentinel and no service can post.
 
 ## Contract
 Schemas, topics, endpoints, Status derivation: [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#json-schemas-the-contract--lock-monday-change-only-by-team-agreement). Lock Monday with firmware (Sentinel) and AI.
@@ -111,7 +111,15 @@ curl -i -X POST https://192.168.X.1/api/v1/auth/login -H 'content-type: applicat
 - `OPERATOR_AUTH=off` lets anyone in without logging in — every endpoint and `/ws` answer, `auth/check` says `204`. For development on a laptop only.
 
 ## Attack watch
-The API is a producer of Alerts too. It counts the requests it refuses on the login, a wrong password (`401`) or a login past the limit (`429`), and makes a `cyber` Alert of them ([`src/cyber-watch.ts`](src/cyber-watch.ts), no dependency on the server, clock injected like the rate limit's).
+The API is a producer of Alerts too. It counts the requests it refuses on three entry points, the vectors, and makes a `cyber` Alert of them ([`src/cyber-watch.ts`](src/cyber-watch.ts), no dependency on the server, clock injected like the rate limit's).
+
+| Vector | Refusals counted |
+|---|---|
+| `login` | A wrong password (`401`) or a login past the limit (`429`) |
+| `service-token` | On `POST /api/v1/alerts`: no token or an unknown one (`401`), a valid token posting a `kind` it does not own (`403`) |
+| `feed-origin` | `/ws` opened from an origin that may not (`403`) |
+
+Each vector is counted apart, with its own Alert and `alert_id`. A request without a session on a protected route (`401`) is counted for none: a tab whose session expired sends them.
 
 | Constant | Value | What it sets |
 |---|---|---|
