@@ -1,19 +1,14 @@
-import { useMemo, useState } from 'react'
-import type { Frame, Incident } from '@/shared/contract'
-import { fetchIncidentReplay } from '../api/incidents-client'
+import type { IncidentsToReplay } from '../hooks/use-incidents-to-replay'
 import type { Player } from '../hooks/use-player'
-import { useRecordedIncidents } from '../hooks/use-recorded-incidents'
-import { incidents } from '../utils/incidents'
 import { clockTime, describeIncident, minutes } from '../utils/labels'
-import { replayOf } from '../utils/replay'
 import { scenario } from '../utils/scenario'
 
 export interface TimeScrubberProps {
-  // The live feed's frames, oldest first: the Incidents this window saw, replayed when the Command Post cannot
-  // be reached.
-  history: readonly Frame[]
   // Plays the replays; whoever holds it rebuilds the Twin from `player.frames`.
   player: Player
+  // The Incidents there are to replay on it, from `useIncidentsToReplay`: whatever else lists them on the same
+  // screen is handed the same.
+  incidents: IncidentsToReplay
 }
 
 // The label over the Twin that tells live from replay: LIVE, or REPLAY with what is replayed and the time it
@@ -36,31 +31,8 @@ function ModeLabel({ player }: { player: Player }) {
 // The demo's insurance, over the Twin: pick a past Incident and replay it second by second, or play the scripted
 // scenario. The Incidents are the Command Post's recorded ones; if it cannot be reached, those of the feed this
 // window received, grouped by the same rule.
-export function TimeScrubber({ history, player }: TimeScrubberProps) {
-  const session = useMemo(() => incidents(history), [history])
-  // Asked again of the Command Post when an Incident opens or closes in the live feed.
-  const latest = session.at(-1)
-  const { recorded, refresh } = useRecordedIncidents(`${session.length}:${latest?.end ?? latest?.start}`)
-  const [error, setError] = useState<string | null>(null)
-  const fromCommandPost = recorded.state === 'loaded'
-  const listed = useMemo(
-    () => (recorded.state === 'loaded' ? recorded.incidents : session).toReversed(),
-    [recorded, session],
-  )
-
-  const open = async (incident: Incident) => {
-    setError(null)
-    if (!fromCommandPost) return player.load(replayOf(history, incident))
-    try {
-      const { incident: replayed, records } = await fetchIncidentReplay(incident.incident_id)
-      player.load(replayOf(records, replayed))
-    } catch (cause) {
-      // The network dropped since the list came: this window may have seen it too, opening on the same Alert.
-      const seen = session.find((known) => known.start === incident.start)
-      if (seen) return player.load(replayOf(history, seen))
-      setError(`Incident #${incident.incident_id} could not be loaded: ${String(cause)}`)
-    }
-  }
+export function TimeScrubber({ player, incidents }: TimeScrubberProps) {
+  const { listed, source, failed, refresh } = incidents
 
   return (
     <>
@@ -98,7 +70,7 @@ export function TimeScrubber({ history, player }: TimeScrubberProps) {
                 disabled={listed.length === 0}
                 onChange={(event) => {
                   const chosen = listed.find((incident) => incident.incident_id === Number(event.currentTarget.value))
-                  if (chosen) void open(chosen)
+                  if (chosen) void incidents.open(chosen)
                 }}
               >
                 <option value="" disabled>
@@ -118,15 +90,15 @@ export function TimeScrubber({ history, player }: TimeScrubberProps) {
               Play the scenario
             </button>
             <p className="scrubber-source">
-              {recorded.state === 'loading'
+              {source === 'asking'
                 ? 'Asking the Command Post…'
-                : fromCommandPost
+                : source === 'command-post'
                   ? 'Recorded by the Command Post'
                   : 'Command Post unreachable: Incidents seen by this window'}
             </p>
-            {error && (
+            {failed && (
               <p className="scrubber-error" role="alert">
-                {error}
+                Incident #{failed.incident.incident_id} could not be loaded: {failed.cause}
               </p>
             )}
           </>
