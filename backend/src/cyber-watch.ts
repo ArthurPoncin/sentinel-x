@@ -9,8 +9,9 @@ export const WINDOW_MS = 10_000
 export const QUIET_MS = 15_000
 
 export interface CyberWatch {
-  // Counts a request the API just refused on `vector`, and gives the Alerts to emit for it, in order.
-  refused(vector: CyberVector): Alert[]
+  // Counts a request the API just refused on `vector`, from `address` when it is known, and gives
+  // the Alerts to emit for it, in order.
+  refused(vector: CyberVector, address?: string): Alert[]
   // The Alerts to clear by now: those of the attacks that went quiet. To call as time goes by.
   settle(): Alert[]
 }
@@ -20,6 +21,8 @@ interface Attack {
   attempts: number
   // When its last refusal came.
   last: number
+  // Where its latest refusal with a known address came from.
+  address?: string
 }
 
 // Watches what the API refuses, one vector apart from the other. Refusals reaching THRESHOLD within a
@@ -39,7 +42,7 @@ export function createCyberWatch(now: () => number = Date.now): CyberWatch {
     severity: 'warning',
     state,
     value: attack.attempts,
-    detail: { vector, attempts: attack.attempts },
+    detail: { vector, attempts: attack.attempts, ...(attack.address !== undefined && { address: attack.address }) },
     ts: new Date(at).toISOString(),
   })
 
@@ -55,7 +58,7 @@ export function createCyberWatch(now: () => number = Date.now): CyberWatch {
   }
 
   return {
-    refused(vector) {
+    refused(vector, address) {
       // An attack that went quiet is over, even if nobody asked since: this refusal starts afresh.
       const alerts = settle()
       const at = now()
@@ -64,13 +67,14 @@ export function createCyberWatch(now: () => number = Date.now): CyberWatch {
       if (attack) {
         attack.attempts++
         attack.last = at
+        attack.address = address ?? attack.address
       } else {
         const window = [...(recent.get(vector) ?? []).filter((earlier) => at - earlier < WINDOW_MS), at]
         recent.set(vector, window)
         if (window.length < THRESHOLD) return alerts
 
         recent.delete(vector)
-        attack = { alert_id: `cyber-${vector}-${randomUUID().slice(0, 8)}`, attempts: window.length, last: at }
+        attack = { alert_id: `cyber-${vector}-${randomUUID().slice(0, 8)}`, attempts: window.length, last: at, address }
         attacks.set(vector, attack)
       }
       return [...alerts, alertOf(vector, attack, 'raised', at)]

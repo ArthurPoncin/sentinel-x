@@ -119,3 +119,39 @@ describe('cyber watch', () => {
     expect(alerts).toMatchObject([{ alert_id: raised?.alert_id, state: 'cleared' }])
   })
 })
+
+describe('cyber watch, where the attempts come from', () => {
+  const clock = { now: Date.parse('2026-10-05T14:23:00Z') }
+  // The Alerts of `count` refusals on the login, all from `address`.
+  const refuse = (watch: ReturnType<typeof createCyberWatch>, count: number, address?: string) =>
+    Array.from({ length: count }, () => watch.refused('login', address)).flat()
+
+  it('gives the address in the detail of the Alert, raised and cleared', () => {
+    const watch = createCyberWatch(() => clock.now)
+
+    const [raised] = refuse(watch, THRESHOLD, '192.168.4.66')
+    clock.now += QUIET_MS
+    const [cleared] = watch.settle()
+
+    expect(raised?.detail).toEqual({ vector: 'login', attempts: THRESHOLD, address: '192.168.4.66' })
+    expect(cleared?.detail).toEqual({ vector: 'login', attempts: THRESHOLD, address: '192.168.4.66' })
+    expect(AlertSchema.safeParse(raised).success).toBe(true)
+  })
+
+  it('leaves the address out when it is not known', () => {
+    const watch = createCyberWatch(() => clock.now)
+
+    const [raised] = refuse(watch, THRESHOLD)
+
+    expect(raised?.detail).toEqual({ vector: 'login', attempts: THRESHOLD })
+  })
+
+  it('gives the address of the latest refusal when the attempts come from several', () => {
+    const watch = createCyberWatch(() => clock.now)
+    refuse(watch, THRESHOLD, '192.168.4.66')
+
+    const [again] = refuse(watch, 1, '192.168.4.67')
+
+    expect(again?.detail).toMatchObject({ attempts: THRESHOLD + 1, address: '192.168.4.67' })
+  })
+})

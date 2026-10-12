@@ -15,6 +15,8 @@ beforeAll(async () => {
 })
 
 const START = Date.parse('2026-10-05T14:23:00Z')
+// Where the tests reach the API from: no reverse proxy in front, the address of the connection.
+const HERE = '127.0.0.1'
 const DAY = { from: '2026-10-05T00:00:00Z', to: '2026-10-06T00:00:00Z' }
 
 const marker: Frame = {
@@ -96,7 +98,7 @@ describe('a brute force on the login', () => {
       severity: 'warning',
       state: 'raised',
       value: THRESHOLD,
-      detail: { vector: 'login', attempts: THRESHOLD },
+      detail: { vector: 'login', attempts: THRESHOLD, address: HERE },
       ts: new Date(START + 60_000).toISOString(),
     }
     await vi.waitFor(() => {
@@ -121,7 +123,7 @@ describe('a brute force on the login', () => {
     expect(alerts.map((alert) => alert.state)).toEqual(['raised', 'raised', 'raised'])
     expect(alerts.map((alert) => alert.value)).toEqual([THRESHOLD, THRESHOLD + 1, THRESHOLD + 2])
     expect(alerts.map((alert) => alert.detail)).toEqual(
-      [THRESHOLD, THRESHOLD + 1, THRESHOLD + 2].map((attempts) => ({ vector: 'login', attempts })),
+      [THRESHOLD, THRESHOLD + 1, THRESHOLD + 2].map((attempts) => ({ vector: 'login', attempts, address: HERE })),
     )
   })
 
@@ -138,7 +140,7 @@ describe('a brute force on the login', () => {
       ...raised,
       state: 'cleared',
       value: THRESHOLD + 1,
-      detail: { vector: 'login', attempts: THRESHOLD + 1 },
+      detail: { vector: 'login', attempts: THRESHOLD + 1, address: HERE },
       ts: new Date(clock.now).toISOString(),
     })
     // Never critical: a refused attack is not a compromised site.
@@ -212,5 +214,35 @@ describe('a brute force on the login', () => {
     hub.broadcast(marker)
 
     await vi.waitFor(() => expect(feed.frames).toMatchObject([{ type: 'status' }, marker]))
+  })
+})
+
+describe('where a brute force comes from', () => {
+  const guessFrom = (request: (path: string, init?: RequestInit) => Promise<Response>, forwardedFor: string) =>
+    request('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-forwarded-for': forwardedFor },
+      body: JSON.stringify({ password: 'a guess' }),
+    })
+
+  // The tests reach the API from 127.0.0.1: trusting it makes them the reverse proxy.
+  it('is in the detail of the Alert: the address the reverse proxy forwards', async () => {
+    const { feed, request } = await startOutpost({ trustedProxy: '127.0.0.1' })
+
+    for (let tried = 0; tried < THRESHOLD; tried++) await guessFrom(request, '192.168.4.66')
+
+    await expect.poll(() => alertsOf(feed).at(-1)?.detail).toEqual({
+      vector: 'login',
+      attempts: THRESHOLD,
+      address: '192.168.4.66',
+    })
+  })
+
+  it('is the address of the connection when the header comes from anyone else', async () => {
+    const { feed, request } = await startOutpost()
+
+    for (let tried = 0; tried < THRESHOLD; tried++) await guessFrom(request, '192.168.4.66')
+
+    await expect.poll(() => alertsOf(feed).at(-1)?.detail).toMatchObject({ address: HERE })
   })
 })

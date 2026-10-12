@@ -115,6 +115,12 @@ describe('contract', () => {
       expect(AlertSchema.parse(cyber)).toEqual(cyber)
     })
 
+    it.each(['192.168.4.66', 'fd00::66'])('accepts it with the address the attempts come from, %s', (address) => {
+      const from = { ...cyber, detail: { ...cyber.detail, address } }
+
+      expect(AlertSchema.parse(from)).toEqual(from)
+    })
+
     it.each(['login', 'service-token', 'feed-origin'])('accepts the %s vector', (vector) => {
       expect(AlertSchema.safeParse({ ...cyber, detail: { ...cyber.detail, vector } }).success).toBe(true)
     })
@@ -126,6 +132,7 @@ describe('contract', () => {
       ['no number of attempts', { attempts: undefined }],
       ['a number of attempts that is not a whole number', { attempts: 2.5 }],
       ['no attempt at all', { attempts: 0 }],
+      ['an address that is not one', { address: 'the attacker' }],
     ])('rejects it with %s', (_what, changes) => {
       expect(AlertSchema.safeParse({ ...cyber, detail: { ...cyber.detail, ...changes } }).success).toBe(false)
     })

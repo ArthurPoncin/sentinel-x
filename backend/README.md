@@ -19,7 +19,7 @@ Rules in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#security-model-bind
 - **Service tokens** on `POST /api/v1/alerts`: one per service, each restricted to its own `kind`; constant-time comparison.
 - **Operator session** (`POST /api/v1/auth/login`, password hash in `.env`, cookie `HttpOnly; Secure; SameSite=Strict`) required on every other endpoint, on the WebSocket upgrade (+ `Origin` check) and behind `GET /api/v1/auth/check` (forward-auth for the camera feed).
 - **Never trust the payload:** `sentinel` comes from the MQTT topic, `source` from the channel; strict schema validation, 16 KB body limit.
-- **Rate limits:** login 5/min per IP, commands 2/s, alerts 20/s per token.
+- **Rate limits:** login 5/min per client address, commands 2/s, alerts 20/s per token.
 - **Attack watch:** refusals on the login that add up to a brute force raise a `cyber` Alert, which no Sentinel and no service can post.
 
 ## Contract
@@ -50,6 +50,7 @@ All the configuration comes from environment variables. `npm run dev` and `npm s
 | `VISION_TOKEN` | — | Bearer token of the `vision` service on `POST /api/v1/alerts`, 32 characters or more. Unset: `vision` cannot post. Never committed |
 | `PREDICTIVE_TOKEN` | — | Same for the `predictive` service; must differ from `VISION_TOKEN` |
 | `OPERATOR_PASSWORD_HASH` | — | The Operator's password hash, from `npm run -s hash-password`. **Required** unless `OPERATOR_AUTH=off`. Never committed |
+| `TRUSTED_PROXY` | — | Host name or address of the reverse proxy in front of the API, the only one whose `X-Forwarded-For` is believed (`reverse-proxy` in Compose). Unset: no one's, the address of the connection is kept |
 | `OPERATOR_AUTH` | `on` | `off` lets anyone in without logging in: development only |
 | `HISTORY_FILE` | `data/history.sqlite` | SQLite file of the history, created with its directory if missing. `:memory:` keeps it in the process only |
 
@@ -106,7 +107,7 @@ curl -i -X POST https://192.168.X.1/api/v1/auth/login -H 'content-type: applicat
 - One Operator, one password, kept as an scrypt hash in `OPERATOR_PASSWORD_HASH`: the API never sees it in clear except at login. Without a hash, the API refuses to start.
 - The cookie, `sx_session`, is `HttpOnly; Secure; SameSite=Strict`, for 12 hours. Sessions live in the API: a restart logs the Operator out.
 - `/ws` also checks the `Origin` of the page opening it: the API's own origin as the browser reached it (`Host`, or `X-Forwarded-Host` from the reverse proxy) or one in `CORS_ORIGINS`; any other gets `403`, session or not. A client that is not a browser sends no `Origin` and only needs the session.
-- At most 5 logins a minute per address, right password or not: `429` with `Retry-After` past that. Behind the reverse proxy every browser comes from its address, so the limit is the Operator's as a whole.
+- At most 5 logins a minute per address, right password or not: `429` with `Retry-After` past that. Behind the reverse proxy, the address is the one it forwards (`X-Forwarded-For`), believed from `TRUSTED_PROXY` alone: each machine has its own limit, and one that used its own up does not lock the Operator out. Sent by anyone else, the header is ignored.
 - `OPERATOR_AUTH=off` lets anyone in without logging in — every endpoint and `/ws` answer, `auth/check` says `204`. For development on a laptop only.
 
 ## Attack watch
@@ -122,12 +123,13 @@ The API is a producer of Alerts too. It counts the requests it refuses on the lo
 {
   "alert_id": "cyber-login-9f2c41aa", "sentinel": "command-post", "source": "api",
   "kind": "cyber", "severity": "warning", "state": "raised", "value": 14,
-  "detail": { "vector": "login", "attempts": 14 },
+  "detail": { "vector": "login", "attempts": 14, "address": "192.168.4.66" },
   "ts": "2026-10-05T14:23:05Z"
 }
 ```
 
 - While the attack goes on, each further refusal raises the Alert again under the same `alert_id`, `value` and `detail.attempts` up to date. An attack that resumes after the clearing gets another `alert_id`.
+- `detail.address` is where the latest refusal came from, the real address behind the reverse proxy (`TRUSTED_PROXY`); it is left out when the API does not know it.
 - Always `warning`: the `Status` goes to `elevated`, never `critical`, and no command goes to the Sentinel.
 - It goes through the same pipeline as the others: recorded in the history, broadcast, `Status` recomputed, and an Incident opens and closes with it.
 - The watch lives in the process: a restart during an attack leaves its Alert raised in the history, as for any producer that stops before clearing.

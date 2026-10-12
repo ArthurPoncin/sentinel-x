@@ -60,6 +60,16 @@ describe('describeAlert', () => {
     expect(describeAlert(attack(6, 'feed-origin'))).toBe('6 tentatives refusées sur le flux en direct')
   })
 
+  it('says where the attempts come from when the Alert carries the address', () => {
+    const from = (attempts: number): Alert => {
+      const alert = attack(attempts)
+      return alert.kind === 'cyber' ? { ...alert, detail: { ...alert.detail, address: '192.168.4.66' } } : alert
+    }
+
+    expect(describeAlert(from(14))).toBe('14 tentatives refusées sur le login, depuis 192.168.4.66')
+    expect(describeAlert(from(1))).toBe('1 tentative refusée sur le login, depuis 192.168.4.66')
+  })
+
   it('has a French label for the kind and the source of an attack', () => {
     expect(KIND_LABEL.cyber).toBe('Cyberattaque')
     expect(SOURCE_LABEL.api).toBe('Command Post')

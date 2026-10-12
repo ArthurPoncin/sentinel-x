@@ -90,7 +90,15 @@ export const AlertSchema = z.discriminatedUnion('kind', [
   ),
   alertOf('predictive', z.strictObject({ anomaly_score: z.number(), drivers: z.array(z.string()) })),
   // `attempts`: how many requests the API refused on this vector since the attack began. `value` repeats it.
-  alertOf('cyber', z.strictObject({ vector: CyberVectorSchema, attempts: z.number().int().positive() })),
+  // `address`: where the latest of them came from, when the API knows it.
+  alertOf(
+    'cyber',
+    z.strictObject({
+      vector: CyberVectorSchema,
+      attempts: z.number().int().positive(),
+      address: z.union([z.ipv4(), z.ipv6()]).optional(),
+    }),
+  ),
 ])
 export type Alert = z.infer<typeof AlertSchema>
 

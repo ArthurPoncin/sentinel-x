@@ -15,6 +15,7 @@ import {
   sessionCookie,
   verifyPassword,
 } from './auth.js'
+import { createClientAddress } from './client-address.js'
 import { type CommandRelay, createCommandRelay } from './commands.js'
 import {
   type AlertKind,
@@ -61,6 +62,9 @@ export interface ServerConfig {
   // The Operator's password hash: a session is required on every other endpoint and on /ws.
   // `false` lets anyone in, for development only.
   operatorAuth: false | { passwordHash: string }
+  // The reverse proxy in front of the API, by host name or address: the only one whose
+  // X-Forwarded-For is believed. Left out or `false`: no one's, the connection's address is kept.
+  trustedProxy?: false | string
   // The clock of the rate limits and of the cyber watch, in milliseconds: the tests move it.
   now?: () => number
 }
@@ -120,12 +124,14 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
   // The connection to the broker, once the server runs with one.
   let broker: MqttClient | undefined
 
-  // As in docs/ARCHITECTURE.md: login 5/min per IP, commands 2/s, alerts 20/s per token.
+  // As in docs/ARCHITECTURE.md: login 5/min per client address, commands 2/s, alerts 20/s per token.
   const limits = {
     login: createRateLimit(5, 60_000, config.now),
     commands: createRateLimit(2, 1000, config.now),
     alerts: createRateLimit(20, 1000, config.now),
   }
+
+  const clientAddress = createClientAddress(config.trustedProxy ?? false)
 
   // The API's own Alerts: it tells the watch what it refuses, and emits what the watch makes of it.
   const cyber = createCyberWatch(config.now)
@@ -149,8 +155,9 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
   })
 
   app.post('/api/v1/auth/login', { bodyLimit: LOGIN_BODY_LIMIT }, async (request, reply) => {
-    if (!withinLimit(limits.login, request.ip, reply)) {
-      emit(cyber.refused('login'))
+    const address = await clientAddress.of(request.ip, request.headers['x-forwarded-for'])
+    if (!withinLimit(limits.login, address, reply)) {
+      emit(cyber.refused('login', address))
       return reply
     }
     const parsed = LoginSchema.safeParse(request.body)
@@ -158,7 +165,7 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
     if (!config.operatorAuth) return reply.code(204).send()
 
     if (!(await verifyPassword(parsed.data.password, config.operatorAuth.passwordHash))) {
-      emit(cyber.refused('login'))
+      emit(cyber.refused('login', address))
       return refuse(reply, 401, 'Unauthorized', 'Wrong password')
     }
     return reply.code(204).header('set-cookie', sessionCookie(sessions.open())).send()

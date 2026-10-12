@@ -59,10 +59,17 @@ def test_accepts_a_cyber_alert_on_each_vector(vector):
     assert alert_errors(cyber(detail={"vector": vector, "attempts": 5})) == []
 
 
+@pytest.mark.parametrize("address", ["192.168.4.66", "fd00::66"])
+def test_accepts_a_cyber_alert_with_the_address_the_attempts_come_from(address):
+    assert alert_errors(cyber(detail={"vector": "login", "attempts": 14, "address": address})) == []
+
+
 @pytest.mark.parametrize(
     "detail",
     [
         {"vector": "ssh", "attempts": 14},
+        {"vector": "login", "attempts": 14, "address": "the attacker"},
+        {"vector": "login", "attempts": 14, "address": 3232236610},
         {"vector": "login", "attempts": 14, "password": "hunter2"},
         {"attempts": 14},
         {"vector": "login"},

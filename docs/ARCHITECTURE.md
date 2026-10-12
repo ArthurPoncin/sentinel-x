@@ -169,7 +169,8 @@ The **single unified Alert schema**, emitted by the Sentinel, by the AI services
 
 // cyber — the entry point under attack (login | service-token | feed-origin) and how many requests
 // the api refused there since the attack began. `value` repeats `attempts`.
-"detail": { "vector": "login", "attempts": 14 }
+//   address  optional: where the latest of them came from (IPv4 or IPv6), when the api knows it
+"detail": { "vector": "login", "attempts": 14, "address": "192.168.4.66" }
 ```
 
 **Intrusion, without the optional fields** — an Alert that carries only `x_norm`, `confidence` and `bbox` is still valid: one intruder, in front of a camera that does not turn, stood just inside the fence. The history recorded before these fields existed replays as it was.
@@ -182,6 +183,7 @@ The **single unified Alert schema**, emitted by the Sentinel, by the AI services
 |---|---|
 | Raised | 5 refusals on one vector within a sliding 10 s. One mistyped password raises nothing |
 | Raised again | each further refusal, same `alert_id`, `attempts` up to date |
+| `address` | the real address of the latest refusal, the one the reverse proxy forwards ([Denial of service](#denial-of-service)); left out when the `api` does not know it |
 | Cleared | 15 s without a refusal, on the `api`'s own clock, without any request |
 | After a clearing | an attack that resumes opens a new Alert, with another `alert_id` |
 
@@ -309,7 +311,8 @@ The `api` watches its own refusals and raises a `cyber` Alert when they add up t
 
 ### Denial of service
 
-- Rate limits in the `api`: login 5/min per IP, commands 2/s, alerts 20/s per token.
+- Rate limits in the `api`: login 5/min per real client address, commands 2/s, alerts 20/s per token.
+- The real address behind the reverse proxy: the `api` believes `X-Forwarded-For` from the `reverse-proxy` of the Compose network alone (`TRUSTED_PROXY`), and takes the address it added. From any other client the header is ignored, and without a reverse proxy the address of the connection is kept. A brute force uses up its own limit, not the Operator's.
 - Mosquitto `max_packet_size 4096`.
 - Log rotation on every container and on Mosquitto, so a message flood can't fill the SD card.
 

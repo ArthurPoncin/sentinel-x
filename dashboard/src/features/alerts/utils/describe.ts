@@ -22,8 +22,9 @@ export function describeAlert(alert: Alert): string {
     case 'presence':
       return 'Mouvement détecté par le PIR'
     case 'cyber': {
-      const { attempts, vector } = alert.detail
-      return `${plural(attempts, 'tentative')} ${attempts > 1 ? 'refusées' : 'refusée'} sur ${VECTOR_LABEL[vector]}`
+      const { attempts, vector, address } = alert.detail
+      const from = address === undefined ? '' : `, depuis ${address}`
+      return `${plural(attempts, 'tentative')} ${attempts > 1 ? 'refusées' : 'refusée'} sur ${VECTOR_LABEL[vector]}${from}`
     }
   }
 }
