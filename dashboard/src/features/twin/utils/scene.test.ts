@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { STATUS_COLORS } from '@/shared/config/status-colors'
-import type { Alert, Severity, StatusLevel } from '@/shared/contract'
+import type { Alert, CyberVector, Severity, StatusLevel } from '@/shared/contract'
 import { ENCLOSURE_PARTS } from './enclosure-parts'
 import { CALM_AIR, CRITICAL_AIR } from './gas-level'
 import { CALM_TEMP, PEAK_TEMP } from './heat-level'
@@ -16,7 +16,9 @@ import {
   NEUTRAL_LIGHT,
   NEUTRAL_RIM,
   PRESENCE_COLOR,
+  SHIELD_COLOR,
   STATUS_GRADES,
+  shieldLabel,
   type TwinState,
   toScene,
 } from './scene'
@@ -84,6 +86,20 @@ function presence(alertId: string): Alert {
   return { ...base, alert_id: alertId, source: 'esp32', kind: 'presence', severity: 'warning', detail: {} }
 }
 
+// As the API raises it on what it refuses: on the Command Post, not on a Sentinel.
+function attack(alertId: string, attempts: number, vector: CyberVector = 'login'): Alert {
+  return {
+    ...base,
+    alert_id: alertId,
+    sentinel: 'command-post',
+    source: 'api',
+    kind: 'cyber',
+    severity: 'warning',
+    value: attempts,
+    detail: { vector, attempts },
+  }
+}
+
 // An Alert the Sentinel raises from its own Probes.
 function sensed(kind: 'gas' | 'thermal' | 'presence' | 'noise', severity: Severity): Alert {
   return { ...base, alert_id: kind, source: 'esp32', kind, severity, detail: {} }
@@ -117,6 +133,7 @@ describe('toScene', () => {
       intruder: null,
       presence: { active: false },
       floodlights: { lit: false },
+      shield: null,
       anchor: null,
       link: { encrypted: false },
       signalLost: false,
@@ -666,6 +683,66 @@ describe('toScene', () => {
 
     expect(new Set(anchors.map((at) => `${at?.x.toFixed(3)} ${at?.z.toFixed(3)}`)).size).toBe(anchors.length)
     for (const at of anchors) expect(Math.hypot(at?.x ?? 0, at?.z ?? 0)).toBeLessThan(SITE.socle.radius)
+  })
+
+  it('lowers the shield without an active cyber Alert, whatever else is raised', () => {
+    expect(toScene(state()).shield).toBeNull()
+    expect(toScene(state({ status: 'critical', activeAlerts: [gas, thermal, intrusion('i1', 0.3)] })).shield).toBeNull()
+  })
+
+  it('raises the shield on a cyber Alert, with the vector it says is attacked and its count of attempts', () => {
+    expect(toScene(state({ activeAlerts: [attack('c1', 12)] })).shield).toMatchObject({
+      alertId: 'c1',
+      vector: 'login',
+      attempts: 12,
+    })
+    expect(toScene(state({ activeAlerts: [attack('c2', 7, 'feed-origin')] })).shield).toMatchObject({
+      alertId: 'c2',
+      vector: 'feed-origin',
+      attempts: 7,
+    })
+  })
+
+  it('follows the count of attempts as the Alert is raised again', () => {
+    expect(toScene(state({ activeAlerts: [attack('c1', 5)] })).shield?.attempts).toBe(5)
+    expect(toScene(state({ activeAlerts: [attack('c1', 31)] })).shield?.attempts).toBe(31)
+  })
+
+  it('keeps the shield raised until the last of several cyber Alerts is cleared, and shows the last raised', () => {
+    const [login, token] = [attack('c1', 12), attack('c2', 6, 'service-token')]
+
+    expect(toScene(state({ activeAlerts: [login, token] })).shield).toMatchObject({ alertId: 'c2', vector: 'service-token', attempts: 6 })
+    expect(toScene(state({ activeAlerts: [login, token, gas] })).shield).toMatchObject({ alertId: 'c2' })
+    expect(toScene(state({ activeAlerts: [login] })).shield).toMatchObject({ alertId: 'c1', vector: 'login', attempts: 12 })
+    expect(toScene(state({ activeAlerts: [] })).shield).toBeNull()
+  })
+
+  it('labels the shield with the vector in French and the attempts refused, on two lines', () => {
+    expect(shieldLabel('login', 12)).toBe('attaque · login\n12 tentatives refusées')
+    expect(shieldLabel('service-token', 40)).toBe('attaque · entrée des Alerts\n40 tentatives refusées')
+    expect(shieldLabel('feed-origin', 1)).toBe('attaque · flux en direct\n1 tentative refusée')
+    expect(toScene(state({ activeAlerts: [attack('c1', 12)] })).shield?.label).toBe(shieldLabel('login', 12))
+  })
+
+  it('changes nothing else of the scene when the shield is raised: gas, heat, intruder, drift, presence', () => {
+    const busy = state({
+      ...withAir(CRITICAL_AIR),
+      status: 'critical',
+      activeAlerts: [gas, thermal, presence('pr1'), predictive('p1', ['temp_slope']), intrusion('i1', 0.3)],
+    })
+    const attacked = { ...busy, activeAlerts: [attack('c0', 9), ...busy.activeAlerts, attack('c1', 12, 'feed-origin')] }
+
+    expect({ ...toScene(attacked), shield: null }).toEqual(toScene(busy))
+    expect(toScene(attacked).shield).not.toBeNull()
+  })
+
+  it('raises the shield in a color of its own, not a Status color', () => {
+    expect(Object.values(STATUS_COLORS)).not.toContain(SHIELD_COLOR)
+  })
+
+  it('gives a cyber Alert no anchor, and leaves the one of the Alert raised before it', () => {
+    expect(toScene(state({ activeAlerts: [attack('c1', 12)] })).anchor).toBeNull()
+    expect(toScene(state({ activeAlerts: [gas, attack('c1', 12)] })).anchor?.alertId).toBe('g1')
   })
 
   it('does not change the state it is given', () => {

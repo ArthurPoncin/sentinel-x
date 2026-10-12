@@ -4,7 +4,7 @@ import { MathUtils, Spherical, Vector3 } from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import type { Frame } from '@/shared/contract'
 import { useFraming } from '../hooks/use-framing'
-import { cameraTurn } from '../utils/alert-framing'
+import { cameraTurn, standBack } from '../utils/alert-framing'
 import type { CameraTouch } from '../utils/auto-orbit'
 import { TARGET, wholeStageDistance } from '../utils/framing'
 import { type OperatorHands, type Stand, steered, stretched } from '../utils/operator-hands'
@@ -32,6 +32,9 @@ export interface OrbitCameraProps {
   // Where the last raised of the active Alerts happens, from the scene: the camera turns to face it as the
   // Alert is raised, stays a few seconds, then orbits again.
   anchor: SceneProps['anchor']
+  // The Alert that is on the whole Outpost, by its alert_id: the attack the shield is raised for. It happens
+  // nowhere on the ground: as it is raised the camera stands back to hold the whole stage, and turns as it did.
+  whole: string | null
   // The feed's frames, oldest first: an Alert is newly raised when it is among those that come in.
   frames: readonly Frame[]
   // Stands back just far enough to hold the whole stage, whatever the shape of the frame. The Operator can
@@ -43,7 +46,7 @@ export interface OrbitCameraProps {
   operator?: OperatorHands
 }
 
-export function OrbitCamera({ anchor, frames, wholeStage = false, operator }: OrbitCameraProps) {
+export function OrbitCamera({ anchor, whole, frames, wholeStage = false, operator }: OrbitCameraProps) {
   const camera = useThree((state) => state.camera)
   const canvas = useThree((state) => state.gl.domElement)
   const controls = useRef<OrbitControls | null>(null)
@@ -54,7 +57,7 @@ export function OrbitCamera({ anchor, frames, wholeStage = false, operator }: Or
   const stand = useRef(new Spherical())
   // How far the camera stood as two hands took hold of the view.
   const grip = useRef<number | null>(null)
-  const framingNow = useFraming(anchor, frames)
+  const framingNow = useFraming(anchor, whole, frames)
 
   useEffect(() => {
     const orbit = new OrbitControls(camera, canvas)
@@ -115,12 +118,23 @@ export function OrbitCamera({ anchor, frames, wholeStage = false, operator }: Or
       hand.current = false
       if (!mouse.current) touch.current = { kind: 'released', at: seconds() }
     }
-    const turn = cameraTurn(framingNow(), orbit.getAzimuthalAngle(), touch.current, seconds())
+    const { framing, wide: wideShot } = framingNow()
+    const turn = cameraTurn(framing, orbit.getAzimuthalAngle(), touch.current, seconds())
     // Round the target's vertical, at the distance and the height the camera stands at: the controls then read
     // where it is, as they do after a drag.
     if (turn.toAnchor !== 0) {
       const angle = turn.toAnchor * Math.min(delta, LONGEST_FRAME)
       camera.position.sub(orbit.target).applyAxisAngle(UP, angle).add(orbit.target)
+    }
+    // A wide shot: back along its own line of sight to where the whole stage shows, as far as it may stand,
+    // and never forward: a camera that already stands further stays there.
+    const back = standBack(wideShot, touch.current, seconds())
+    if (back !== 0) {
+      const wide = Math.min(orbit.maxDistance, wholeStageDistance(size.width / size.height))
+      const from = camera.position.sub(orbit.target)
+      const distance = from.length()
+      if (distance < wide) from.setLength(distance + (wide - distance) * back * Math.min(delta, LONGEST_FRAME))
+      from.add(orbit.target)
     }
     // OrbitControls counts autoRotateSpeed in turns per minute.
     orbit.autoRotateSpeed = (60 / ORBIT_PERIOD) * turn.orbit

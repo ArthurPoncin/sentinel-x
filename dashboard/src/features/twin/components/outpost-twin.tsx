@@ -31,6 +31,7 @@ import { Perimeter } from './perimeter'
 import { PowerPlant } from './power-plant'
 import { Renewables } from './renewables'
 import { Rocks } from './rocks'
+import { Shield } from './shield'
 import { Signage } from './signage'
 import { Socle } from './socle'
 
@@ -140,9 +141,12 @@ export interface OutpostTwinProps {
 // PIR dome and sends an amber sweep round the fence; either one, someone near the site or inside it, lights the
 // floodlights on the perimeter in white, each a pool on the ground at its foot; a clap sends a wave of light from the Enclosure over the socle.
 // The antenna on the Enclosure's side sends an impulse of white light for each frame of telemetry received,
-// and a padlock reads « WSS » by it while the live feed is encrypted.
+// and a padlock reads « WSS » by it while the live feed is encrypted. An attack on the Command Post raises a
+// shield around the whole Outpost, a dome of blue light with the entry point attacked and the attempts refused
+// on a label over it, which comes back down once the attack is over.
 // The camera orbits the site, and turns to an Alert as it is raised: it faces where it happens for a few
-// seconds, then orbits again. Without its signal it all turns grey, the picture drops out like a screen's
+// seconds, then orbits again. For an attack, which happens nowhere on the ground, it stands back to show the
+// whole dome instead. Without its signal it all turns grey, the picture drops out like a screen's
 // (snow, tears, a rolling bar) and it says so: what it shows is no longer live. With a hand sensor, the Operator's
 // hands float in hologram in a corner of the view, a flat one steers the camera and two open ones, moved apart or
 // together, zoom. It fills its parent: give that
@@ -187,7 +191,14 @@ export function OutpostTwin({ scene, frames, wholeStage = false, operator }: Out
             link={{ frames, live: !scene.signalLost, encrypted: scene.link.encrypted }}
           />
         </group>
-        <OrbitCamera anchor={scene.anchor} frames={frames} wholeStage={wholeStage} operator={operator} />
+        <Shield shield={scene.shield} />
+        <OrbitCamera
+          anchor={scene.anchor}
+          whole={scene.shield?.alertId ?? null}
+          frames={frames}
+          wholeStage={wholeStage}
+          operator={operator}
+        />
         {operator && <HandHologram operator={operator} />}
         {operator && <Gunsight operator={operator} range={range} intel={scene} />}
         <Halo signal={scene.signalLost ? 0 : 1} />

@@ -6,7 +6,10 @@ import {
   FRAMING_TURN,
   type Framing,
   newlyRaised,
+  type Shots,
   shortestTurn,
+  shotsAfter,
+  standBack,
 } from './alert-framing'
 import { autoOrbitSpeed, type CameraTouch, RESUME_DELAY, RESUME_RAMP } from './auto-orbit'
 import type { GroundPoint } from './site'
@@ -299,3 +302,91 @@ describe('cameraTurn', () => {
     expect(cameraTurn(second, 70 * DEGREE, never, now).toAnchor).toBeLessThan(0)
   })
 })
+
+describe('shotsAfter', () => {
+  const NOW = 100
+  const gate = { alertId: 'presence', at: { x: -1, z: 2.6 } }
+  const none: Shots = { framing: null, wide: null }
+  const earlier: Shots = { framing: { anchor: { x: 1, z: -1.2 }, since: 40 }, wide: 30 }
+
+  it('turns the camera to the anchor as its Alert is raised, from now', () => {
+    expect(shotsAfter(none, ['presence'], gate, null, NOW)).toEqual({
+      framing: { anchor: gate.at, since: NOW },
+      wide: null,
+    })
+  })
+
+  it('takes a wide shot as a cyber Alert is raised: on the whole Outpost, with no anchor on the ground', () => {
+    expect(shotsAfter(none, ['attack'], null, 'attack', NOW)).toEqual({ framing: null, wide: NOW })
+  })
+
+  it('keeps the shots it had while neither is raised: nothing new, or an Alert that has no shot', () => {
+    expect(shotsAfter(earlier, [], gate, 'attack', NOW)).toBe(earlier)
+    expect(shotsAfter(earlier, ['noise'], gate, 'attack', NOW)).toBe(earlier)
+    expect(shotsAfter(none, ['noise'], null, null, NOW)).toBe(none)
+  })
+
+  it('does not undo one with the other: an attack leaves the turn, an Alert on the ground leaves the wide shot', () => {
+    expect(shotsAfter(earlier, ['attack'], gate, 'attack', NOW)).toEqual({ framing: earlier.framing, wide: NOW })
+    expect(shotsAfter(earlier, ['presence'], gate, 'attack', NOW)).toEqual({
+      framing: { anchor: gate.at, since: NOW },
+      wide: earlier.wide,
+    })
+  })
+
+  it('takes both when both are raised at once', () => {
+    expect(shotsAfter(none, ['presence', 'attack'], gate, 'attack', NOW)).toEqual({
+      framing: { anchor: gate.at, since: NOW },
+      wide: NOW,
+    })
+  })
+})
+
+describe('standBack', () => {
+  const RAISED = 100
+  const FRAMED = FRAMING_TURN + FRAMING_HOLD
+  const never: CameraTouch = { kind: 'never' }
+  // How far the camera stands `seconds` after the Alert was raised, having stood back as it is told on every
+  // frame, toward the distance that holds the whole Outpost.
+  function retreat(from: number, to: number, seconds: number, touch: CameraTouch = never): number {
+    let distance = from
+    for (let elapsed = 0; elapsed < seconds; elapsed += FRAME) {
+      distance += (to - distance) * standBack(RAISED, touch, RAISED + elapsed) * FRAME
+    }
+    return distance
+  }
+
+  it('leaves the camera where it stands while no wide shot has been taken', () => {
+    expect(standBack(null, never, 50)).toBe(0)
+  })
+
+  it('stands the camera back to where the whole Outpost shows, within the turn', () => {
+    // All but the last few hundredths of the way: the pull closes what is left during the hold.
+    expect(retreat(5, 11, FRAMING_TURN)).toBeGreaterThan(5 + 0.97 * (11 - 5))
+    expect(retreat(5, 11, FRAMING_TURN + 1)).toBeCloseTo(11, 2)
+  })
+
+  it('starts without a jerk and never goes past: still as the Alert is raised, then further and further back', () => {
+    expect(standBack(RAISED, never, RAISED)).toBe(0)
+    let last = 5
+    for (let seconds = FRAME; seconds < FRAMED; seconds += 0.25) {
+      const distance = retreat(5, 11, seconds)
+      expect(distance).toBeGreaterThanOrEqual(last)
+      expect(distance).toBeLessThanOrEqual(11)
+      last = distance
+    }
+  })
+
+  it('holds the camera back for the hold, then lets it go', () => {
+    expect(standBack(RAISED, never, RAISED + FRAMING_TURN + FRAMING_HOLD / 2)).toBeGreaterThan(0)
+    expect(standBack(RAISED, never, RAISED + FRAMED)).toBe(0)
+    expect(standBack(RAISED, never, RAISED + FRAMED + 30)).toBe(0)
+  })
+
+  it("gives way to the Operator's hand: while they hold the camera, and once they have touched it since", () => {
+    expect(standBack(RAISED, { kind: 'holding' }, RAISED + 1)).toBe(0)
+    expect(standBack(RAISED, { kind: 'released', at: RAISED + 0.5 }, RAISED + 1)).toBe(0)
+    expect(standBack(RAISED, { kind: 'released', at: RAISED - 1 }, RAISED + 1)).toBeGreaterThan(0)
+  })
+})
+

@@ -1,4 +1,4 @@
-// Sentinel enclosure: the ESP32 on its two half breadboards, the Probes and the Alarm's speaker.
+// Sentinel enclosure: the ESP32 on its cradle, the wires joined in WAGO 221 lever connectors, the Probes and the Alarm's speaker.
 // The DHT22 and the MQ-2 each have a ventilated compartment of their own, in the two front corners:
 // the MQ-2's heater would otherwise warm the DHT22, and the predictive model would learn it as drift.
 //
@@ -21,8 +21,18 @@ H = 56;
 
 dht_box = [32, 30];   // DHT22 compartment, front left: X 0..32, Y 0..30
 mq_box = [44, 36];    // MQ-2 compartment, front right: its can, its board and the Dupont plugs behind it
-bb = [112, 86];       // two half breadboards (400 points) glued side by side, with play
-bb_at = [(W - bb[0]) / 2, 38];
+esp = [28.6, 56.6];   // ESP32 DevKitC V4 (AZ-Delivery, 56 x 28 mm), with play
+esp_z = 26;           // its board's underside: the Dupont plugs on its pins hang under it
+usb_x = W / 2;        // its USB toward the back, under the cable's notch
+esp_at = [usb_x - esp[0] / 2, D - 30 - esp[1]];  // 30 mm left behind it for the USB plug
+
+// WAGO 221 lever connectors: 18.6 deep, 8.3 high, their width by the number of poles.
+function wago_w(n) = n == 2 ? 13.1 : n == 3 ? 18.7 : 29.9;
+// One per node of docs/cablage/esp32.html, [name engraved beside it, poles], front to back.
+wago_left = [["3V3", 5], ["IO4", 3], ["GND", 5], ["5V", 3]];
+wago_right = [["GND", 3], ["AO", 2], ["IO34", 3], ["IO25", 2], ["HP+", 2]];
+wago_y = [36, 40];    // the first pocket on each side, behind the DHT22's and the MQ-2's compartments
+function wago_at(l, i, y0) = i == 0 ? y0 : wago_at(l, i - 1, y0) + wago_w(l[i - 1][1]) + 0.4 + 1.6;
 
 dht_x = 18;           // DHT22 holder, against the front wall
 dht_body = [15.1, 7.7, 25];
@@ -31,9 +41,8 @@ mic = [46, 32];       // CZN-15E capsule on the front wall: X, Z
 pir = [80, 32];       // HC-SR501 dome on the front wall: X, Z
 pir_skirt = 4;        // from the wall to the PIR's board: the lens' square foot
 mq = [22, 30];        // MQ-2 can on the right wall: Y, Z
-usb_x = W / 2;        // the ESP32 straddles the joint of the two breadboards, its USB toward the back
-spk = [W - 32, D - 32];          // speaker, under the lid
-spk_steps = [29, 37, 41, 51];    // its seat takes speakers of 28, 36, 40 and 50 mm
+spk = [30.6, 70.6, 18];          // the speaker, 30 x 70 x 18, under the lid along the right wall, its face up
+spk_at = [W - clr - 1.6 - spk[0] / 2, 92];  // its centre: the frame's right side is the lid's lip
 
 corner = [[4.5, 4.5], [W - 4.5, 4.5], [4.5, D - 4.5], [W - 4.5, D - 4.5]];
 feet = [[16, 16], [W - 16, 16], [16, D - 16], [W - 16, D - 16]];
@@ -64,6 +73,38 @@ module dht_holder() {
   }
 }
 
+// The ESP32 stands on two cradles at its ends, pins down: the Dupont plugs go on its pins before it drops in,
+// and the side guides' lips hold it. The front cradle stays under the board, for the module that may overhang it.
+module esp_cradles() for (end = [0, 1]) translate([usb_x, esp_at[1] + end * esp[1], 0]) mirror([0, end, 0]) {
+  // a pillar and its ledge, between the two rows of pins
+  translate([-8, -2, 0]) cube([16, 8, esp_z]);
+  // the end wall, cut for the module at the front and for the USB plug at the back
+  difference() {
+    translate([-esp[0] / 2 - 1.6, -2, 0]) cube([esp[0] + 3.2, 2, esp_z + 3]);
+    translate([end ? -7 : -10, -3, esp_z]) cube([end ? 14 : 20, 4, 10]);
+  }
+  for (sx = [-1, 1]) scale([sx, 1, 1]) {
+    // a guide along the board's edge, its foot sloping into the wall to print
+    hull() {
+      translate([esp[0] / 2, -eps, esp_z - 3]) cube([1.6, 4, 6]);
+      translate([esp[0] / 2, -eps, esp_z - 7]) cube([1.6, eps, 1]);
+    }
+    // its lip, 0.4 mm over the board
+    translate([esp[0] / 2, 0, esp_z + 1.7]) rotate([-90, 0, 0]) linear_extrude(4) polygon([[0, 0], [-0.4, -0.3], [0, -1.2]]);
+  }
+}
+
+// A WAGO 221 lies in each pocket, levers up, its wire openings toward the middle; ribs hold it by its sides.
+module wago_pockets(list, y0) for (i = [0 : len(list) - 1]) translate([0, wago_at(list, i, y0), 0]) {
+  w = wago_w(list[i][1]) + 0.4;
+  for (y = [-1.6, w]) translate([0, y, 0]) cube([16, 1.6, 4]);
+  for (y = [0, w]) translate([8, y, 0]) cylinder(h = 4, d = 1, $fn = 16);
+  translate([18.6 + 0.4, -1.6, 0]) cube([1.6, w + 3.2, 1.5]);  // a stop, under its wire openings
+}
+
+module wago_labels(list, x, y0) for (i = [0 : len(list) - 1])
+  translate([x, wago_at(list, i, y0) + (wago_w(list[i][1]) + 0.4) / 2, 0]) label(list[i][0], 3.5);
+
 // ---------------------------------------------------------------- base: floor and walls, printed floor down
 
 module base() {
@@ -75,12 +116,9 @@ module base() {
       }
       linear_extrude(H) inner_walls_2d();
       for (c = corner) translate(c) cylinder(h = H, d = 9);
-      // corners of the breadboards
-      for (cx = [0, 1], cy = [0, 1]) translate([bb_at[0] + cx * bb[0], bb_at[1] + cy * bb[1], 0])
-        scale([cx ? -1 : 1, cy ? -1 : 1, 1]) {
-          translate([-2, -2, 0]) cube([14, 2, 5]);
-          translate([-2, -2, 0]) cube([2, 14, 5]);
-        }
+      esp_cradles();
+      wago_pockets(wago_left, wago_y[0]);
+      translate([W, 0, 0]) mirror([1, 0, 0]) wago_pockets(wago_right, wago_y[1]);
       dht_holder();
       translate([mic[0], 0, mic[1]]) rotate([-90, 0, 0]) cradle(10.3, 13.5, 4);
       for (s = [-1, 1]) translate([pir[0] + s * 14, 0, pir[1]]) rotate([-90, 0, 0]) boss(pir_skirt, 3.8, 1.7, pir_skirt);
@@ -109,6 +147,9 @@ module base() {
       translate([0, H - 7]) circle(d = 7);
     }
     for (f = feet) translate([f[0], f[1], -floor_t - eps]) cylinder(h = 1, d = 10.5);
+    // each connector's node, engraved in the floor beside it
+    wago_labels(wago_left, 30, wago_y[0]);
+    wago_labels(wago_right, W - 30, wago_y[1]);
   }
 }
 
@@ -128,14 +169,14 @@ module lid() {
         translate([0, 0, -1]) linear_extrude(6) offset(delta = clr) inner_walls_2d();
         translate([usb_x - 5, D - 3, -1]) cube([10, 4, 6]);
       }
-      // the speaker's seat: it goes in the step of its size, a bead of hot glue holds it
-      translate([spk[0], spk[1], H - 8]) difference() {
-        cylinder(h = 8 + eps, d = spk_steps[3] + 4);
-        for (i = [0 : 3]) translate([0, 0, -eps]) cylinder(h = 8 - 2 * i, d = spk_steps[i]);
+      // the speaker's frame: it goes in face up, a bead of hot glue holds it
+      translate([spk_at[0], spk_at[1], H - 8]) linear_extrude(8 + eps) difference() {
+        crect([spk[0] + 3.2, spk[1] + 3.2], 2.4);
+        crect([spk[0], spk[1]], 1);
       }
     }
     for (c = corner) translate([c[0], c[1], H + lid_t]) cs_m3(lid_t + 2);
-    translate([spk[0], spk[1], H - 1]) linear_extrude(lid_t + 2) hole_disc(25, 2, 3.4);
+    translate([spk_at[0], spk_at[1], H - 1]) linear_extrude(lid_t + 2) slot_row(5, spk[1] - 14, 2.4, 4.8);
     // the DHT22's and the MQ-2's compartments breathe through the lid too
     translate([dht_x, 19, H - 1]) linear_extrude(lid_t + 2) rotate(90) slot_row(3, 16, 2.6, 5);
     translate([W - mq_box[0] / 2, 21, H - 1]) linear_extrude(lid_t + 2) slot_row(5, 22, 2.6, 5);
@@ -147,16 +188,25 @@ module lid() {
 
 // ---------------------------------------------------------------- what goes inside, to check the fit (not printed)
 
-module ghosts() {
-  color("WhiteSmoke") translate(bb_at + [1, 1, 0]) cube([bb[0] - 2, bb[1] - 2, 9.5]);
-  color([0.1, 0.1, 0.12]) translate([usb_x - 14, bb_at[1] + bb[1] - 56, 9.5]) cube([28, 55, 6]);
-  color("Silver") translate([usb_x - 4, bb_at[1] + bb[1] - 1, 12]) cube([8, 22, 5]);
+module ghosts(speaker = true) {
+  // the ESP32: its board, its module, its USB-C plug; the two rows of Dupont plugs under it
+  translate([usb_x - 14, esp_at[1] + 0.3, esp_z]) {
+    color([0.1, 0.1, 0.12]) cube([28, 56, 1.6]);
+    color("Silver") translate([5, 0, 1.6]) cube([18, 25.5, 3.2]);
+    color("Silver") translate([10, 56 - 1, 1.6]) cube([8, 22, 3.2]);
+    for (x = [1.3 - 1.27, 26.7 - 1.27]) color("Black") translate([x, 3.8, -16.5]) cube([2.54, 48.3, 16.5]);
+  }
+  // the WAGO connectors in their pockets
+  color("Orange", 0.8) {
+    for (i = [0 : len(wago_left) - 1]) translate([0.2, wago_at(wago_left, i, wago_y[0]) + 0.2, 0]) cube([18.6, wago_w(wago_left[i][1]), 8.3]);
+    for (i = [0 : len(wago_right) - 1]) translate([W - 18.8, wago_at(wago_right, i, wago_y[1]) + 0.2, 0]) cube([18.6, wago_w(wago_right[i][1]), 8.3]);
+  }
   color("White") translate([dht_x - dht_body[0] / 2, 0.2, dht_z]) cube(dht_body);
   color("White") translate([pir[0], -wall, pir[1]]) rotate([-90, 0, 0]) translate([0, 0, -7]) sphere(d = 23);
   color("SeaGreen") translate([pir[0] - 16, pir_skirt, pir[1] - 12]) cube([32, 1.6, 24]);
   color("Silver") translate([W - 15, mq[0], mq[1]]) rotate([0, 90, 0]) cylinder(h = 15, d = 19.8);
   color("Black") translate([mic[0], 0.2, mic[1]]) rotate([-90, 0, 0]) cylinder(h = 7, d = 9.7);
-  color("DimGray") translate([spk[0], spk[1], H - 22]) cylinder(h = 16, d = 40);
+  if (speaker) color("DimGray") translate([spk_at[0] - spk[0] / 2 + 0.3, spk_at[1] - spk[1] / 2 + 0.3, H - spk[2]]) cube(spk - [0.6, 0.6, 0]);
 }
 
 module assembly() {
@@ -168,4 +218,4 @@ module assembly() {
 if (part == "base") translate([0, 0, floor_t]) base();
 else if (part == "lid") translate([0, 0, H + lid_t]) rotate([180, 0, 0]) lid();
 else if (part == "assembly") assembly();
-else if (part == "inside") { color("SlateGray") base(); ghosts(); }
+else if (part == "inside") { color("SlateGray") base(); ghosts(speaker = false); }
