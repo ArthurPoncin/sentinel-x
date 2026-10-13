@@ -13,6 +13,9 @@ const STATUS: Readonly<Record<Exclude<VoiceState['status'], 'off'>, string>> = {
   awake: 'Éveillée · dites la commande',
 }
 
+// While the built-in voice talks: the ear is closed, whatever it was at.
+export const TALKING_LINE = 'Sentinelle parle…'
+
 export function statusLine(status: Exclude<VoiceState['status'], 'off'>): string {
   return STATUS[status]
 }

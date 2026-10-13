@@ -1,5 +1,6 @@
 import { heardFrom } from '../utils/heard'
 import { GRAMMAR } from '../utils/interpret'
+import { levelOf } from '../utils/level'
 import type { EarEvent, Failure } from './ear'
 
 // The recognition model, a static file of the dashboard itself: nothing leaves the machine to hear a voice.
@@ -42,8 +43,8 @@ function turn(givenUp: AbortSignal, wait: () => void): Promise<() => void> {
 
 // The ear: the microphone of this machine, heard by Vosk in WebAssembly, in a worker, within its closed
 // grammar. It waits for its turn among the tabs, asks for the microphone, loads the engine and its model only
-// then, and tells `emit` of each step, of each sentence once it is said, and of what stopped it, be it once
-// it listens. What the microphone gives while `deaf` says so never reaches the engine: the dashboard's own
+// then, and tells `emit` of each step, of how loud the microphone is, of each sentence once it is said, and of
+// what stopped it, be it once it listens. What the microphone gives while `deaf` says so never reaches the engine: the dashboard's own
 // voice. Returns what stops it: the microphone is let go of and the engine's memory freed. The engine is
 // behind this function alone: another one would give the same events.
 export function listen(emit: (event: EarEvent) => void, deaf: () => boolean = () => false, modelUrl = MODEL_URL): () => void {
@@ -127,7 +128,9 @@ export function listen(emit: (event: EarEvent) => void, deaf: () => boolean = ()
 
       const tap = new AudioWorkletNode(context, 'pcm-tap', { numberOfOutputs: 0 })
       tap.port.onmessage = ({ data }: MessageEvent<Float32Array>) => {
-        if (!stopped && !deaf()) recognizer.acceptWaveformFloat(data, context.sampleRate)
+        if (stopped) return
+        emit({ type: 'level', level: levelOf(data) })
+        if (!deaf()) recognizer.acceptWaveformFloat(data, context.sampleRate)
       }
       context.createMediaStreamSource(stream).connect(tap)
       await Promise.race([context.resume(), new Promise((resolve) => setTimeout(resolve, RESUME_MS))])

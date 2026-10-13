@@ -434,6 +434,154 @@
   }
 }
 
+/* The voice control's halo, at the foot of the Twin's stage, over the caption and the windows' bar and between
+   the windows' columns: the presence of the assistant. Its glow swells with the microphone (`--level`, from 0 to 1), turns to the wake
+   color and rings while a command is taken, and beats while the dashboard talks. Only scale and opacity move:
+   the scene keeps its frames. The last sentence heard stays written next to it. */
+.voice-halo {
+  --halo: var(--muted-foreground);
+  position: absolute;
+  bottom: 4.5rem;
+  left: 50%;
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: min(36rem, calc(100% - 2rem));
+  padding: 0.15rem 1.1rem 0.15rem 0.3rem;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 55%);
+  color: var(--muted-foreground);
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+
+/* The lost signal's label stands clear of it. */
+.stage:has(.voice-halo) .twin-signal {
+  bottom: max(12%, 9.5rem);
+}
+
+.voice-halo[data-status='listening'] {
+  --halo: var(--nominal);
+}
+
+.voice-halo[data-status='awake'] {
+  --halo: var(--elevated);
+  color: var(--foreground);
+}
+
+.voice-halo[data-talking] {
+  --halo: var(--replay);
+  color: var(--foreground);
+}
+
+.voice-halo-orb {
+  --level: 0;
+  position: relative;
+  flex: none;
+  width: 3.5rem;
+  height: 3.5rem;
+}
+
+.voice-halo-glow,
+.voice-halo-core,
+.voice-halo-orb::after {
+  position: absolute;
+  border-radius: 50%;
+}
+
+.voice-halo-glow {
+  inset: 0;
+  background: radial-gradient(circle, var(--halo) 0%, transparent 68%);
+  opacity: calc(0.35 + var(--level) * 0.65);
+  scale: calc(0.7 + var(--level) * 0.9);
+  transition:
+    scale 0.12s linear,
+    opacity 0.12s linear;
+}
+
+.voice-halo-core {
+  inset: 38%;
+  background: var(--halo);
+  transition: background-color 0.2s;
+}
+
+/* The ring of the wake window: it goes out from the core, again and again, for as long as a command is taken. */
+.voice-halo-orb::after {
+  content: '';
+  inset: 0;
+  border: 2px solid var(--halo);
+  opacity: 0;
+}
+
+.voice-halo[data-status='awake']:not([data-talking]) .voice-halo-glow {
+  opacity: calc(0.65 + var(--level) * 0.35);
+  scale: calc(0.95 + var(--level) * 0.65);
+}
+
+.voice-halo[data-status='awake']:not([data-talking]) .voice-halo-orb::after {
+  animation: voice-halo-ring 1.2s ease-out infinite;
+}
+
+/* The synthesis gives no level to follow: the glow beats at the pace of a voice. */
+.voice-halo[data-talking] .voice-halo-glow {
+  transition: none;
+  animation: voice-halo-talk 0.7s ease-in-out infinite alternate;
+}
+
+.voice-halo-lines {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.voice-halo-lines span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-halo[data-outcome='command'] .voice-halo-last {
+  color: var(--foreground);
+}
+
+@keyframes voice-halo-ring {
+  from {
+    opacity: 0.9;
+    scale: 0.4;
+  }
+
+  to {
+    opacity: 0;
+    scale: 1.35;
+  }
+}
+
+@keyframes voice-halo-talk {
+  from {
+    opacity: 0.45;
+    scale: 0.7;
+  }
+
+  to {
+    opacity: 1;
+    scale: 1.4;
+  }
+}
+
+/* Without motion the halo still says where the ear is by its color, and how loud by its light. */
+@media (prefers-reduced-motion: reduce) {
+  .voice-halo .voice-halo-glow {
+    scale: 1;
+    animation: none;
+  }
+
+  .voice-halo[data-status='awake']:not([data-talking]) .voice-halo-orb::after {
+    opacity: 0.9;
+    animation: none;
+  }
+}
+
 /* What the tutorial's hands of light are shown in: a dark well lit from below, ruled with fine lines as a
    hologram is, and a band of light that goes down it. What is laid over it takes z-index 2. */
 .hologram {
