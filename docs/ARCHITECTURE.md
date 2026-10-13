@@ -18,7 +18,7 @@ The Sentinel and the Command Post live in the same 3D-printed **Enclosure** (see
 
 - **ESP32 instead of ESP8266.** Same family and toolchain (Arduino/PlatformIO), strictly more capable: RAM headroom for the mandatory TLS handshake (tight on an ESP8266) and several ADC inputs (the ESP8266 has a single 0–1 V analog input, awkward for the MQ-2). An ESP-01S is on hand if the ESP8266 label is required.
 - **Raspberry Pi 4 instead of a Pi 5.** The brief specifies a Pi 5 (4 GB) for Option A; we have a Pi 4. Inference is slower, hence the lightweight vision model and the Monday benchmark.
-- **An HDMI screen on the Pi instead of the OLED on the ESP.** The brief lists a 0.96" OLED I2C on the microcontroller for the IP/Wi-Fi status; ours is an 800×480 HDMI screen on the Command Post, which shows the table Wi-Fi, the Sentinel's link, readings and Alerts, the webcam and the containers ([`../infra/README.md`](../infra/README.md#the-status-screen)). The Sentinel's own reasons, when it cannot connect, are on its serial monitor.
+- **An HDMI screen on the Pi instead of the OLED on the ESP.** The brief lists a 0.96" OLED I2C on the microcontroller for the IP/Wi-Fi status; ours is an 800×480 HDMI screen on the Command Post, which shows the table Wi-Fi, the Sentinel's link, readings and Alerts, the webcam and the containers, then, once everything runs, an eye whose colour and manner are those of the Alerts raised and which follows the intruder the camera follows ([`../infra/README.md`](../infra/README.md#the-status-screen)). The Sentinel's own reasons, when it cannot connect, are on its serial monitor.
 
 ```mermaid
 flowchart LR
@@ -107,6 +107,8 @@ Two ingress paths funnel into one Alert pipeline in the `api`:
 sentinel/<id>/telemetry        # ESP32 → broker → api + predictive, continuous snapshot
 sentinel/<id>/alert            # ESP32 → broker, on transition
 command/<id>/actuator          # api → broker → ESP32
+command-post/alerts            # api → broker → status screen, retained: { ts, alerts }, the Alerts
+                               # raised that are not a Sentinel's (intrusion, predictive, cyber)
 ```
 
 ---
@@ -285,7 +287,8 @@ No plaintext port: no MQTT 1883, no HTTP 80. `api`, `dashboard`, `vision`, `pred
 | Channel | Principal | Mechanism | Allowed |
 |---|---|---|---|
 | MQTT | `sentinel-01` | username/password over TLS | publish its own telemetry/alert, read its own commands |
-| MQTT | `api` | username/password over TLS | read all Sentinel topics, publish commands |
+| MQTT | `api` | username/password over TLS | read all Sentinel topics, publish commands and the Alert board |
+| MQTT | `screen` | username/password over TLS | read all Sentinel topics and the Alert board, write nothing |
 | MQTT | `predictive` | username/password over TLS | read all Sentinel telemetry |
 | HTTP (internal) | `vision`, `predictive` | bearer token | `POST /api/v1/alerts` for its own `kind` |
 | HTTPS/WSS | Operator | login → session cookie | dashboard, history, camera feed, commands |
@@ -302,6 +305,7 @@ user api
 topic read sentinel/+/telemetry
 topic read sentinel/+/alert
 topic write command/+/actuator
+topic write command-post/alerts
 
 user predictive
 topic read sentinel/+/telemetry
@@ -309,6 +313,7 @@ topic read sentinel/+/telemetry
 user screen
 topic read sentinel/+/telemetry
 topic read sentinel/+/alert
+topic read command-post/alerts
 ```
 
 **Never trust the payload:** the `api` derives `sentinel` from the MQTT topic and `source` from the channel (MQTT → `esp32`, token → `vision` / `predictive`), and validates every body against the schemas above. The source `api` is never set from a channel: only the `api` itself raises with it.

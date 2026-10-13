@@ -19,7 +19,12 @@ export interface AlertPipeline {
   accept(alert: Alert): void
 }
 
-export function createAlertPipeline(hub: Pick<Hub, 'broadcast'>, history: HistoryRepository): AlertPipeline {
+// `onActive` is told the Alerts still raised after each one taken in.
+export function createAlertPipeline(
+  hub: Pick<Hub, 'broadcast'>,
+  history: HistoryRepository,
+  onActive: (active: readonly Alert[]) => void = () => {},
+): AlertPipeline {
   // Raised and not cleared yet, by alert_id. A raised on a known id replaces it.
   const active = new Map<string, Alert>()
 
@@ -35,6 +40,7 @@ export function createAlertPipeline(hub: Pick<Hub, 'broadcast'>, history: Histor
         type: 'status',
         payload: { status: computeStatus([...active.values()]), ts: new Date().toISOString() },
       })
+      onActive([...active.values()])
     },
   }
 }

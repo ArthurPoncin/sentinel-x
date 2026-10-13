@@ -3,6 +3,7 @@ import websocket from '@fastify/websocket'
 import fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify'
 import type { MqttClient } from 'mqtt'
 import { z } from 'zod'
+import { type AlertBoard, startAlertBoard } from './alert-board.js'
 import { createAlertPipeline, normalizeAlert } from './alerts.js'
 import {
   cookieOf,
@@ -115,7 +116,9 @@ function whileRunning(app: FastifyInstance, start: () => () => void | Promise<vo
 export async function buildServer(config: ServerConfig): Promise<FastifyInstance> {
   const app = fastify()
   const hub = createHub()
-  const alerts = createAlertPipeline(hub, config.history)
+  // The Alerts put up on the broker for the status screen, once the server runs with one.
+  let board: AlertBoard | undefined
+  const alerts = createAlertPipeline(hub, config.history, (active) => board?.show(active))
   const telemetry = createTelemetryPipeline(hub, config.history)
   app.decorate('hub', hub)
   await app.register(websocket)
@@ -286,6 +289,7 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
       broker = client
       startMqttIngress({ telemetry, alerts }, client)
       commands = createCommandRelay(client)
+      board = startAlertBoard(client)
       return () => client.endAsync(true)
     })
   }

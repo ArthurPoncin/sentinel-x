@@ -10,6 +10,8 @@ user api
 topic read sentinel/+/telemetry
 topic read sentinel/+/alert
 topic write command/+/actuator
+# The Alerts that are not a Sentinel's, put up for the status screen (backend/src/alert-board.ts).
+topic write command-post/alerts
 
 user predictive
 topic read sentinel/+/telemetry
@@ -18,3 +20,4 @@ topic read sentinel/+/telemetry
 user screen
 topic read sentinel/+/telemetry
 topic read sentinel/+/alert
+topic read command-post/alerts

@@ -13,6 +13,7 @@ The nervous system of the Command Post: ingests from two paths, persists history
 - **Recompute `Status`** (`nominal`/`elevated`/`critical`) after every Alert.
 - **WebSocket** feed → live push to the dashboard (`telemetry`, `alert`, `status` frames).
 - Relay Operator actuator commands: `POST /api/v1/commands` → MQTTS `command/<id>/actuator` → Sentinel.
+- Keep the Alert board on the broker for the Command Post's status screen: one retained message on `command-post/alerts`, `{ ts, alerts }`, the Alerts raised that are not a Sentinel's (`intrusion`, `predictive`, `cyber`), the most severe first, under the broker's 4096-byte packet limit. Put up again each time the broker connection comes up.
 
 ## Security
 Rules in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#security-model-binding-for-every-workstream).

@@ -108,6 +108,8 @@ Conflicts=getty@tty1.service
 
 [Service]
 User=$USER
+# The eye draws straight on the HDMI output: the groups that own it, whatever the user's are.
+SupplementaryGroups=video render
 ExecStart=/usr/bin/python3 "$PWD/infra/screen.py" $table
 StandardInput=tty
 StandardOutput=tty
@@ -219,6 +221,18 @@ done
 if ((${#missing[@]})); then
   $online || ui_fail "paquets manquants (${missing[*]}) : branche l'Ethernet, puis relance."
   ui_run "installation de ${missing[*]}" install_packages "${missing[@]}"
+fi
+# The eye of the HDMI screen (infra/eye.py): without them the screen keeps its status, as text.
+eye_missing=()
+for package in python3-pygame fonts-dejavu-core; do
+  dpkg -s "$package" >/dev/null 2>&1 || eye_missing+=("$package")
+done
+if ((${#eye_missing[@]})); then
+  if $online; then
+    ui_run "installation de ${eye_missing[*]}" install_packages "${eye_missing[@]}"
+  else
+    ui_note "sans Internet, l'écran HDMI reste en texte : relance avec l'Ethernet pour l'œil (${eye_missing[*]})."
+  fi
 fi
 if ! command -v docker >/dev/null; then
   $online || ui_fail "Docker manque : branche l'Ethernet, puis relance."
@@ -396,6 +410,9 @@ ui_task "démarrage des conteneurs" with_group docker docker compose up -d
 ui_task "vérification du certificat que sert le broker" serves 8883 "$secrets/mosquitto/broker.crt"
 if ((UI_RC != 0)) || $screen_account_new; then
   ui_run "redémarrage du broker" with_group docker docker compose restart mosquitto
+else
+  # A broker that was already running reads its ACL again: setup.sh copies it each run.
+  ui_task "relecture des droits du broker" with_group docker docker compose kill -s SIGHUP mosquitto
 fi
 ui_task "vérification du certificat que sert le proxy" serves 443 "$secrets/caddy/proxy.crt"
 if ((UI_RC != 0)); then

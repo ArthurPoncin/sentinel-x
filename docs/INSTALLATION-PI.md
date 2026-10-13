@@ -172,7 +172,24 @@ Au démarrage de `vision`, le servo se met au centre : c'est la position de repo
 
 ### L'écran de statut
 
-Il remplace l'écran de l'ESP32 et se redessine chaque seconde : le Wi-Fi de la table et son point d'accès, l'adresse du dashboard, le Sentinel et ses dernières mesures, ses alertes en cours (en rouge et en capitales quand elles sont critiques), la webcam et les conteneurs. Les alertes d'intrusion et prédictives ne passent pas par le broker : elles sont sur le dashboard.
+Il remplace l'écran de l'ESP32 et se redessine chaque seconde : le Wi-Fi de la table et son point d'accès, l'adresse du dashboard, le Sentinel et ses dernières mesures, les alertes en cours (en rouge et en capitales quand elles sont critiques), la webcam et les conteneurs.
+
+Il s'affiche au démarrage, puis dès qu'il manque quelque chose pendant 4 s (Sentinel, broker, point d'accès, conteneur). Quand tout tourne, l'écran passe à **l'œil** :
+
+| Alerte | L'œil |
+|---|---|
+| aucune | cyan, il regarde autour de lui et cligne |
+| intrusion | rouge, pupille serrée, il suit la personne que suit la caméra |
+| cyberattaque | magenta, l'image se déchire |
+| gaz | jaune vert, à moitié fermé |
+| température | orange, il vacille |
+| dérive (prédictif) | violet, il regarde en rond |
+| bruit | ambre, des ondes en sortent selon le niveau sonore |
+| présence | pupille grande ouverte, il regarde droit devant |
+
+Une alerte critique le fait battre, avec un cadre rouge. Autour, un radar vu de dessus, l'avant du boîtier vers le bas : chaque personne vue par la caméra y est à sa place. Sous l'œil : les mesures et l'adresse du dashboard.
+
+Pour voir tous les visages sur un PC, sans Pi : `python3 infra/screen.py --demo` (avec pygame installé).
 
 | Ligne **Sentinel** | Ce que ça veut dire |
 |---|---|
@@ -255,6 +272,9 @@ L'écran HDMI :
 | Écran noir | Force la sortie du deuxième port en 800×480 : `sudo sed -i '1 s/$/ video=HDMI-A-2:800x480M@60D/' /boot/firmware/cmdline.txt`, puis `sudo reboot` |
 | Une invite de connexion au lieu du statut | `systemctl status sentinel-x-screen` ; ses erreurs : `journalctl -u sentinel-x-screen` |
 | `BROKER ?` et `paho-mqtt manque` ou `pas de compte screen` | Relance le script (avec Internet la première fois) |
+| Tout tourne mais l'écran reste en texte, sans l'œil | `journalctl -u sentinel-x-screen` dit pourquoi. Le plus souvent `python3-pygame` manque : relance le script avec l'Ethernet |
+| L'œil ne réagit pas à une intrusion ou à une cyberattaque | Les droits du broker datent d'avant l'œil : relance le script (`--no-flash` suffit) |
+| L'œil regarde du mauvais côté | La caméra au repos ne regarde pas du même côté que l'écran : remets-la face à l'avant du boîtier |
 
 Le script lui-même :
 

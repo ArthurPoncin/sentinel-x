@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""The Command Post's status screen, on the Pi's HDMI console (tty1): the table Wi-Fi, the Sentinel,
-its last readings and raised Alerts, the webcam and the stack, redrawn every second. What the brief's
-OLED showed on the Sentinel, on a screen plugged into the Pi instead. Run by the sentinel-x-screen
-systemd unit that infra/plug-and-play.sh installs:
+"""The Command Post's screen, on the Pi's HDMI (tty1). While something is missing, its status: the table
+Wi-Fi, the Sentinel, its last readings and raised Alerts, the webcam and the stack, what the brief's
+OLED showed on the Sentinel. Once everything runs, an eye that watches (infra/eye.py): its colour and
+its manner are those of the Alerts raised, and it follows the intruder the camera follows. Run by the
+sentinel-x-screen systemd unit that infra/plug-and-play.sh installs:
     python3 infra/screen.py <table number>
+    python3 infra/screen.py --demo      # on a laptop: every face of the eye in turn, no Pi needed
 
-The Python of the Pi OS, nothing to install but python3-paho-mqtt (plug-and-play.sh does). It reads
-the broker with its own MQTT account, `screen`, which may only read the Sentinels' telemetry and
-Alerts (infra/mosquitto/acl); Docker, NetworkManager and the DHCP leases with the user's own rights.
-The Alerts of vision and predictive go to the api, not to the broker: the dashboard shows them.
+The Python of the Pi OS, with python3-paho-mqtt and, for the eye, python3-pygame (plug-and-play.sh
+installs both): without pygame, or where it cannot open the screen, the status stays, as text on the
+console. It reads the broker with its own MQTT account, `screen`, which may only read the Sentinels'
+telemetry and Alerts and the board where the api puts up the others, the AI services' and its own
+(infra/mosquitto/acl); Docker, NetworkManager and the DHCP leases with the user's own rights.
 """
 
 from __future__ import annotations
@@ -42,10 +45,24 @@ FONTS = [
 ]
 # The Sentinel sends a snapshot a second: without one for this long, it is no longer online.
 ONLINE_S = 10
-# Docker, the access point and the DHCP leases are read this often; the screen is drawn every second.
+# Docker, the access point and the DHCP leases are read this often; the status is drawn every second.
 POLL_S = 5
+# The status comes back once something has been missing for this long: not for one reading that failed.
+TROUBLE_S = 4
+# Where the api puts up the Alerts that are not the Sentinel's (backend/src/alert-board.ts).
+BOARD = "command-post/alerts"
+# The webcam's horizontal field of view, in degrees: vision's CAMERA_FOV_DEG.
+CAMERA_FOV = 60
 
-KINDS = {"gas": "gaz", "thermal": "température", "presence": "présence", "noise": "bruit"}
+KINDS = {
+    "gas": "gaz",
+    "thermal": "température",
+    "presence": "présence",
+    "noise": "bruit",
+    "intrusion": "intrusion",
+    "predictive": "dérive",
+    "cyber": "cyberattaque",
+}
 
 RESET, BOLD, DIM = "\033[0m", "\033[1m", "\033[2m"
 RED, GREEN, YELLOW, CYAN = "\033[31m", "\033[32m", "\033[33m", "\033[36m"
@@ -84,6 +101,9 @@ class Snapshot:
     readings: dict | None
     age: float | None  # seconds since the last telemetry, None before the first
     alerts: list[tuple[str, str]]  # (kind, severity), in the order they were raised
+    # The people the camera sees, the one it follows first: (degrees to the right of where the camera
+    # rests, share of the image's height they take, 0 far to 1 close).
+    people: list[tuple[float, float]] = field(default_factory=list)
 
 
 @dataclass
@@ -96,6 +116,7 @@ class Sentinel:
     readings: dict | None = None
     seen_at: float | None = None
     alerts: dict[str, tuple[str, str]] = field(default_factory=dict)  # alert_id → (kind, severity)
+    board: list[dict] = field(default_factory=list)  # the api's board, as it last put it up
 
     def take(self, topic: str, payload: bytes) -> None:
         try:
@@ -105,7 +126,10 @@ class Sentinel:
         if not isinstance(data, dict):
             return
         with self.lock:
-            if topic.endswith("/telemetry") and isinstance(data.get("readings"), dict):
+            if topic == BOARD:
+                if isinstance(data.get("alerts"), list):
+                    self.board = [alert for alert in data["alerts"][:16] if isinstance(alert, dict)]
+            elif topic.endswith("/telemetry") and isinstance(data.get("readings"), dict):
                 self.readings, self.seen_at = data["readings"], time.monotonic()
             elif topic.endswith("/alert") and isinstance(data.get("alert_id"), str):
                 if data.get("state") == "cleared":
@@ -114,14 +138,36 @@ class Sentinel:
                     # A raised again with another severity replaces the first, in its place.
                     self.alerts[data["alert_id"]] = (str(data.get("kind")), str(data.get("severity")))
 
-    def snapshot(self, now: float) -> Snapshot:
+    def snapshot(self, now: float, board: bool = True) -> Snapshot:
+        """`board` False leaves the api's board out: an api that stopped left its last one on the broker."""
         with self.lock:
             age = None if self.seen_at is None else now - self.seen_at
             if age is None or age > ONLINE_S:
                 # Gone, it may come back from a reboot that forgot them: on reconnecting, it sends
                 # every Alert it still has raised again.
                 self.alerts.clear()
-            return Snapshot(self.connected, self.problem, self.readings, age, list(self.alerts.values()))
+            alerts, people = list(self.alerts.values()), []
+            for raised in self.board if board and self.connected else []:
+                alerts.append((str(raised.get("kind")), str(raised.get("severity"))))
+                detail = raised.get("detail")
+                if raised.get("kind") == "intrusion" and isinstance(detail, dict):
+                    pan = detail.get("pan")
+                    others = detail.get("others")
+                    for person in [detail] + (others if isinstance(others, list) else []):
+                        if isinstance(person, dict) and number(person.get("x_norm")):
+                            near = person.get("h_norm")
+                            people.append((
+                                bearing(person["x_norm"], pan if number(pan) else 0.0),
+                                min(1.0, max(0.0, near)) if number(near) else 0.5,
+                            ))
+            return Snapshot(self.connected, self.problem, self.readings, age, alerts, people)
+
+
+def bearing(x_norm: float, pan: float) -> float:
+    """Where someone at `x_norm` across the image is, in degrees to the right of where the camera rests,
+    the camera turned by `pan`."""
+    across = (2 * min(1.0, max(0.0, x_norm)) - 1) * math.tan(math.radians(CAMERA_FOV / 2))
+    return pan + math.degrees(math.atan(across))
 
 
 def listen(pi_ip: str, sentinel: Sentinel):
@@ -145,7 +191,7 @@ def listen(pi_ip: str, sentinel: Sentinel):
             text = mqtt.connack_string(reason) if isinstance(reason, int) else str(reason)
             sentinel.problem = f"broker : {printable(text, 30)}" if refused else ""
         if not refused:
-            client.subscribe([("sentinel/+/telemetry", 0), ("sentinel/+/alert", 1)])
+            client.subscribe([("sentinel/+/telemetry", 0), ("sentinel/+/alert", 1), (BOARD, 1)])
 
     def on_disconnect(_client, _userdata, *_args):
         with sentinel.lock:
@@ -279,10 +325,10 @@ def render(width: int, table: int, ssid: str, pi_ip: str, sentinel_ip: str, syst
     elif seen.connected:
         lines.append(row("", f"{DIM}pas encore de mesure{RESET}"))
 
-    if not online:
-        alerts = f"{DIM}-{RESET}"
-    elif seen.alerts:
+    if seen.alerts:
         alerts = " · ".join(alert(kind, severity) for kind, severity in seen.alerts)
+    elif not online:
+        alerts = f"{DIM}-{RESET}"
     else:
         alerts = f"{GREEN}aucune{RESET}"
     lines += [row("Alertes", alerts), ""]
@@ -315,6 +361,107 @@ def render(width: int, table: int, ssid: str, pi_ip: str, sentinel_ip: str, syst
     return lines
 
 
+def trouble(system: dict, seen: Snapshot) -> bool:
+    """Whether something of the Command Post is missing: the status says what, instead of the eye."""
+    containers = system.get("containers")
+    return (
+        not seen.connected
+        or seen.age is None
+        or seen.age > ONLINE_S
+        or system.get("access_point") is False
+        or not containers
+        or any(state in ("down", "unhealthy") for state in containers.values())
+    )
+
+
+class Watch:
+    """What the screen shows, kept up to date in the background: what the broker says and, every POLL_S,
+    what the Pi itself says. Nothing here makes a drawing wait."""
+
+    def __init__(self, table: int, stop: threading.Event) -> None:
+        self.table = table
+        self.pi_ip, self.sentinel_ip = f"192.168.{table}.1", f"192.168.{table}.10"
+        self.ssid = printable(env_value(SECRETS / "wifi.env", "WIFI_SSID") or f"SentinelX-{table}", 32)
+        self._stop, self._system, self._sentinel = stop, {}, Sentinel()
+        self._client = listen(self.pi_ip, self._sentinel)
+        # The status first, until everything is seen to run.
+        self._trouble_since: float | None = -math.inf
+        threading.Thread(target=self._poll, name="poll", daemon=True).start()
+
+    def _poll(self) -> None:
+        while not self._stop.is_set():
+            self._system = poll(self.sentinel_ip)
+            self._stop.wait(POLL_S)
+
+    def look(self, now: float) -> tuple[dict, Snapshot, bool]:
+        """What the Pi says, what the broker says, and whether the status is to be shown."""
+        system = self._system
+        # An api that is not running left its last board on the broker: it tells nothing of now.
+        api = (system.get("containers") or {}).get("api", "ok")
+        seen = self._sentinel.snapshot(now, board=api == "ok")
+        if system and not trouble(system, seen):
+            self._trouble_since = None
+        elif self._trouble_since is None:
+            self._trouble_since = now
+        return system, seen, self._trouble_since is not None and now - self._trouble_since >= TROUBLE_S
+
+    def lines(self, width: int, system: dict, seen: Snapshot) -> list[str]:
+        return render(width, self.table, self.ssid, self.pi_ip, self.sentinel_ip, system, seen)
+
+    def close(self) -> None:
+        if self._client is not None:
+            self._client.loop_stop()
+
+
+class Demo:
+    """A Command Post that is not there: every face of the eye in turn, to see them on a laptop."""
+
+    table, ssid, pi_ip, sentinel_ip = 0, "SentinelX-0", "192.168.0.1", "192.168.0.10"
+    SCENES = [
+        ("status", []),
+        ("nominal", []),
+        ("presence", [("presence", "info")]),
+        ("noise", [("noise", "warning")]),
+        ("gas", [("gas", "warning")]),
+        ("thermal", [("thermal", "critical")]),
+        ("predictive", [("predictive", "warning")]),
+        ("cyber", [("cyber", "critical")]),
+        ("intrusion", [("intrusion", "critical")]),
+    ]
+    SCENE_S = 7
+
+    def scene(self, now: float) -> tuple[str, float]:
+        """The scene played at `now` and how far into it, 0 to 1."""
+        at = now % (self.SCENE_S * len(self.SCENES))
+        return self.SCENES[int(at // self.SCENE_S)][0], at % self.SCENE_S / self.SCENE_S
+
+    def look(self, now: float) -> tuple[dict, Snapshot, bool]:
+        name, share = self.scene(now)
+        status = name == "status"
+        containers = dict.fromkeys(("api", "dashboard", "mosquitto", "predictive", "reverse-proxy"), "ok")
+        containers["vision"] = "starting" if status else "ok"
+        system = {"access_point": True, "on_wifi": not status, "webcam": True, "containers": containers}
+        readings = {
+            "temp": 41.5 if name == "thermal" else 22.4,
+            "humidity": 46,
+            "air": 2350 if name == "gas" else 410,
+            "pir": name in ("presence", "intrusion"),
+            "sound": 0.2 + 0.7 * abs(math.sin(now * 3)) if name == "noise" else 0.04,
+        }
+        people = []
+        if name == "intrusion":
+            # Someone who walks across the room and back, a second one who stands further away.
+            people = [(55 * math.sin(share * 2 * math.pi), 0.55 + 0.25 * math.cos(share * 4 * math.pi)), (-38.0, 0.3)]
+        alerts = dict(self.SCENES)[name]
+        return system, Snapshot(True, "", None if status else readings, None if status else 0.4, alerts, people), status
+
+    def lines(self, width: int, system: dict, seen: Snapshot) -> list[str]:
+        return render(width, self.table, self.ssid, self.pi_ip, self.sentinel_ip, system, seen)
+
+    def close(self) -> None:
+        pass
+
+
 def fit(line: str, width: int) -> str:
     """The line cut to `width` columns, its colours kept: a longer one would wrap and push the rest down."""
     out, seen, at = [], 0, 0
@@ -340,25 +487,34 @@ def prepare_console() -> None:
 
 
 def main() -> None:
-    if len(sys.argv) != 2 or not sys.argv[1].isdigit() or not 0 <= int(sys.argv[1]) <= 254:
-        sys.exit("Usage: python3 infra/screen.py <table number>")
-    table = int(sys.argv[1])
-    pi_ip, sentinel_ip = f"192.168.{table}.1", f"192.168.{table}.10"
-    ssid = printable(env_value(SECRETS / "wifi.env", "WIFI_SSID") or f"SentinelX-{table}", 32)
+    demo = sys.argv[1:] == ["--demo"]
+    if not demo and (len(sys.argv) != 2 or not sys.argv[1].isdigit() or not 0 <= int(sys.argv[1]) <= 254):
+        sys.exit("Usage: python3 infra/screen.py <table number> | --demo")
 
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
-    prepare_console()
-    sentinel = Sentinel()
-    client = listen(pi_ip, sentinel)
-    system, polled = {}, -math.inf
+    # The eye when pygame is there and opens the screen; the console otherwise.
+    stage = None
+    try:
+        import eye
+
+        stage = eye.Stage()
+    except Exception as error:  # pygame missing, no screen, no right to it: whatever SDL says
+        print(f"no eye, the status stays on the console: {printable(error, 200)}", file=sys.stderr)
+        if demo:
+            sys.exit(1)
+        prepare_console()
+    watch = Demo() if demo else Watch(int(sys.argv[1]), stop)
     try:
         while not stop.is_set():
-            now = time.monotonic()
-            if now - polled >= POLL_S:
-                system, polled = poll(sentinel_ip), now
+            system, seen, status = watch.look(time.monotonic())
+            if stage is not None:
+                # Its own pace, a frame at a time; False once its window was closed.
+                if not stage.draw(watch, system, seen, status):
+                    break
+                continue
             width, height = shutil.get_terminal_size((50, 15))
-            lines = render(width, table, ssid, pi_ip, sentinel_ip, system, sentinel.snapshot(now))
+            lines = watch.lines(width, system, seen)
             # From the top, each line over the last one: no flicker, and no newline after the last row,
             # which would scroll the screen.
             sys.stdout.write("\033[H" + "\033[K\n".join(fit(line, width) for line in lines[:height]) + "\033[K\033[J")
@@ -367,10 +523,12 @@ def main() -> None:
     except KeyboardInterrupt:
         pass
     finally:
-        if client is not None:
-            client.loop_stop()
-        sys.stdout.write(f"{RESET}\033[2J\033[H\033[?25h")
-        sys.stdout.flush()
+        watch.close()
+        if stage is not None:
+            stage.close()
+        else:
+            sys.stdout.write(f"{RESET}\033[2J\033[H\033[?25h")
+            sys.stdout.flush()
 
 
 if __name__ == "__main__":

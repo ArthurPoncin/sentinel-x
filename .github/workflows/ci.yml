@@ -145,7 +145,7 @@ jobs:
       - name: The Pi's scripts pass shellcheck
         run: shellcheck --shell=bash --external-sources --severity=warning infra/*.sh cyber/*.sh
       - name: The status screen compiles
-        run: python3 -m py_compile infra/screen.py
+        run: python3 -m py_compile infra/screen.py infra/eye.py
       # With what infra/setup.sh and infra/plug-and-play.sh put there on the Pi: the secrets' files, the
       # webcam and its servo.
       - name: The Compose stack is valid, with the webcam and its servo

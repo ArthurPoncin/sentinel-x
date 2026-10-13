@@ -140,8 +140,27 @@ max_packet_size 4096
 ```
 
 ## The status screen
-The Pi's HDMI screen (800×480, either micro-HDMI port) shows what the brief's OLED showed on the Sentinel, and more: the table Wi-Fi and whether its access point is up, the dashboard's address, the Sentinel (`EN LIGNE`, `SUR LE WI-FI`, `MUET`, `ABSENT`), its last readings and raised Alerts, the webcam and the containers. Redrawn every second by [`screen.py`](screen.py), the Pi OS's Python and `python3-paho-mqtt`, on the console in large Terminus letters, without a desktop.
-- **Where it reads:** the broker, with its own MQTT account `screen` (made by `setup.sh`, in `infra/secrets/screen.env`), which may only read `sentinel/+/telemetry` and `sentinel/+/alert`; the DHCP leases, NetworkManager and `docker ps` with the user's own rights. The `intrusion` and `predictive` Alerts go to the api, not to the broker: they are on the dashboard only. Text from the network is stripped of control characters before it reaches the console.
+The Pi's HDMI screen (800×480, either micro-HDMI port) has two faces, both by [`screen.py`](screen.py), without a desktop.
+- **The status, while something is missing** (at start, then whenever the Sentinel, the broker, the access point or a container is not there for 4 s): what the brief's OLED showed on the Sentinel, and more. The table Wi-Fi and whether its access point is up, the dashboard's address, the Sentinel (`EN LIGNE`, `SUR LE WI-FI`, `MUET`, `ABSENT`), its last readings and raised Alerts, the webcam and the containers, redrawn every second.
+- **The eye, once everything runs** ([`eye.py`](eye.py), drawn with pygame straight on the HDMI output): the Outpost's Status at a glance, with the readings and the dashboard's address under it.
+
+| Alert shown (the most severe, then in this order) | The eye |
+|---|---|
+| none | cyan, looks around, blinks |
+| `intrusion` | red, pupil shut tight, follows the person the camera follows |
+| `cyber` | magenta, the picture tears |
+| `gas` | yellow green, half shut |
+| `thermal` | orange, flickers |
+| `predictive` | violet, looks around in circles |
+| `noise` | amber; rings run out of it, as wide as the sound is loud |
+| `presence` | pupil wide open, looks straight ahead |
+
+A critical Alert makes it beat, with a red frame. Around the eye, a radar seen from above, the front of the box toward the bottom: each person the camera sees is on its ring, where they stand around the box.
+- **Where the eye looks:** the bearing of the followed person is the camera's `pan` plus their place across the image (`x_norm`, through the 60° field of view), both from the `intrusion` Alert. The eye turns the other way across the screen, as in a mirror: it looks at the person, for whoever faces the box. This holds when the camera at rest and the screen face the same way.
+- **Without pygame** (`python3-pygame` and `fonts-dejavu-core`, installed by `plug-and-play.sh` when there is Internet), or when it cannot open the screen: the status only, on the console in large Terminus letters. `journalctl -u sentinel-x-screen` says why.
+- **On a laptop:** `python3 infra/screen.py --demo` plays every face in turn in a window, with pygame installed. No Pi, no broker.
+- **Where it reads:** the broker, with its own MQTT account `screen` (made by `setup.sh`, in `infra/secrets/screen.env`), which may only read `sentinel/+/telemetry`, `sentinel/+/alert` and `command-post/alerts`, the board where the api keeps the Alerts that are not a Sentinel's (`intrusion`, `predictive`, `cyber`); the DHCP leases, NetworkManager and `docker ps` with the user's own rights. While the `api` container is not running, its board is left out. Text from the network is stripped of control characters before it reaches the console.
+- **Upside down:** `rotate=180` in `cmdline.txt` (see the enclosure's README) turns the console; the eye reads it there and turns with it.
 - **How it runs:** the `sentinel-x-screen` systemd unit, as the user, on `tty1` in place of its login prompt (`getty@tty1` disabled; ctrl+alt+F2 gives one); its errors in `journalctl -u sentinel-x-screen`.
 - **A black screen:** `video=HDMI-A-2:800x480M@60D` at the end of `/boot/firmware/cmdline.txt` forces the second port on, at 800×480.
 

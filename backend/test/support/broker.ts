@@ -8,6 +8,7 @@ import { Aedes } from 'aedes'
 import { connectAsync } from 'mqtt'
 import { generate } from 'selfsigned'
 import { onTestFinished, vi } from 'vitest'
+import { ALERT_BOARD_TOPIC } from '../../src/alert-board.js'
 import type { MqttConfig } from '../../src/mqtt.js'
 
 const API_PASSWORD = 'api-password'
@@ -73,8 +74,10 @@ export async function startBroker() {
   let port = 0
   // Topic filters the clients of the running broker hold.
   const subscriptions: string[] = []
-  // Everything the clients published, in the order the broker took it.
+  // Everything the clients published, in the order the broker took it, but the api's Alert board.
   const published: { topic: string; payload: string }[] = []
+  // The Alert boards the api put up, in the order the broker took them.
+  const boards: string[] = []
   // While set: the topics of the publications the running broker received and left unanswered.
   let unanswered: string[] | undefined
 
@@ -89,7 +92,9 @@ export async function startBroker() {
     })
     aedes.on('subscribe', (granted) => subscriptions.push(...granted.map(({ topic }) => topic)))
     aedes.on('publish', ({ topic, payload }, client) => {
-      if (client) published.push({ topic, payload: payload.toString() })
+      if (!client) return
+      if (topic === ALERT_BOARD_TOPIC) boards.push(payload.toString())
+      else published.push({ topic, payload: payload.toString() })
     })
 
     const sockets = new Set<Socket>()
@@ -129,6 +134,7 @@ export async function startBroker() {
     } satisfies MqttConfig,
     subscriptions,
     published,
+    boards,
     // Resolves once a client holds a subscription on the running broker.
     subscribed: () =>
       vi.waitFor(
