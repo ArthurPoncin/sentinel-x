@@ -6,14 +6,16 @@ import { useLiveFeed } from '@/features/live-feed'
 import { fetchLastClosedIncident } from '@/features/replay'
 import { acknowledge, type Command, failureLine, type Reply, VoiceControlProvider } from '@/features/voice'
 import { type Answer, answer, driveAlarm, presetOfVoice } from './alarm'
-import { inTutorial, NAV, TWIN } from './app-sidebar'
+import { inTutorial, inVoiceTutorial, NAV, TWIN } from './app-sidebar'
 import { replayAsked } from './replay-asked'
 import { windowsAsked, windowsOfVoice } from './windows-asked'
 
 // Where a voice command leads from `pathname`: to the screen it names. Nowhere when it names none, or the one
 // the app is on already, a slash at its end or not. Out of the tutorial too: a screen's name is not one of the
-// gestures tried there, and a swipe would never lead out of it.
+// gestures tried there, and a swipe would never lead out of it. Not out of the voice's own: there a screen's
+// name is a command that is tried, as any other.
 export function pageOfVoice(command: Command, pathname: string): string | null {
+  if (inVoiceTutorial(pathname)) return null
   const to = NAV.find(({ voice }) => voice === command)?.to
   return to === undefined || to === (pathname.replace(/\/+$/, '') || '/') ? null : to
 }
@@ -41,7 +43,8 @@ interface Props {
 // the Status and the active Alerts said; « silence » hushes the announcements, until they are asked for again.
 // Each command taken is answered in a short sentence, said and written, and so is one refused or not
 // understood. The ear is closed while the dashboard talks. An ear that cannot listen says why, and the switch
-// is off again.
+// is off again. In the voice's own tutorial every command is only tried: the page marks it, and nothing else
+// is done.
 export function VoiceControl({ navigate, pathname, children }: Props) {
   const sentinel = useLiveFeed((state) => state.latestTelemetry?.sentinel ?? null)
   const alerts = useLiveFeed((state) => state.activeAlerts)
@@ -70,6 +73,8 @@ export function VoiceControl({ navigate, pathname, children }: Props) {
 
   // Carries the command out, and gives the sentences that answer it: once it is known how it went.
   const carryOut = async (command: Command): Promise<readonly string[]> => {
+    // The voice's tutorial: the lesson is marked there, nothing is sent and the screen stays.
+    if (inVoiceTutorial(pathname())) return [acknowledge('tried')]
     switch (command) {
       case 'report':
         return [acknowledge(command), ...report({ alerts, status })]
@@ -92,7 +97,8 @@ export function VoiceControl({ navigate, pathname, children }: Props) {
       }
       case 'operator':
       case 'twin':
-      case 'tutorial': {
+      case 'tutorial':
+      case 'voice-tutorial': {
         const page = pageOfVoice(command, pathname())
         if (!page) return [acknowledge('already-there')]
         navigate(page)

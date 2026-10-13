@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { driveAlarm, presetOfGesture, presetOfVoice } from './alarm'
-import { TUTORIAL } from './app-sidebar'
+import { TUTORIAL, VOICE_TUTORIAL } from './app-sidebar'
 
 // The Command Post API, answering every command with `status`: what it was sent is kept.
 function commandPost(status = 202) {
@@ -58,6 +58,12 @@ describe('a voice command for the Alarm', () => {
     expect(presetOfVoice('siren', TUTORIAL)).toBeNull()
     expect(presetOfVoice('siren-off', `${TUTORIAL}/`)).toBeNull()
     expect(presetOfGesture('alarm', TUTORIAL)).toBeNull()
+  })
+
+  it("never drives the siren from the voice's tutorial", () => {
+    expect(presetOfVoice('siren', VOICE_TUTORIAL)).toBeNull()
+    expect(presetOfVoice('siren-off', VOICE_TUTORIAL)).toBeNull()
+    expect(presetOfVoice('siren', `${VOICE_TUTORIAL}/`)).toBeNull()
   })
 
   it('has no preset for a gesture that is not about the Alarm', () => {

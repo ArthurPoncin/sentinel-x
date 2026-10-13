@@ -123,6 +123,7 @@ describe('interpret', () => {
     expect(WORDINGS.operator).toEqual(['opérateur', 'écran opérateur', 'vue opérateur'])
     expect(WORDINGS.twin).toEqual(['jumeau', 'jumeau numérique', 'écran jumeau'])
     expect(WORDINGS.tutorial).toEqual(['tutoriel', 'tutoriel des gestes', 'gestes'])
+    expect(WORDINGS['voice-tutorial']).toEqual(['tutoriel vocal', 'tutoriel de la voix', 'commandes vocales'])
     expect(WORDINGS['replay-last']).toEqual([
       'rejoue le dernier incident',
       'relance le dernier incident',

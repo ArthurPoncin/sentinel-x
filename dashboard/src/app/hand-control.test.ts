@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { handLine } from '@/features/gestures/components/hand-hud'
 import { HANDS_OFF } from '@/features/gestures/stores/hand-store'
-import { inTutorial, screens, TUTORIAL } from './app-sidebar'
+import { inTutorial, inVoiceTutorial, screens, TUTORIAL, VOICE_TUTORIAL } from './app-sidebar'
 import { pageAfter } from './hand-control'
 
 describe('pageAfter', () => {
@@ -20,6 +20,8 @@ describe('pageAfter', () => {
     for (const from of ['/', '/twin']) {
       expect(pageAfter(from, 'page-left')).not.toBe(TUTORIAL)
       expect(pageAfter(from, 'page-right')).not.toBe(TUTORIAL)
+      expect(pageAfter(from, 'page-left')).not.toBe(VOICE_TUTORIAL)
+      expect(pageAfter(from, 'page-right')).not.toBe(VOICE_TUTORIAL)
     }
   })
 })
@@ -33,10 +35,24 @@ describe('inTutorial', () => {
   })
 })
 
+describe('inVoiceTutorial', () => {
+  it("is the voice's tutorial with a slash at its end too, and no other screen", () => {
+    expect(inVoiceTutorial(VOICE_TUTORIAL)).toBe(true)
+    expect(inVoiceTutorial(`${VOICE_TUTORIAL}/`)).toBe(true)
+    expect(inVoiceTutorial('/')).toBe(false)
+    expect(inVoiceTutorial(TUTORIAL)).toBe(false)
+  })
+})
+
 describe('screens', () => {
   it('has the tutorial in the menu only while the hand control is on', () => {
     expect(screens(false).map(({ to }) => to)).toEqual(['/', '/twin'])
     expect(screens(true).map(({ to }) => to)).toEqual(['/', '/twin', TUTORIAL])
+  })
+
+  it("has the voice's tutorial only while the voice control is on, next to the gestures'", () => {
+    expect(screens(false, true).map(({ to }) => to)).toEqual(['/', '/twin', VOICE_TUTORIAL])
+    expect(screens(true, true).map(({ to }) => to)).toEqual(['/', '/twin', TUTORIAL, VOICE_TUTORIAL])
   })
 })
 

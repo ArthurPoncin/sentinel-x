@@ -2,6 +2,7 @@
 export { VoiceControlProvider } from './components/voice-control-provider'
 export { VoiceHalo } from './components/voice-halo'
 export { VoiceHud } from './components/voice-hud'
+export { VoiceTutorial } from './components/voice-tutorial'
 export { useVoiceState, useVoiceSwitch } from './hooks/use-voice-control'
 export type { Failure } from './api/ear'
 export type { Command, Screen, WindowCommand, WindowName } from './utils/interpret'

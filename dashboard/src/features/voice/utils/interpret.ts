@@ -15,7 +15,7 @@ export const ASLEEP: Wake = { until: -Infinity }
 export const WAKE_WORD = 'sentinelle'
 
 // The screens of the menu, each a command of its own: its name is the way to it.
-export const SCREENS = ['operator', 'twin', 'tutorial'] as const
+export const SCREENS = ['operator', 'twin', 'tutorial', 'voice-tutorial'] as const
 
 export type Screen = (typeof SCREENS)[number]
 
@@ -60,6 +60,7 @@ export const WORDINGS: Readonly<Record<Command, readonly string[]>> = {
   operator: ['opérateur', 'écran opérateur', 'vue opérateur'],
   twin: ['jumeau', 'jumeau numérique', 'écran jumeau'],
   tutorial: ['tutoriel', 'tutoriel des gestes', 'gestes'],
+  'voice-tutorial': ['tutoriel vocal', 'tutoriel de la voix', 'commandes vocales'],
   'replay-last': ['rejoue le dernier incident', 'relance le dernier incident', 'montre le dernier incident'],
   report: ['rapport', 'fais ton rapport', 'au rapport'],
   // The announcements, hushed until they are asked for again.

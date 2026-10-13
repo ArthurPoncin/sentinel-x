@@ -1,13 +1,15 @@
 import { type Command, ofWindows, WINDOW_NAMES } from './interpret'
 
 // What the voice answers to: a command it carried out, or what kept it from one. Words that were no command,
-// a command it was not sure of, one only tried in the tutorial, a screen the app is on already, a window closed
-// where none is open, no Incident to replay or none to be had, and an Alarm the Command Post did not relay.
+// a command it was not sure of, one only tried in the gestures' tutorial, one tried in its own, a screen the app
+// is on already, a window closed where none is open, no Incident to replay or none to be had, and an Alarm the
+// Command Post did not relay.
 export type Reply =
   | Command
   | 'unknown'
   | 'unsure'
   | 'only-tried'
+  | 'tried'
   | 'already-there'
   | 'no-window'
   | 'nothing-to-replay'
@@ -22,6 +24,7 @@ export const ACKNOWLEDGEMENTS: Readonly<Record<Reply, readonly [string, ...strin
   operator: ['Écran opérateur.', "Voici l'écran opérateur."],
   twin: ['Jumeau numérique.', 'Voici le jumeau numérique.'],
   tutorial: ['Tutoriel des gestes.', 'Voici le tutoriel des gestes.'],
+  'voice-tutorial': ['Tutoriel de la voix.', 'Voici le tutoriel de la voix.'],
   'replay-last': ['Je rejoue le dernier incident.', 'Dernier incident, sur le jumeau.'],
   report: ['Rapport.', 'Voici le rapport.', 'État du site.'],
   silence: ['Annonces coupées.', 'Entendu, je me tais.'],
@@ -35,6 +38,8 @@ export const ACKNOWLEDGEMENTS: Readonly<Record<Reply, readonly [string, ...strin
   unknown: ["Je n'ai pas compris.", 'Commande inconnue.'],
   unsure: ['Je ne suis pas sûre, répétez.', 'Pouvez-vous répéter ?'],
   'only-tried': ['Dans le tutoriel, la commande est seulement essayée.'],
+  // In the voice's own tutorial, where each command is a lesson: short, another one follows.
+  tried: ['Réussi.', 'Commande reconnue.', "C'est bien ça."],
   'no-window': ["Aucune fenêtre n'est ouverte ici."],
   'already-there': ['Vous y êtes déjà.', 'Cet écran est déjà affiché.'],
   'nothing-to-replay': ['Aucun incident à rejouer.'],

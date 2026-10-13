@@ -32,6 +32,7 @@ interface Props {
 export function VoiceControlProvider({ onCommand, onFailure, onMissed, talking = false, ear = listen, children }: Props) {
   const [store] = useState(createVoiceStore)
   const [enabled, setEnabledState] = useState(() => readEnabled(window.localStorage))
+  const [failure, setFailure] = useState<Failure | null>(null)
   // The latest listeners, so that new ones never open a new ear.
   const told = useRef({ onCommand, onFailure, onMissed })
   useEffect(() => {
@@ -43,6 +44,8 @@ export function VoiceControlProvider({ onCommand, onFailure, onMissed, talking =
   const setEnabled = useCallback((next: boolean) => {
     writeEnabled(window.localStorage, next)
     setEnabledState(next)
+    // Switched on again: what kept the ear from listening is to be found out anew.
+    if (next) setFailure(null)
   }, [])
 
   useEffect(() => {
@@ -53,6 +56,7 @@ export function VoiceControlProvider({ onCommand, onFailure, onMissed, talking =
       // An ear that could not listen: the switch goes back to off, and whoever shows messages is told why.
       store.onFailure((failure) => {
         setEnabled(false)
+        setFailure(failure)
         told.current.onFailure?.(failure)
       }),
     ]
@@ -69,6 +73,6 @@ export function VoiceControlProvider({ onCommand, onFailure, onMissed, talking =
     }
   }, [enabled, ear, store, setEnabled])
 
-  const control = useMemo(() => ({ store, enabled, setEnabled }), [store, enabled, setEnabled])
+  const control = useMemo(() => ({ store, enabled, setEnabled, failure }), [store, enabled, setEnabled, failure])
   return <VoiceControlContext value={control}>{children}</VoiceControlContext>
 }
