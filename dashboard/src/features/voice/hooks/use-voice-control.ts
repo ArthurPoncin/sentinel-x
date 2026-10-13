@@ -15,8 +15,8 @@ export function useVoiceState<T>(select: (state: VoiceState) => T): T {
   return useSyncExternalStore(store.subscribe, () => select(store.getState()))
 }
 
-// Whether the voice control is on, and the way to switch it.
-export function useVoiceSwitch(): Pick<VoiceControl, 'enabled' | 'setEnabled'> {
-  const { enabled, setEnabled } = useControl()
-  return useMemo(() => ({ enabled, setEnabled }), [enabled, setEnabled])
+// Whether the voice control is on, the way to switch it, and why it went back to off when it did by itself.
+export function useVoiceSwitch(): Pick<VoiceControl, 'enabled' | 'setEnabled' | 'failure'> {
+  const { enabled, setEnabled, failure } = useControl()
+  return useMemo(() => ({ enabled, setEnabled, failure }), [enabled, setEnabled, failure])
 }

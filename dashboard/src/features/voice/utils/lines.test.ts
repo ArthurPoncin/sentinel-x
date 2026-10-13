@@ -30,6 +30,9 @@ describe('lastLine', () => {
     expect(line('sentinelle gestes', { kind: 'command', command: 'tutorial' })).toBe(
       '« sentinelle gestes » · commande : aller au tutoriel des gestes',
     )
+    expect(line('sentinelle tutoriel vocal', { kind: 'command', command: 'voice-tutorial' })).toBe(
+      '« sentinelle tutoriel vocal » · commande : aller au tutoriel de la voix',
+    )
     expect(line('sentinelle rejoue le dernier incident', { kind: 'command', command: 'replay-last' })).toBe(
       '« sentinelle rejoue le dernier incident » · commande : rejouer le dernier incident',
     )

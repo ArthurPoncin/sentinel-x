@@ -1,20 +1,21 @@
 import { NavLink, Outlet, useLocation, useMatches } from 'react-router'
 import { HandHud, useHandSwitch } from '@/features/gestures'
 import { ConnectionIndicator } from '@/features/live-feed'
-import { VoiceHud } from '@/features/voice'
+import { VoiceHud, useVoiceSwitch } from '@/features/voice'
 import { SidebarInset, SidebarProvider, useSidebar } from '@/shared/ui/sidebar'
-import { AppSidebar, TUTORIAL } from './app-sidebar'
+import { AppSidebar, TUTORIAL, VOICE_TUTORIAL } from './app-sidebar'
 import { layoutMode, sidebarOpenFrom } from './layout-mode'
 
 // The bar the app was born with, across the whole window: the menu button, the brand, the two surfaces, and
 // whether the feed is live. Its words stay in English, as they were. On a phone the two surfaces are in the
 // menu only: the bar keeps the brand and the feed. While the hand control is on, it also says what the hand
 // sensor sees, next to the feed, and has the way to its tutorial. While the voice control is on, it says
-// where the ear is and what it last heard.
+// where the ear is and what it last heard, and has the way to its own tutorial.
 function TopBar() {
   const { toggleSidebar, open, openMobile, isMobile } = useSidebar()
   const expanded = isMobile ? openMobile : open
   const hands = useHandSwitch()
+  const voice = useVoiceSwitch()
 
   return (
     <header className="flex shrink-0 items-center gap-3 border-b bg-card px-3 py-3 sm:gap-6 sm:px-5">
@@ -39,6 +40,11 @@ function TopBar() {
         {hands.enabled && (
           <NavLink to={TUTORIAL} className={({ isActive }) => (isActive ? 'text-foreground' : 'text-muted-foreground')}>
             Gestes
+          </NavLink>
+        )}
+        {voice.enabled && (
+          <NavLink to={VOICE_TUTORIAL} className={({ isActive }) => (isActive ? 'text-foreground' : 'text-muted-foreground')}>
+            Voix
           </NavLink>
         )}
       </nav>

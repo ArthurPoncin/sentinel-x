@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { Command, WindowCommand } from '@/features/voice'
 import { WINDOW_IDS, type WindowId } from '@/features/windows'
-import { inTutorial, TWIN } from './app-sidebar'
+import { inTutorial, inVoiceTutorial, TWIN } from './app-sidebar'
 
 // What the voice asks of the Twin's windows: one opened, one closed, or all of them closed.
 const id = z.enum(WINDOW_IDS as [WindowId, ...WindowId[]])
@@ -24,10 +24,10 @@ const OF_VOICE = new Map<Command, WindowsAsk>([
 
 // What a voice command said at `pathname` asks of the windows, nothing when it is about something else. A
 // window is shown from any screen: the way leads to the Twin. One is closed on the Twin only: there is none
-// open anywhere else. The tutorial's rule holds here too: a command is tried there, not meant.
+// open anywhere else. The tutorials' rule holds here too: a command is tried there, not meant.
 export function windowsOfVoice(command: Command, pathname: string): WindowsAsk | null {
   const ask = OF_VOICE.get(command)
-  if (!ask || inTutorial(pathname)) return null
+  if (!ask || inTutorial(pathname) || inVoiceTutorial(pathname)) return null
   return ask.type === 'open' || pathname.replace(/\/+$/, '') === TWIN ? ask : null
 }
 

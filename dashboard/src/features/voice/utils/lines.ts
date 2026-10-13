@@ -24,6 +24,7 @@ const COMMANDS: Readonly<Record<Command, string>> = {
   operator: "aller à l'écran opérateur",
   twin: 'aller au jumeau numérique',
   tutorial: 'aller au tutoriel des gestes',
+  'voice-tutorial': 'aller au tutoriel de la voix',
   'replay-last': 'rejouer le dernier incident',
   report: 'faire le rapport',
   silence: 'faire taire les annonces',
@@ -32,10 +33,15 @@ const COMMANDS: Readonly<Record<Command, string>> = {
   'close-all': 'fermer toutes les fenêtres',
 }
 
+// What `command` asks for, in the Operator's words.
+export function asks(command: Command): string {
+  return COMMANDS[command]
+}
+
 function made(outcome: Outcome): string {
   switch (outcome.kind) {
     case 'command':
-      return `commande : ${COMMANDS[outcome.command]}`
+      return `commande : ${asks(outcome.command)}`
     case 'woken':
       return "mot d'éveil entendu"
     case 'ignored':
