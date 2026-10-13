@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { ActiveAlertList, AttackList } from '@/features/alerts'
+import { useAnnouncements } from '@/features/announcements'
 import { CameraView } from '@/features/camera'
 import { useHandWind, useLiveHands } from '@/features/gestures'
 import { stateAfter, useLiveFeed } from '@/features/live-feed'
 import { IncidentList, TimeScrubber, useIncidentsToReplay, usePlayer } from '@/features/replay'
 import { GasCurve, TemperatureCurve, toSeries } from '@/features/telemetry'
 import { type OperatorHands, OutpostTwin, toScene } from '@/features/twin'
+import { VoiceHalo } from '@/features/voice'
 import { GlassWindows, useAimedWindow, useWindows } from '@/features/windows'
 import { captureMode } from '@/shared/config/capture-mode'
 import { feedEncrypted } from '@/shared/config/feed-url'
@@ -48,7 +50,10 @@ type Intrusion = Extract<Alert, { kind: 'intrusion' }>
 // A replay asked for from another screen, the voice's « rejoue le dernier incident », starts as the Twin opens.
 // The voice opens and closes the windows by their names, « affiche la caméra », « ferme la caméra », « ferme
 // tout »: one it opens is the Operator's, as one opened from the bar.
-// With `?capture` it is the Twin alone, on the same feed: no top bar, no sidebar, no caption, no scrubber, no window,
+// With the voice control on, a halo at the foot of the stage is the assistant's presence: it swells with the
+// microphone while the ear listens, lights up at the wake word, beats while the dashboard talks, and keeps the
+// last sentence heard written next to it. The top bar's own witness gives way to it here.
+// With `?capture` it is the Twin alone, on the same feed: no top bar, no sidebar, no caption, no scrubber, no window, no halo,
 // the whole stage held in frame, to be filmed in a vertical window for the teaser.
 export function TwinRoute() {
   const location = useLocation()
@@ -60,6 +65,7 @@ export function TwinRoute() {
   const latestTelemetry = useLiveFeed((state) => state.latestTelemetry)
   const activeAlerts = useLiveFeed((state) => state.activeAlerts)
   const history = useLiveFeed((state) => state.history)
+  const { talking } = useAnnouncements()
   const player = usePlayer()
   const incidents = useIncidentsToReplay(history, player)
   // The replay the way here asks for, taken once the Command Post has said whether it has its records. The way
@@ -143,6 +149,7 @@ export function TwinRoute() {
             </p>
           </div>
           <TimeScrubber player={player} incidents={incidents} />
+          <VoiceHalo talking={talking} />
           <GlassWindows
             windows={windows}
             send={sendToWindows}

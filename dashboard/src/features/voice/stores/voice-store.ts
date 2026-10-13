@@ -33,6 +33,9 @@ export interface VoiceStore {
   deafen(talking: boolean, now: number): void
   // Whether what the microphone gives at `now` is the dashboard's own voice.
   deaf(now: number): boolean
+  // Told how loud the microphone is, from 0 to 1, some times a second while the ear listens: nothing while the
+  // dashboard talks, that is its own voice. Not part of the state: nothing is drawn again for it.
+  onLevel(listener: (level: number) => void): () => void
   // Told of each command a sentence asks for, once.
   onCommand(listener: (command: Command) => void): () => void
   // Told why the ear stopped, when it could not listen.
@@ -50,6 +53,7 @@ export function createVoiceStore(): VoiceStore {
   let talking = false
   let deafUntil = -Infinity
   const listeners = new Set<() => void>()
+  const levelListeners = new Set<(level: number) => void>()
   const commandListeners = new Set<(command: Command) => void>()
   const failureListeners = new Set<(failure: Failure) => void>()
   const missedListeners = new Set<(missed: Missed) => void>()
@@ -80,6 +84,11 @@ export function createVoiceStore(): VoiceStore {
         return
       }
       if (event.type === 'ear') return show({ ...state, status: event.state })
+      if (event.type === 'level') {
+        const level = deaf(now) ? 0 : event.level
+        for (const listener of levelListeners) listener(level)
+        return
+      }
       // A sentence that comes before the ear listens, or after the voice control was switched off, is nobody's.
       if (state.status !== 'listening' && state.status !== 'awake') return
       // The dashboard's own voice, wake word and wordings included: not a sentence of the Operator's.
@@ -108,6 +117,10 @@ export function createVoiceStore(): VoiceStore {
       talking = next
     },
     deaf,
+    onLevel(listener) {
+      levelListeners.add(listener)
+      return () => levelListeners.delete(listener)
+    },
     onCommand(listener) {
       commandListeners.add(listener)
       return () => commandListeners.delete(listener)

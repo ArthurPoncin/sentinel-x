@@ -1,5 +1,6 @@
 // Public API of the voice feature: import from '@/features/voice', never from its folders.
 export { VoiceControlProvider } from './components/voice-control-provider'
+export { VoiceHalo } from './components/voice-halo'
 export { VoiceHud } from './components/voice-hud'
 export { VoiceTutorial } from './components/voice-tutorial'
 export { useVoiceState, useVoiceSwitch } from './hooks/use-voice-control'

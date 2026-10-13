@@ -10,8 +10,9 @@ import { layoutMode, sidebarOpenFrom } from './layout-mode'
 // whether the feed is live. Its words stay in English, as they were. On a phone the two surfaces are in the
 // menu only: the bar keeps the brand and the feed. While the hand control is on, it also says what the hand
 // sensor sees, next to the feed, and has the way to its tutorial. While the voice control is on, it says
-// where the ear is and what it last heard, and has the way to its own tutorial.
-function TopBar() {
+// where the ear is and what it last heard, not on a stage, where the Twin has its halo for that, and has the way
+// to its own tutorial.
+function TopBar({ stage }: { stage: boolean }) {
   const { toggleSidebar, open, openMobile, isMobile } = useSidebar()
   const expanded = isMobile ? openMobile : open
   const hands = useHandSwitch()
@@ -51,9 +52,11 @@ function TopBar() {
       <span className="ml-auto md:ml-0">
         <HandHud />
       </span>
-      <span className="min-w-0">
-        <VoiceHud />
-      </span>
+      {!stage && (
+        <span className="min-w-0">
+          <VoiceHud />
+        </span>
+      )}
       <span className="whitespace-nowrap">
         <ConnectionIndicator />
       </span>
@@ -83,7 +86,7 @@ export function Layout() {
       className="h-svh flex-col overflow-hidden"
       style={{ '--sidebar-width': '15rem' } as React.CSSProperties}
     >
-      <TopBar />
+      <TopBar stage={stage} />
       <div className="flex min-h-0 flex-1">
         <AppSidebar />
         <SidebarInset className="min-h-0 min-w-0 overflow-hidden">

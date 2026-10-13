@@ -8,5 +8,10 @@ export type Failure = 'refused' | 'no-microphone' | 'unavailable' | 'unsupported
 // listening, the microphone asked for, the model loading, listening.
 export type EarState = 'waiting' | 'asking' | 'loading' | 'listening'
 
-// What the ear gives: its own life, each sentence once it is said, and why it stopped when it could not go on.
-export type EarEvent = { type: 'ear'; state: EarState } | { type: 'heard'; heard: Heard } | { type: 'failed'; reason: Failure }
+// What the ear gives: its own life, how loud the microphone is, from 0 to 1 and some times a second, each
+// sentence once it is said, and why it stopped when it could not go on.
+export type EarEvent =
+  | { type: 'ear'; state: EarState }
+  | { type: 'level'; level: number }
+  | { type: 'heard'; heard: Heard }
+  | { type: 'failed'; reason: Failure }

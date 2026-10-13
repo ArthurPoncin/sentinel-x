@@ -206,4 +206,22 @@ describe('the voice store', () => {
 
     expect(commands).toEqual([])
   })
+
+  it('tells how loud the microphone is, without a change of state, and nothing while the dashboard talks', () => {
+    const { store } = listening()
+    const levels: number[] = []
+    let shown = 0
+    store.onLevel((level) => levels.push(level))
+    store.subscribe(() => shown++)
+
+    store.dispatch({ type: 'level', level: 0.4 }, 1)
+    store.deafen(true, 2)
+    store.dispatch({ type: 'level', level: 0.8 }, 3)
+    store.deafen(false, 4)
+    store.dispatch({ type: 'level', level: 0.8 }, 4 + ECHO_TAIL / 2)
+    store.dispatch({ type: 'level', level: 0.6 }, 4 + ECHO_TAIL + 1)
+
+    expect(levels).toEqual([0.4, 0, 0, 0.6])
+    expect(shown).toBe(0)
+  })
 })

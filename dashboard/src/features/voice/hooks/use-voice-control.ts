@@ -1,4 +1,4 @@
-import { useContext, useMemo, useSyncExternalStore } from 'react'
+import { useContext, useEffect, useMemo, useSyncExternalStore } from 'react'
 import type { VoiceState } from '../stores/voice-store'
 import { type VoiceControl, VoiceControlContext } from '../stores/voice-store-context'
 
@@ -19,4 +19,11 @@ export function useVoiceState<T>(select: (state: VoiceState) => T): T {
 export function useVoiceSwitch(): Pick<VoiceControl, 'enabled' | 'setEnabled' | 'failure'> {
   const { enabled, setEnabled, failure } = useControl()
   return useMemo(() => ({ enabled, setEnabled, failure }), [enabled, setEnabled, failure])
+}
+
+// Tells `onLevel` how loud the microphone is, from 0 to 1, some times a second while the ear listens. Nothing is
+// rendered again for it: the listener moves what it draws itself. Give one that stays the same.
+export function useVoiceLevel(onLevel: (level: number) => void): void {
+  const { store } = useControl()
+  useEffect(() => store.onLevel(onLevel), [store, onLevel])
 }
