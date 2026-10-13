@@ -25,26 +25,36 @@ export function inTutorial(pathname: string): boolean {
   return pathname.replace(/\/+$/, '') === TUTORIAL
 }
 
+// Where the voice control's tutorial is: a screen of its own, there only while the voice control is on.
+export const VOICE_TUTORIAL = '/voix'
+
+// Whether the screen at `pathname` is the voice's tutorial, a slash at its end or not.
+export function inVoiceTutorial(pathname: string): boolean {
+  return pathname.replace(/\/+$/, '') === VOICE_TUTORIAL
+}
+
 // Where the Digital Twin is.
 export const TWIN = '/twin'
 
 // The screens of the app, each with the command that names it to the voice.
 export const NAV = [
-  { to: '/', title: 'Operator view', hands: false, voice: 'operator' },
-  { to: TWIN, title: 'Digital Twin', hands: false, voice: 'twin' },
-  { to: TUTORIAL, title: 'Tutoriel des gestes', hands: true, voice: 'tutorial' },
-] as const satisfies readonly { to: string; title: string; hands: boolean; voice: Screen }[]
+  { to: '/', title: 'Operator view', of: null, voice: 'operator' },
+  { to: TWIN, title: 'Digital Twin', of: null, voice: 'twin' },
+  { to: TUTORIAL, title: 'Tutoriel des gestes', of: 'hands', voice: 'tutorial' },
+  { to: VOICE_TUTORIAL, title: 'Tutoriel de la voix', of: 'voice', voice: 'voice-tutorial' },
+] as const satisfies readonly { to: string; title: string; of: 'hands' | 'voice' | null; voice: Screen }[]
 
-// The screens the menu shows: those of the hand control only while it is on.
-export function screens(handsOn: boolean) {
-  return NAV.filter(({ hands }) => handsOn || !hands)
+// The screens the menu shows: the tutorial of the hand control only while it is on, and so for the voice's.
+export function screens(handsOn: boolean, voiceOn = false) {
+  const on = { hands: handsOn, voice: voiceOn }
+  return NAV.filter(({ of }) => of === null || on[of])
 }
 
 // A switch's state, at the right of its name and smaller: the two hold on one line of the menu.
 const STATE = 'ml-auto shrink-0 text-xs text-muted-foreground'
 
-// The side navigation, under the top bar: the two surfaces, the hand control's tutorial while it is on, and
-// the way out. Words, no icons. The top bar's ☰ (or Ctrl+B) folds it away on a wide screen; on a phone it is a
+// The side navigation, under the top bar: the two surfaces, the hand control's tutorial while it is on, the
+// voice control's next to it while that one is, and the way out. Words, no icons. The top bar's ☰ (or Ctrl+B) folds it away on a wide screen; on a phone it is a
 // drawer that a choice closes. At its foot, the hand control's switch, off until the Operator has a hand
 // sensor on their desk, the voice control's next to it, off until they want the microphone listened to, and
 // the announcements', off until they want the dashboard to talk.
@@ -64,7 +74,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Supervision</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {screens(hands.enabled).map(({ to, title }) => (
+              {screens(hands.enabled, voice.enabled).map(({ to, title }) => (
                 <SidebarMenuItem key={to}>
                   <SidebarMenuButton asChild isActive={pathname === to}>
                     <NavLink to={to} end onClick={close}>

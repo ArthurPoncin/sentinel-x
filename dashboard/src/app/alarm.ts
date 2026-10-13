@@ -2,7 +2,7 @@ import { toast } from 'sonner'
 import { firePreset, type PresetId } from '@/features/actuators'
 import type { Action } from '@/features/gestures'
 import type { Command } from '@/features/voice'
-import { inTutorial } from './app-sidebar'
+import { inTutorial, inVoiceTutorial } from './app-sidebar'
 
 // The Alarm's command a thumb stands for: raised, all is well and the siren stops; turned down, it sounds.
 const OF_GESTURE: Partial<Record<Action, PresetId>> = { 'all-clear': 'siren-off', alarm: 'siren' }
@@ -17,9 +17,9 @@ export function presetOfGesture(action: Action, pathname: string): PresetId | nu
 }
 
 // What a voice command said at `pathname` asks of the Alarm, nothing when it is about something else. The
-// tutorial's rule holds for the voice too.
+// tutorial's rule holds for the voice too, and in its own tutorial: the siren is never driven from either.
 export function presetOfVoice(command: Command, pathname: string): PresetId | null {
-  return inTutorial(pathname) ? null : (OF_VOICE[command] ?? null)
+  return inTutorial(pathname) || inVoiceTutorial(pathname) ? null : (OF_VOICE[command] ?? null)
 }
 
 // What the Operator did not press a button for.

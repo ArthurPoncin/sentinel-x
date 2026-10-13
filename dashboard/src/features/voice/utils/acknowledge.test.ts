@@ -9,6 +9,7 @@ const NOT_DONE: readonly Reply[] = [
   'unknown',
   'unsure',
   'only-tried',
+  'tried',
   'already-there',
   'no-window',
   'nothing-to-replay',

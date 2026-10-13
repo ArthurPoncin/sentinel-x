@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { acknowledge, type Command } from '@/features/voice'
 import { NO_WINDOWS_STATE, WINDOW_IDS, windowsAfter } from '@/features/windows'
 import type { Incident } from '@/shared/contract'
-import { NAV, screens, TUTORIAL } from './app-sidebar'
+import { NAV, screens, TUTORIAL, VOICE_TUTORIAL } from './app-sidebar'
 import { pageAfter } from './hand-control'
 import { askedReplay, replayAsked } from './replay-asked'
 import { alarmSaid, pageOfVoice } from './voice-control'
@@ -14,6 +14,7 @@ const ALL: readonly Command[] = [
   'operator',
   'twin',
   'tutorial',
+  'voice-tutorial',
   'replay-last',
   'report',
   'silence',
@@ -27,6 +28,7 @@ describe('pageOfVoice', () => {
     expect(pageOfVoice('operator', '/twin')).toBe('/')
     expect(pageOfVoice('twin', '/')).toBe('/twin')
     expect(pageOfVoice('tutorial', '/')).toBe(TUTORIAL)
+    expect(pageOfVoice('voice-tutorial', '/')).toBe(VOICE_TUTORIAL)
   })
 
   it('has a name for each screen of the menu', () => {
@@ -46,6 +48,13 @@ describe('pageOfVoice', () => {
   it('leads out of the tutorial too: a name is not a gesture that is tried there', () => {
     expect(pageOfVoice('twin', TUTORIAL)).toBe('/twin')
     expect(pageOfVoice('operator', TUTORIAL)).toBe('/')
+  })
+
+  it("leads nowhere from the voice's tutorial: a screen's name is tried there, and the screen stays", () => {
+    for (const command of ALL) {
+      expect(pageOfVoice(command, VOICE_TUTORIAL)).toBeNull()
+      expect(pageOfVoice(command, `${VOICE_TUTORIAL}/`)).toBeNull()
+    }
   })
 
   it('leads nowhere for a command that names no screen', () => {
@@ -135,6 +144,11 @@ describe('windowsOfVoice', () => {
   it('does nothing in the tutorial: a command is tried there, not meant', () => {
     for (const command of ALL) expect(windowsOfVoice(command, TUTORIAL)).toBeNull()
     expect(windowsOfVoice('show-camera', `${TUTORIAL}/`)).toBeNull()
+  })
+
+  it("does nothing in the voice's tutorial either", () => {
+    for (const command of ALL) expect(windowsOfVoice(command, VOICE_TUTORIAL)).toBeNull()
+    expect(windowsOfVoice('show-camera', `${VOICE_TUTORIAL}/`)).toBeNull()
   })
 
   it('asks nothing for a command that is about something else', () => {
