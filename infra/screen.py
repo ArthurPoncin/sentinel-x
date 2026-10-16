@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""The Command Post's screen, on the Pi's HDMI (tty1). While something is missing, its status: the table
-Wi-Fi, the Sentinel, its last readings and raised Alerts, the webcam and the stack, what the brief's
-OLED showed on the Sentinel. Once everything runs, an eye that watches (infra/eye.py): its colour and
-its manner are those of the Alerts raised, and it follows the intruder the camera follows. Run by the
-sentinel-x-screen systemd unit that infra/plug-and-play.sh installs:
+"""The Command Post's screen, on the Pi's HDMI (tty1): an eye that watches (infra/eye.py), from the
+moment the Pi boots, with no keyboard nor mouse. Its colour and its manner are those of the Alerts
+raised, and it follows the intruder the camera follows; what of the Command Post is missing (the
+Sentinel, the broker, the access point, a container) is written above it, in amber. Without the eye,
+the status on the console: the table Wi-Fi, the Sentinel, its last readings and raised Alerts, the
+webcam and the stack. Run at each boot by the sentinel-x-screen systemd unit that
+infra/plug-and-play.sh installs:
     python3 infra/screen.py <table number>
     python3 infra/screen.py --demo      # on a laptop: every face of the eye in turn, no Pi needed
 
@@ -47,8 +49,11 @@ FONTS = [
 ONLINE_S = 10
 # Docker, the access point and the DHCP leases are read this often; the status is drawn every second.
 POLL_S = 5
-# The status comes back once something has been missing for this long: not for one reading that failed.
+# What is missing is said once it has been missing for this long: not for one reading that failed.
 TROUBLE_S = 4
+# The eye that could not open the screen (not there yet at boot, HDMI plugged in later) is tried again
+# this often; the console shows the status meanwhile.
+EYE_RETRY_S = 10
 # Where the api puts up the Alerts that are not the Sentinel's (backend/src/alert-board.ts).
 BOARD = "command-post/alerts"
 # The webcam's horizontal field of view, in degrees: vision's CAMERA_FOV_DEG.
@@ -361,17 +366,25 @@ def render(width: int, table: int, ssid: str, pi_ip: str, sentinel_ip: str, syst
     return lines
 
 
-def trouble(system: dict, seen: Snapshot) -> bool:
-    """Whether something of the Command Post is missing: the status says what, instead of the eye."""
+def missing(system: dict, seen: Snapshot) -> list[str]:
+    """What of the Command Post is missing, in a few words each: the eye says it above itself."""
+    if not system:
+        return ["démarrage…"]
+    said = []
+    if system.get("access_point") is False:
+        said.append("Wi-Fi arrêté")
+    if not seen.connected:
+        said.append("broker injoignable")
+    elif seen.age is None or seen.age > ONLINE_S:
+        said.append("Sentinel muet" if system.get("on_wifi") else "Sentinel absent")
     containers = system.get("containers")
-    return (
-        not seen.connected
-        or seen.age is None
-        or seen.age > ONLINE_S
-        or system.get("access_point") is False
-        or not containers
-        or any(state in ("down", "unhealthy") for state in containers.values())
-    )
+    if containers is None:
+        said.append("Docker ?")
+    elif not containers:
+        said.append("stack arrêtée")
+    else:
+        said += [f"{name} arrêté" for name, state in sorted(containers.items()) if state in ("down", "unhealthy")]
+    return said
 
 
 class Watch:
@@ -384,7 +397,7 @@ class Watch:
         self.ssid = printable(env_value(SECRETS / "wifi.env", "WIFI_SSID") or f"SentinelX-{table}", 32)
         self._stop, self._system, self._sentinel = stop, {}, Sentinel()
         self._client = listen(self.pi_ip, self._sentinel)
-        # The status first, until everything is seen to run.
+        # Said at once, until everything is seen to run.
         self._trouble_since: float | None = -math.inf
         threading.Thread(target=self._poll, name="poll", daemon=True).start()
 
@@ -393,17 +406,18 @@ class Watch:
             self._system = poll(self.sentinel_ip)
             self._stop.wait(POLL_S)
 
-    def look(self, now: float) -> tuple[dict, Snapshot, bool]:
-        """What the Pi says, what the broker says, and whether the status is to be shown."""
+    def look(self, now: float) -> tuple[dict, Snapshot, list[str]]:
+        """What the Pi says, what the broker says, and what is missing, once it has been for TROUBLE_S."""
         system = self._system
         # An api that is not running left its last board on the broker: it tells nothing of now.
         api = (system.get("containers") or {}).get("api", "ok")
         seen = self._sentinel.snapshot(now, board=api == "ok")
-        if system and not trouble(system, seen):
+        lacking = missing(system, seen)
+        if not lacking:
             self._trouble_since = None
         elif self._trouble_since is None:
             self._trouble_since = now
-        return system, seen, self._trouble_since is not None and now - self._trouble_since >= TROUBLE_S
+        return system, seen, lacking if self._trouble_since is not None and now - self._trouble_since >= TROUBLE_S else []
 
     def lines(self, width: int, system: dict, seen: Snapshot) -> list[str]:
         return render(width, self.table, self.ssid, self.pi_ip, self.sentinel_ip, system, seen)
@@ -435,7 +449,7 @@ class Demo:
         at = now % (self.SCENE_S * len(self.SCENES))
         return self.SCENES[int(at // self.SCENE_S)][0], at % self.SCENE_S / self.SCENE_S
 
-    def look(self, now: float) -> tuple[dict, Snapshot, bool]:
+    def look(self, now: float) -> tuple[dict, Snapshot, list[str]]:
         name, share = self.scene(now)
         status = name == "status"
         containers = dict.fromkeys(("api", "dashboard", "mosquitto", "predictive", "reverse-proxy"), "ok")
@@ -453,7 +467,8 @@ class Demo:
             # Someone who walks across the room and back, a second one who stands further away.
             people = [(55 * math.sin(share * 2 * math.pi), 0.55 + 0.25 * math.cos(share * 4 * math.pi)), (-38.0, 0.3)]
         alerts = dict(self.SCENES)[name]
-        return system, Snapshot(True, "", None if status else readings, None if status else 0.4, alerts, people), status
+        seen = Snapshot(True, "", None if status else readings, None if status else 0.4, alerts, people)
+        return system, seen, missing(system, seen)
 
     def lines(self, width: int, system: dict, seen: Snapshot) -> list[str]:
         return render(width, self.table, self.ssid, self.pi_ip, self.sentinel_ip, system, seen)
@@ -493,26 +508,41 @@ def main() -> None:
 
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
-    # The eye when pygame is there and opens the screen; the console otherwise.
-    stage = None
+    # The eye when pygame is there and opens the screen; the console meanwhile, the eye tried again
+    # every EYE_RETRY_S: at boot the HDMI output may not be ready yet, or the screen not plugged in.
     try:
         import eye
-
-        stage = eye.Stage()
-    except Exception as error:  # pygame missing, no screen, no right to it: whatever SDL says
+    except Exception as error:  # pygame missing: the status stays on the console
         print(f"no eye, the status stays on the console: {printable(error, 200)}", file=sys.stderr)
+        eye = None
         if demo:
             sys.exit(1)
-        prepare_console()
+    stage, console, retry_at, said = None, False, 0.0, None
     watch = Demo() if demo else Watch(int(sys.argv[1]), stop)
     try:
         while not stop.is_set():
-            system, seen, status = watch.look(time.monotonic())
+            if stage is None and eye is not None and time.monotonic() >= retry_at:
+                try:
+                    stage = eye.Stage()
+                except Exception as error:  # no screen, no right to it: whatever SDL says
+                    eye.release()
+                    if demo:
+                        sys.exit(f"no eye: {error}")
+                    if str(error) != said:
+                        print(f"no eye yet, tried again every {EYE_RETRY_S} s: {printable(error, 200)}", file=sys.stderr)
+                        said = str(error)
+                    retry_at = time.monotonic() + EYE_RETRY_S
+                else:
+                    console = False
+            system, seen, lacking = watch.look(time.monotonic())
             if stage is not None:
                 # Its own pace, a frame at a time; False once its window was closed.
-                if not stage.draw(watch, system, seen, status):
+                if not stage.draw(watch, system, seen, lacking):
                     break
                 continue
+            if not console:
+                prepare_console()
+                console = True
             width, height = shutil.get_terminal_size((50, 15))
             lines = watch.lines(width, system, seen)
             # From the top, each line over the last one: no flicker, and no newline after the last row,

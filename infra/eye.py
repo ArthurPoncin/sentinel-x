@@ -14,8 +14,8 @@ Alert raised:
 A critical Alert makes it beat, a red frame around the screen. Around it, a radar seen from above, the
 front of the box toward the bottom: the people the camera sees are on its ring, where they stand around it.
 
-While something of the Command Post is missing, the status takes the screen instead, the same lines
-as on the console.
+It is there from the moment the Pi boots, whatever runs or not: what of the Command Post is missing
+(the Sentinel, the broker, the access point, a container) is written above it, in amber.
 """
 
 from __future__ import annotations
@@ -23,7 +23,6 @@ from __future__ import annotations
 import math
 import os
 import random
-import re
 from datetime import datetime
 from pathlib import Path
 
@@ -50,6 +49,8 @@ FONTS = [
 ]
 
 NOMINAL = (70, 205, 235)
+# What is missing of the Command Post, above the eye.
+MISSING = (240, 190, 60)
 COLOURS = {
     "presence": (70, 205, 235),
     "noise": (255, 190, 60),
@@ -72,9 +73,6 @@ LABELS = {
     "cyber": "CYBERATTAQUE",
 }
 
-# The console's colours, for the status: 30–37 as foreground, 40–47 as background.
-ANSI = {0: (10, 12, 14), 1: (235, 70, 60), 2: (80, 210, 110), 3: (240, 190, 60), 6: (70, 205, 235), 7: (225, 230, 235)}
-ESCAPE = re.compile(r"\033\[([0-9;?]*)([A-Za-z])")
 
 
 def mood(alerts: list[tuple[str, str]]) -> tuple[str | None, str | None]:
@@ -125,7 +123,6 @@ class Stage:
         self._texts: dict[tuple, pygame.Surface] = {}
         self._irises: dict[tuple, pygame.Surface] = {}
         self._sweeps: dict[tuple, pygame.Surface] = {}
-        self._page: tuple[list[str], pygame.Surface] | None = None
         self._random = random.Random()
         self._time = 0.0
         # Where the eye looks, -1 to 1 across and down, and where it is going to.
@@ -138,17 +135,14 @@ class Stage:
 
     # --- one frame ---------------------------------------------------------------------------
 
-    def draw(self, watch, system: dict, seen, status: bool) -> bool:
+    def draw(self, watch, system: dict, seen, lacking: list[str]) -> bool:
         """False once the window was closed (on a desktop; on the Pi there is nothing to close it with)."""
         for event in pygame.event.get():
             if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                 return False
         dt = min(0.2, self._clock.tick(FPS) / 1000)
         self._time += dt
-        if status:
-            self._status(watch.lines(50, system, seen))
-        else:
-            self._eye(dt, watch, seen)
+        self._eye(dt, watch, seen, lacking)
         frame = self._canvas
         if self._flipped:
             frame = pygame.transform.flip(frame, True, True)
@@ -158,53 +152,9 @@ class Stage:
         pygame.display.flip()
         return True
 
-    # --- the status, as text -----------------------------------------------------------------
-
-    def _status(self, lines: list[str]) -> None:
-        if self._page is None or self._page[0] != lines:
-            page = pygame.Surface(SIZE)
-            page.fill(BACKGROUND)
-            # The largest letters that leave the console's 50 columns and 15 rows on the screen.
-            font = next(
-                (font for font in map(self._font, range(30, 12, -1)) if font.size("M" * 50)[0] <= WIDTH - 8 and 15 * font.get_linesize() <= HEIGHT - 8),
-                self._font(12),
-            )
-            cell, row = font.size("M")[0], font.get_linesize()
-            for at, line in enumerate(lines[: HEIGHT // row]):
-                self._line(page, font, line, at * row + 4, cell, row)
-            self._page = (lines, page)
-        self._canvas.blit(self._page[1], (0, 0))
-
-    def _line(self, page: pygame.Surface, font: pygame.font.Font, line: str, y: int, cell: int, row: int) -> None:
-        """One line of the console, its colours read from its escape codes."""
-        column, at = 0, 0
-        ink, paper, dim = ANSI[7], None, False
-        while at < len(line):
-            escape = ESCAPE.match(line, at)
-            if escape:
-                at = escape.end()
-                for code in [int(code or 0) for code in escape.group(1).split(";")] if escape.group(2) == "m" else []:
-                    if code == 0:
-                        ink, paper, dim = ANSI[7], None, False
-                    elif code == 2:
-                        dim = True
-                    elif code - 30 in ANSI:
-                        ink = ANSI[code - 30]
-                    elif code - 40 in ANSI:
-                        paper = ANSI[code - 40]
-                continue
-            end = line.find("\033", at)
-            end = len(line) if end < 0 else end
-            text = line[at:end]
-            if paper is not None:
-                pygame.draw.rect(page, paper, (column * cell + 4, y, len(text) * cell, row - 2), border_radius=3)
-            if text.strip():
-                page.blit(font.render(text, True, shade(ink, 0.5) if dim else ink), (column * cell + 4, y))
-            column, at = column + len(text), end
-
     # --- the eye -----------------------------------------------------------------------------
 
-    def _eye(self, dt: float, watch, seen) -> None:
+    def _eye(self, dt: float, watch, seen, lacking: list[str]) -> None:
         now, canvas = self._time, self._canvas
         kind, severity = mood(seen.alerts)
         readings = seen.readings or {}
@@ -259,7 +209,7 @@ class Stage:
             self._rings(colour, iris_at)
         if kind == "cyber":
             self._tear()
-        self._words(watch, seen, kind, colour, critical, beat)
+        self._words(watch, seen, kind, colour, critical, beat, lacking)
         if critical:
             pygame.draw.rect(canvas, shade(COLOURS["intrusion"], 0.35 + 0.65 * beat), canvas.get_rect(), width=6)
 
@@ -385,16 +335,27 @@ class Stage:
             strip = self._canvas.subsurface((0, top, WIDTH, height)).copy()
             self._canvas.blit(strip, (self._random.choice((-1, 1)) * self._random.randint(8, 48), top))
 
-    def _words(self, watch, seen, kind: str | None, colour: tuple, critical: bool, beat: float) -> None:
+    def _words(self, watch, seen, kind: str | None, colour: tuple, critical: bool, beat: float, lacking: list[str]) -> None:
         canvas, quiet = self._canvas, (110, 125, 135)
         canvas.blit(self._text(f"SENTINEL-X · table {watch.table}", 17, quiet), (12, 8))
         clock = self._text(f"{datetime.now():%H:%M:%S}", 17, quiet)
         canvas.blit(clock, (WIDTH - 12 - clock.get_width(), 8))
+        # What is missing, on a dark band across the top of the radar.
+        if lacking:
+            said = self._text("! " + " · ".join(lacking[:4]), 17, MISSING)
+            band = said.get_rect(center=(CX, 46)).inflate(20, 8)
+            pygame.draw.rect(canvas, BACKGROUND, band, border_radius=6)
+            pygame.draw.rect(canvas, shade(MISSING, 0.5), band, width=1, border_radius=6)
+            canvas.blit(said, said.get_rect(center=band.center))
 
         # Every Alert raised, the one the eye shows first.
         names = sorted({name for name, _ in seen.alerts if name in LABELS}, key=lambda name: (name != kind, PRIORITY.index(name)))
-        label = " · ".join(LABELS[name] for name in names[:3]) if names else "NOMINAL"
-        title = self._text(label, 30, colour)
+        if names:
+            label = " · ".join(LABELS[name] for name in names[:3])
+        else:
+            # Nothing raised: nominal only when nothing is missing either.
+            label = "EN ATTENTE" if lacking else "NOMINAL"
+        title = self._text(label, 30, shade(colour, 0.6) if lacking and not names else colour)
         title.set_alpha(round(255 * (0.55 + 0.45 * beat)) if critical else 255)
         canvas.blit(title, title.get_rect(center=(CX, 424)))
 
@@ -414,7 +375,7 @@ class Stage:
 
     def _font(self, size: int) -> pygame.font.Font:
         if size not in self._fonts:
-            # Without DejaVu, pygame's own font: the status then loses its columns, not its words.
+            # Without DejaVu, pygame's own font.
             self._fonts[size] = pygame.font.Font(self._font_file, size)
         return self._fonts[size]
 
@@ -425,3 +386,8 @@ class Stage:
                 self._texts.clear()
             self._texts[key] = self._font(size).render(text, True, colour)
         return self._texts[key]
+
+
+def release() -> None:
+    """What a Stage that could not open left behind: for the next attempt to start afresh."""
+    pygame.quit()

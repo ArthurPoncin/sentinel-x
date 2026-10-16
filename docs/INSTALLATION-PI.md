@@ -11,7 +11,7 @@ Dans cette page, la table est la n° **4**. Remplace `4` par ton numéro de tabl
 - L'ESP32 câblé selon [le schéma de l'ESP32](cablage/esp32.html) (à ouvrir dans un navigateur) et [`firmware/include/pins.h`](../firmware/include/pins.h), avec un **câble USB qui transmet les données**, pour son tout premier firmware seulement. Beaucoup de câbles ne font que charger : avec eux, le Pi ne voit pas l'ESP32. Ensuite, l'ESP32 vit sur sa propre alimentation (chargeur USB, batterie) et reçoit ses mises à jour par le Wi-Fi.
 - Une **webcam USB**, pour la détection d'intrusion.
 - En option, un moteur qui fait tourner la webcam pour suivre la personne détectée : un **moteur pas à pas** 28BYJ-48 et sa carte ULN2003 ([Le moteur pas à pas](#le-moteur-pas-à-pas-de-la-caméra-en-option)), ou un **servo** ([Le servo](#le-servo-de-la-caméra-en-option)).
-- L'**écran HDMI** 800×480, branché sur un port micro-HDMI du Pi (le deuxième, côté prise jack, convient) : il affiche le statut du Poste de commande, à la place de l'écran de l'ESP32.
+- L'**écran HDMI** 800×480, branché sur un port micro-HDMI du Pi (le deuxième, côté prise jack, convient) : il affiche **l'œil** du Poste de commande, à la place de l'écran de l'ESP32, dès que le Pi démarre.
 
 ## 1. Préparer la carte SD (sur ton PC)
 
@@ -39,7 +39,7 @@ Depuis ton PC, sur le même réseau :
 ssh ton-utilisateur@sentinel-x.local
 ```
 
-Si ça ne répond pas (certains réseaux d'école bloquent), branche un écran et un clavier sur le Pi. Une fois le script passé, l'écran affiche le statut : **Ctrl+Alt+F2** donne une console de connexion.
+Si ça ne répond pas (certains réseaux d'école bloquent), branche un écran et un clavier sur le Pi. Une fois le script passé, l'écran affiche l'œil : **Ctrl+Alt+F2** donne une console de connexion.
 
 ## 4. Mettre le Pi à jour
 
@@ -79,7 +79,7 @@ Il déroule 10 étapes numérotées. Chacune affiche un spinner et son temps, av
 4. **Webcam USB** : elle est donnée au service `vision` si elle est branchée, avec le moteur pas à pas qui la fait tourner.
 5. **Démarrage de la stack** : les conteneurs, sur les images de l'étape 2.
 6. **Firmware du Sentinel** : compilé avec les secrets de ce Pi ; les mots de passe ne quittent jamais le Pi. Ses outils se sont téléchargés pendant les images de l'étape 2. Sa version (une empreinte de son code et de ses secrets) dit au Sentinel s'il doit le prendre.
-7. **Écran HDMI** : l'écran du Pi affiche en continu le statut du Poste de commande (voir [L'écran de statut](#lécran-de-statut)), à la place de l'invite de connexion.
+7. **Écran HDMI** : l'œil s'affiche sur l'écran du Pi (voir [L'écran de statut](#lécran-de-statut)), à la place de l'invite de connexion, et revient seul **à chaque démarrage du Pi**, sans clavier ni souris. Un Pi qui démarrait sur un bureau est remis sur la console (le bureau prendrait l'écran avant l'œil) : redémarre-le une fois, le script le dit.
 8. **Wi-Fi de la table** : le Wi-Fi du Pi devient le réseau `SentinelX-4`, en 2,4 GHz, WPA2, sans Internet. L'ESP32 a toujours l'adresse `192.168.4.10`, et le Pi lui donne l'heure. Déjà en place et inchangé : rien n'est redémarré.
 9. **Firmware sur le Sentinel** : par USB s'il est branché sur le Pi ; sinon **par le Wi-Fi** : le Pi l'annonce sur le broker, le Sentinel le télécharge en HTTPS sur le Pi, vérifie son empreinte et redémarre dessus (une trentaine de secondes). `– déjà à jour` s'il l'a déjà, `– ignoré` avec `--no-flash`.
 10. **Première mesure du Sentinel** : il attend que l'ESP32 rejoigne le Wi-Fi, puis sa première mesure sur le broker.
@@ -94,7 +94,7 @@ Le script finit sur un encadré : **vert** « Command Post prêt » si tout s'es
 - **Sentinel** `✓ 192.168.4.10` et l'étape 10 qui affiche `première mesure : 23.4 °C · humidité 41 % · gaz 312` : **tout marche**, l'ESP32 envoie ses mesures au Pi.
 - **Webcam** `✓ donnée à vision` : la webcam va au service `vision`.
 - **Moteur** `✓ moteur pas à pas, donné à vision` (ou `servo`) : la caméra tourne pour suivre la personne détectée. `sans : caméra fixe` : c'est ce que demande ton `.env` (la raison est entre parenthèses), tout le reste marche pareil.
-- **Écran HDMI** `✓ statut affiché` : l'écran du Pi montre le statut (ci-dessous).
+- **Écran HDMI** `✓ l'œil, à chaque démarrage` : l'écran du Pi montre l'œil (ci-dessous).
 - Sous **À voir**, chaque remarque `!` dit ce qui manque : voir aussi [Dépannage](#dépannage).
 - Sous **Ensuite**, les commandes à copier telles quelles : récupérer le certificat, puis les journaux.
 
@@ -173,9 +173,7 @@ Au démarrage de `vision`, le servo se met au centre : c'est la position de repo
 
 ### L'écran de statut
 
-Il remplace l'écran de l'ESP32 et se redessine chaque seconde : le Wi-Fi de la table et son point d'accès, l'adresse du dashboard, le Sentinel et ses dernières mesures, les alertes en cours (en rouge et en capitales quand elles sont critiques), la webcam et les conteneurs.
-
-Il s'affiche au démarrage, puis dès qu'il manque quelque chose pendant 4 s (Sentinel, broker, point d'accès, conteneur). Quand tout tourne, l'écran passe à **l'œil** :
+Il remplace l'écran de l'ESP32. **L'œil** s'y lance seul à chaque démarrage du Pi (le service `sentinel-x-screen`), sans clavier ni souris, et y reste, que tout tourne ou non. Ce qui manque depuis 4 s s'écrit au-dessus de lui, en ambre : `Sentinel absent`, `broker injoignable`, `Wi-Fi arrêté`, `vision arrêté`… ; tant que rien n'est levé, il affiche alors `EN ATTENTE` au lieu de `NOMINAL`. Si l'écran n'est pas prêt au démarrage, ou s'il est branché après, l'œil réessaie toutes les 10 s. Ses visages :
 
 | Alerte | L'œil |
 |---|---|
@@ -192,7 +190,9 @@ Une alerte critique le fait battre, avec un cadre rouge. Autour, un radar vu de 
 
 Pour voir tous les visages sur un PC, sans Pi : `python3 infra/screen.py --demo` (avec pygame installé).
 
-| Ligne **Sentinel** | Ce que ça veut dire |
+Sans pygame (`python3-pygame`), ou en attendant l'écran, le statut s'affiche en texte sur la console : le Wi-Fi de la table et son point d'accès, l'adresse du dashboard, le Sentinel et ses dernières mesures, les alertes en cours, la webcam et les conteneurs.
+
+| Ligne **Sentinel** (statut en texte) | Ce que ça veut dire |
 |---|---|
 | `EN LIGNE` | Il envoie ses mesures : tout va bien |
 | `SUR LE WI-FI` | Il a son adresse mais n'envoie rien : le moniteur série dit pourquoi (broker, heure ou DHT22, voir [Dépannage](#dépannage)) |
@@ -200,7 +200,7 @@ Pour voir tous les visages sur un PC, sans Pi : `python3 infra/screen.py --demo`
 | `ABSENT` | Il n'est pas sur le Wi-Fi de la table : alimentation, puis moniteur série |
 | `BROKER ?` | L'écran ne joint pas le broker : `docker compose ps`, puis relance le script |
 
-L'écran occupe la première console du Pi : pour se connecter avec un clavier, **Ctrl+Alt+F2** ouvre une console de connexion, **Ctrl+Alt+F1** ramène le statut.
+L'écran occupe la première console du Pi : pour se connecter avec un clavier, **Ctrl+Alt+F2** ouvre une console de connexion, **Ctrl+Alt+F1** ramène l'œil.
 
 ## 8. Connecter le PC Opérateur
 
@@ -271,9 +271,9 @@ L'écran HDMI :
 | Problème | Quoi faire |
 |---|---|
 | Écran noir | Force la sortie du deuxième port en 800×480 : `sudo sed -i '1 s/$/ video=HDMI-A-2:800x480M@60D/' /boot/firmware/cmdline.txt`, puis `sudo reboot` |
-| Une invite de connexion au lieu du statut | `systemctl status sentinel-x-screen` ; ses erreurs : `journalctl -u sentinel-x-screen` |
+| Une invite de connexion ou un bureau au lieu de l'œil | `systemctl status sentinel-x-screen` ; ses erreurs : `journalctl -u sentinel-x-screen` |
 | `BROKER ?` et `paho-mqtt manque` ou `pas de compte screen` | Relance le script (avec Internet la première fois) |
-| Tout tourne mais l'écran reste en texte, sans l'œil | `journalctl -u sentinel-x-screen` dit pourquoi. Le plus souvent `python3-pygame` manque : relance le script avec l'Ethernet |
+| L'écran reste en texte, sans l'œil | `journalctl -u sentinel-x-screen` dit pourquoi (`no eye yet`). Le plus souvent `python3-pygame` manque : relance le script avec l'Ethernet. Un bureau qui tient l'écran : `sudo systemctl set-default multi-user.target`, puis `sudo reboot` |
 | L'œil ne réagit pas à une intrusion ou à une cyberattaque | Les droits du broker datent d'avant l'œil : relance le script (`--no-flash` suffit) |
 | L'œil regarde du mauvais côté | La caméra au repos ne regarde pas du même côté que l'écran : remets-la face à l'avant du boîtier |
 
@@ -294,7 +294,7 @@ Le script lui-même :
 | `le firmware ne compile pas` | La première fois, PlatformIO télécharge ses outils : il faut Internet |
 | `NetworkManager ne tourne pas` | Le système est trop ancien : réinstalle un Raspberry Pi OS (64-bit) récent |
 | `pas de webcam USB` | Branche la webcam sur un port USB du Pi (elle doit apparaître dans `ls /dev/v4l/by-id`), puis relance avec `--no-flash` |
-| `pas d'écran HDMI détecté` | Branche l'écran : le statut s'y affiche seul. Écran noir : tableau ci-dessus |
+| `pas d'écran HDMI détecté` | Branche l'écran : l'œil s'y affiche seul, en 10 s au plus. Écran noir : tableau ci-dessus |
 | Le moteur pas à pas ne bouge pas | `docker compose logs vision` : « Stepper on /dev/gpiochip0, GPIO 6, 13, 19, 26, ready » quand il est pris en main. « unavailable » : relance `infra/plug-and-play.sh --no-flash`. Pour le faire tourner sans attendre une intrusion : « Tester le moteur », dans [Le moteur pas à pas](#le-moteur-pas-à-pas-de-la-caméra-en-option). Vérifie les fils IN1 à IN4, et le + et le − de la carte : ses LED s'allument quand le moteur tourne |
 | Le moteur pas à pas vibre sans tourner | Il manque des pas : `PAN_STEP_MS=3` dans `.env`, puis `docker compose up -d vision`. Ou IN1 à IN4 ne sont pas dans l'ordre |
 | Le servo ne bouge pas | `docker compose logs vision` : « Servo on /pwm ready » quand il est pris en main. « unavailable » : relance `infra/servo.sh`, redémarre le Pi, puis `infra/plug-and-play.sh --no-flash`. Vérifie aussi son alimentation et le fil de signal sur le GPIO 18 |

@@ -155,9 +155,9 @@ CHRONY
 # gives one, with a keyboard.
 install_screen() {
   sudo tee /etc/systemd/system/sentinel-x-screen.service >/dev/null <<UNIT
-# The Command Post's status screen on the Pi's HDMI console (infra/screen.py). Made by infra/plug-and-play.sh.
+# The eye of the Command Post on the Pi's HDMI, at each boot (infra/screen.py). Made by infra/plug-and-play.sh.
 [Unit]
-Description=Sentinel-X status screen (HDMI, tty1)
+Description=Sentinel-X eye on the HDMI screen (tty1)
 After=systemd-user-sessions.service plymouth-quit-wait.service getty@tty1.service docker.service
 Conflicts=getty@tty1.service
 
@@ -178,6 +178,12 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 UNIT
+  # The eye takes the HDMI output itself, at each boot: a desktop would hold it first. The Pi then
+  # boots to the console, the eye on it.
+  if [[ "$(systemctl get-default)" == graphical.target ]]; then
+    sudo systemctl set-default multi-user.target
+    touch "$UI_LOG.reboot"
+  fi
   sudo systemctl daemon-reload
   sudo systemctl disable --quiet getty@tty1.service
   sudo systemctl enable --quiet sentinel-x-screen.service
@@ -576,12 +582,15 @@ ui_done
 # Before the Wi-Fi: it shows how the rest goes, should the terminal be gone with it.
 ui_step "Écran HDMI"
 screen_ok=false
-ui_task "écran de statut sur la console" install_screen
+ui_task "l'œil sur l'écran, lancé à chaque démarrage" install_screen
 if ((UI_RC != 0)); then
-  ui_note "l'écran de statut ne démarre pas : systemctl status sentinel-x-screen dit pourquoi."
+  ui_note "l'écran ne démarre pas : systemctl status sentinel-x-screen dit pourquoi."
+elif [[ -e "$UI_LOG.reboot" ]]; then
+  rm -f "$UI_LOG.reboot"
+  ui_note "le Pi démarrait sur un bureau, qui prend l'écran avant l'œil : il démarre maintenant sur la console. Redémarre-le une fois (sudo reboot), l'œil viendra seul."
 elif grep -qsx connected /sys/class/drm/card*-HDMI-A-*/status; then
   screen_ok=true
-  ui_detail "le statut du Poste de commande s'y affiche, en continu"
+  ui_detail "l'œil s'y affiche, et à chaque démarrage du Pi, sans clavier ni souris"
 else
   ui_note "pas d'écran HDMI détecté : branche-le, le statut s'y affiche seul (écran noir : voir le dépannage)."
 fi
@@ -698,7 +707,7 @@ summary=(
   "Firmware     $firmware_version"
   "Webcam       $($camera_ok && echo "$G_OK donnée à vision" || echo "$G_FAIL absente")"
   "Moteur       $([[ -n "$motor" ]] && echo "$G_OK $motor, donné à vision" || echo "sans : caméra fixe ($fixed)")"
-  "Écran HDMI   $($screen_ok && echo "$G_OK statut affiché" || echo "$G_FAIL non détecté")"
+  "Écran HDMI   $($screen_ok && echo "$G_OK l'œil, à chaque démarrage" || echo "$G_FAIL non détecté")"
   "Durée        $(_ui_duration "$SECONDS")"
   "Journal      $(_ui_home "$UI_LOG")"
 )
