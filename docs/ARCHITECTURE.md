@@ -109,6 +109,9 @@ sentinel/<id>/alert            # ESP32 → broker, on transition
 command/<id>/actuator          # api → broker → ESP32
 command-post/alerts            # api → broker → status screen, retained: { ts, alerts }, the Alerts
                                # raised that are not a Sentinel's (intrusion, predictive, cyber)
+sentinel/<id>/firmware         # ESP32 → broker, retained: { version, error? }, the firmware it runs
+command/<id>/firmware          # Pi (infra/plug-and-play.sh) → broker → ESP32, retained:
+                               # { version, md5 }, the firmware to fetch over HTTPS (Wi-Fi update)
 ```
 
 ---
@@ -300,11 +303,15 @@ user sentinel-01
 topic write sentinel/sentinel-01/telemetry
 topic write sentinel/sentinel-01/alert
 topic read command/sentinel-01/actuator
+topic write sentinel/sentinel-01/firmware
+topic read command/sentinel-01/firmware
 
 user api
 topic read sentinel/+/telemetry
 topic read sentinel/+/alert
 topic write command/+/actuator
+topic read sentinel/+/firmware
+topic write command/+/firmware
 topic write command-post/alerts
 
 user predictive

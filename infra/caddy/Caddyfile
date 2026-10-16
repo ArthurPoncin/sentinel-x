@@ -1,6 +1,7 @@
 # reverse-proxy: the Command Post's only HTTPS entry point (published on 443).
 # TLS with the team CA's certificate (infra/setup.sh), then the API and its live feed, the camera
-# feed behind the Operator session, the dashboard for everything else. The api's /health is not
+# feed behind the Operator session, the Sentinel's firmware behind its token, the dashboard for
+# everything else. The api's /health is not
 # routed: it stays on the internal network.
 {
 	admin off
@@ -22,6 +23,23 @@
 		X-Frame-Options DENY
 		Referrer-Policy no-referrer
 		-Server
+	}
+
+	# The Sentinel's firmware, for its update over the Wi-Fi (firmware/src/ota.h), to whoever gives the
+	# token of infra/secrets/firmware.env, and to nobody else: it holds the Wi-Fi and MQTT secrets it
+	# was built with. infra/plug-and-play.sh puts it in infra/secrets/firmware/.
+	handle /firmware/* {
+		@sentinel {
+			path /firmware/sentinel-01.bin
+			header Authorization "Bearer {$FIRMWARE_TOKEN}"
+			# Without a token (no firmware.env yet), never: an empty one would match.
+			not header Authorization "Bearer "
+		}
+		handle @sentinel {
+			root * /srv
+			file_server
+		}
+		respond 404
 	}
 
 	# The API checks the Operator session itself, and the Origin of /ws against this Host.

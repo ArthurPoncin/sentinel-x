@@ -7,28 +7,36 @@ Orchestrates the whole server stack on the Pi and owns the isolated table networ
 ## Plug and play
 Step by step, from a blank SD card to the dashboard: [`../docs/INSTALLATION-PI.md`](../docs/INSTALLATION-PI.md).
 
-On a Raspberry Pi 4 with a recent Raspberry Pi OS (64-bit), plugged into Ethernet the first time, with the ESP32 on one of its USB ports:
+On a Raspberry Pi 4 with a recent Raspberry Pi OS (64-bit), plugged into Ethernet the first time, with the ESP32 on one of its USB ports for its very first firmware only:
 
 ```bash
 git clone https://github.com/ArthurPoncin/sentinel-x.git && cd sentinel-x
 infra/plug-and-play.sh X          # X = table number: the Pi becomes 192.168.X.1
 ```
 
-[`plug-and-play.sh`](plug-and-play.sh) does everything below and more, and can be run again at will (it keeps what exists, `--no-flash` leaves the ESP32 alone):
-1. installs Docker, dnsmasq, chrony and PlatformIO, while there is Internet;
+[`plug-and-play.sh`](plug-and-play.sh) is the only script to run. It does everything below and more, and can be run again at will, without the table number, which it keeps in `infra/secrets/table.env` (it keeps what exists, leaves alone what has not changed, `--no-flash` leaves the ESP32 alone):
+1. installs Docker, dnsmasq, chrony and PlatformIO, while there is Internet; the firmware's toolchain then downloads in the background, while the images do;
 2. makes the secrets ([`setup.sh`](setup.sh)) and starts the stack;
-3. builds the Sentinel's firmware with this Pi's secrets: no `handover.txt` to carry for the ESP32;
-4. turns the Pi's Wi-Fi into the table access point `SentinelX-X` (NetworkManager, 2.4 GHz, WPA2/CCMP, passphrase made once in `infra/secrets/wifi.env`), with DHCP only (dnsmasq: no DNS, no gateway, `sentinel-01` always on `.10`) and the time for the table (chrony: the network has no Internet, and every reading is time-stamped);
-5. shows the Command Post's status on the Pi's HDMI screen ([below](#the-status-screen));
-6. flashes the ESP32 over USB and waits for its first telemetry snapshot on the broker.
+3. builds the Sentinel's firmware with this Pi's secrets: no `handover.txt` to carry for the ESP32. Its version is a hash of its sources and of `secrets.h`, built in (`FIRMWARE_VERSION`);
+4. shows the Command Post's status on the Pi's HDMI screen ([below](#the-status-screen));
+5. turns the Pi's Wi-Fi into the table access point `SentinelX-X` (NetworkManager, 2.4 GHz, WPA2/CCMP, passphrase made once in `infra/secrets/wifi.env`), with DHCP only (dnsmasq: no DNS, no gateway, `sentinel-01` always on `.10`) and the time for the table (chrony: the network has no Internet, and every reading is time-stamped). An access point, DHCP or time server already as they should be are not restarted: an SSH session over the table Wi-Fi holds. The first time, the Pi leaves the Wi-Fi it was on: the script says so before its steps and asks; an SSH session coming in through that Wi-Fi drops, and the script finishes on its own (its output to the log, `SIGHUP` ignored, no `sudo` left to ask after that point);
+6. gives the Sentinel its firmware: over USB when it is on one of the Pi's ports, **over the Wi-Fi otherwise** ([below](#the-sentinels-firmware-over-the-wi-fi)), and waits for its first telemetry snapshot on the broker.
+
+### The Sentinel's firmware over the Wi-Fi
+The Sentinel needs no cable to the Pi: on its own supply (a USB charger, a battery), it joins the table Wi-Fi, and takes each new firmware from the Pi.
+- `plug-and-play.sh` copies the build to `infra/secrets/firmware/sentinel-01.bin` and puts up, **retained**, `{ "version", "md5" }` on `command/sentinel-01/firmware`, with the api's MQTT account.
+- The Sentinel reads it whenever it connects ([`../firmware/src/ota.h`](../firmware/src/ota.h)). Another version than its own: it lets go of the broker, downloads `https://192.168.X.1/firmware/sentinel-01.bin` (the address and the CA of its own build, never one from the message), with `Authorization: Bearer <FIRMWARE_TOKEN>`, writes it to its other OTA partition, checks the MD5, and restarts on it. A failed download leaves the running firmware as it is; it is tried 3 times per boot at most.
+- It says which firmware it runs, retained, on `sentinel/sentinel-01/firmware`: `{ "version" }`, with `"error"` when the last download failed. The script waits for its new version there (3 min at most), and leaves it alone when it already runs it.
+- The reverse proxy serves that one file at `/firmware/sentinel-01.bin` to the token of `infra/secrets/firmware.env` (made by `setup.sh`), `404` to anyone else: the file holds the Wi-Fi and MQTT secrets it was built with. Its certificate names the Pi's IP as a DNS entry too, which the ESP32's TLS stack needs, as for the broker.
+- USB only for a first firmware, one from before this update, or one built for other secrets (it then cannot reach the broker). The broker keeps nothing on disk (`persistence false`): a Sentinel that was away gets the announcement until the Pi restarts; after that, run the script again.
 
 Its images come ready-made: [`.github/workflows/images.yml`](../.github/workflows/images.yml) builds each one for the Pi (linux/arm64, on GitHub's own Arm runners) on every push to `main` and publishes it on GHCR as `ghcr.io/arthurponcin/sentinel-x-<service>:<key>`, the key being that of the code it is built from ([`images.sh`](images.sh): the git trees of its paths, so the same code gives the same key on the CI as on the Pi). `plug-and-play.sh` pulls, all at once, the image whose key matches its checkout and names it as `docker-compose.yml` does; it builds on the Pi only what it cannot pull — code changed on the Pi, a key the CI has not published yet, a package still private — and, offline, keeps the images it has. The packages are private when first published: their owner makes each one public once (*Package settings → Change visibility → Public*). A new path in a Dockerfile's `COPY` goes into its service's paths in `images.sh`, or a stale image could be pulled.
 
-It talks French, through [`ui.sh`](ui.sh): sudo and the Operator password asked first, then 10 numbered steps with a spinner and their time, the commands' output in `~/.local/share/sentinel-x/plug-and-play.log` (its last line shown under the running step), a framed reason and the failed command's last lines when a step fails, a framed summary at the end. Plain lines, without the animation, when its output is not a terminal; `NO_COLOR` turns the colours off.
+It talks French, through [`ui.sh`](ui.sh): sudo, the Operator password and, the first time, whether the Pi may leave its Wi-Fi, asked first, then 10 numbered steps with a spinner and their time, the commands' output in `~/.local/share/sentinel-x/plug-and-play.log` (its last line shown under the running step), a framed reason and the failed command's last lines when a step fails, a framed summary at the end. Plain lines, without the animation, when its output is not a terminal; `NO_COLOR` turns the colours off.
 
 Everything comes back by itself when the Pi reboots. The manual steps follow, for reference.
 
-Once installed, an update is [`update.sh`](update.sh), with Ethernet plugged in: `git pull`, the images of the new code (pulled or built as above, through [`pull.sh`](pull.sh), which both scripts share), then `docker compose up -d`, which makes again only the containers whose image or settings changed, and a restart of the broker when `mosquitto.conf` changed. No sudo, no table number: the Wi-Fi, the secrets, the status screen and the ESP32 stay as they are, so an SSH session over the table Wi-Fi holds and the hardening stays in place. It does not apply a new firmware, a new broker account or ACL, nor a change to the Pi's own setup or to its hardening: when the pull brought one, it says so at the end, with the command to run (`plug-and-play.sh`, `harden.sh`).
+Once installed, an update is [`update.sh`](update.sh), with Ethernet plugged in: `git pull`, the images of the new code (pulled or built as above, through [`pull.sh`](pull.sh), which both scripts share), then `docker compose up -d`, which makes again only the containers whose image or settings changed, and a restart of the broker when `mosquitto.conf` changed. No sudo, no table number: the Wi-Fi, the secrets, the status screen and the ESP32's firmware stay as they are, so an SSH session over the table Wi-Fi holds and the hardening stays in place. It does not apply a new firmware, a new broker account or ACL, nor a change to the Pi's own setup or to its hardening: when the pull brought one, it says so at the end, with the command to run (`plug-and-play.sh`, `harden.sh`).
 
 Before the pentest, [`../cyber/harden.sh`](../cyber/harden.sh) closes the Pi down to what the table needs (SSH by key from the Operator laptop only, UFW, Docker's published ports kept to the table Wi-Fi) — [`../cyber/README.md`](../cyber/README.md#hardensh). Run it again after each `plug-and-play.sh`.
 
@@ -74,7 +82,7 @@ infra/update.sh                                 # update: git pull, the new imag
 
 | Service | Image | Reached at | Runs as |
 |---|---|---|---|
-| `reverse-proxy` | Caddy ([`caddy/`](caddy/)) | **443** (HTTPS/WSS) → `/api/*` and `/ws` to `api`, `/camera` to `vision` (Operator session checked first), the rest to `dashboard` | `65534`, port 8443 inside |
+| `reverse-proxy` | Caddy ([`caddy/`](caddy/)) | **443** (HTTPS/WSS) → `/api/*` and `/ws` to `api`, `/camera` to `vision` (Operator session checked first), `/firmware/sentinel-01.bin` to the Sentinel's token, the rest to `dashboard` | `65534`, port 8443 inside |
 | `mosquitto` | `eclipse-mosquitto:2.0` ([`mosquitto/`](mosquitto/)) | **8883** (MQTTS) — ESP32 by IP, `api`/`predictive` as `mosquitto:8883` | `1883` |
 | `api` | [`../backend/`](../backend/) | `api:8080`, internal only | `node` |
 | `dashboard` | [`../dashboard/`](../dashboard/) (static, Caddy) | `dashboard:8080`, internal only | `65534` |
@@ -166,7 +174,7 @@ A critical Alert makes it beat, with a red frame. Around the eye, a radar seen f
 
 ## Network topology
 - The **Pi is the Wi-Fi access point** (hostapd, WPA2-PSK CCMP) with DHCP reservations (dnsmasq) for **`192.168.X.0/24`** — IP plan in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#network-topology).
-- The **Sentinel (ESP32)** and the **Operator laptop** join that Wi-Fi.
+- The **Sentinel (ESP32)** and the **Operator laptop** join that Wi-Fi. The Sentinel has no cable to the Pi: its firmware comes over that Wi-Fi too.
 - No route/NAT to other networks; the Pi's Ethernet is for setup only — **pull Docker images and Python packages before going isolated**.
 - No interference with neighboring tables (own SSID, own channel if possible).
 

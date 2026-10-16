@@ -1,6 +1,6 @@
 # Installer le Command Post sur le Raspberry Pi
 
-Pas à pas, de la carte SD vierge au dashboard qui affiche les mesures du Sentinel. Tout repose sur [`infra/plug-and-play.sh`](../infra/plug-and-play.sh) : il configure le Pi, démarre la stack et flashe l'ESP32 branché en USB. Détails techniques : [`infra/README.md`](../infra/README.md) et [`firmware/README.md`](../firmware/README.md).
+Pas à pas, de la carte SD vierge au dashboard qui affiche les mesures du Sentinel. Tout repose sur [`infra/plug-and-play.sh`](../infra/plug-and-play.sh), le seul script à lancer : il configure le Pi, démarre la stack et donne son firmware à l'ESP32, par USB la première fois, **par le Wi-Fi ensuite** : le Sentinel n'a pas besoin d'être branché au Pi. Détails techniques : [`infra/README.md`](../infra/README.md) et [`firmware/README.md`](../firmware/README.md).
 
 Dans cette page, la table est la n° **4**. Remplace `4` par ton numéro de table partout : le Pi devient `192.168.<table>.1`.
 
@@ -8,7 +8,7 @@ Dans cette page, la table est la n° **4**. Remplace `4` par ton numéro de tabl
 
 - Le Raspberry Pi 4, son alimentation officielle (USB-C, 5 V / 3 A) et une carte microSD d'au moins 16 Go.
 - Un **câble Ethernet** branché sur un réseau qui a Internet (box, routeur, prise de l'école). Indispensable seulement la première fois.
-- L'ESP32 câblé selon [le schéma de l'ESP32](cablage/esp32.html) (à ouvrir dans un navigateur) et [`firmware/include/pins.h`](../firmware/include/pins.h), avec un **câble USB qui transmet les données**. Beaucoup de câbles ne font que charger : avec eux, le Pi ne voit pas l'ESP32.
+- L'ESP32 câblé selon [le schéma de l'ESP32](cablage/esp32.html) (à ouvrir dans un navigateur) et [`firmware/include/pins.h`](../firmware/include/pins.h), avec un **câble USB qui transmet les données**, pour son tout premier firmware seulement. Beaucoup de câbles ne font que charger : avec eux, le Pi ne voit pas l'ESP32. Ensuite, l'ESP32 vit sur sa propre alimentation (chargeur USB, batterie) et reçoit ses mises à jour par le Wi-Fi.
 - Une **webcam USB**, pour la détection d'intrusion.
 - En option, un moteur qui fait tourner la webcam pour suivre la personne détectée : un **moteur pas à pas** 28BYJ-48 et sa carte ULN2003 ([Le moteur pas à pas](#le-moteur-pas-à-pas-de-la-caméra-en-option)), ou un **servo** ([Le servo](#le-servo-de-la-caméra-en-option)).
 - L'**écran HDMI** 800×480, branché sur un port micro-HDMI du Pi (le deuxième, côté prise jack, convient) : il affiche le statut du Poste de commande, à la place de l'écran de l'ESP32.
@@ -29,7 +29,7 @@ Dans **Raspberry Pi Imager** :
 
 ## 2. Démarrer le Pi
 
-Mets la carte SD dans le Pi. Branche l'**Ethernet**, l'**ESP32** et la **webcam** sur des ports USB du Pi, puis l'alimentation. Attends 2 minutes.
+Mets la carte SD dans le Pi. Branche l'**Ethernet**, la **webcam** et, pour son premier firmware, l'**ESP32** sur des ports USB du Pi, puis l'alimentation. Attends 2 minutes.
 
 ## 3. Se connecter au Pi
 
@@ -56,7 +56,7 @@ Reconnecte-toi après le redémarrage, comme à l'étape 3.
 ls /dev/ttyUSB*
 ```
 
-Ça doit afficher `/dev/ttyUSB0`. Sinon, change de câble USB.
+Ça doit afficher `/dev/ttyUSB0`. Sinon, change de câble USB. Seulement la première fois : un ESP32 qui a déjà un firmware avec la mise à jour par le Wi-Fi n'a plus besoin du câble.
 
 ## 6. Lancer le script
 
@@ -68,7 +68,8 @@ infra/plug-and-play.sh 4
 
 - **Tout est demandé au début** : le mot de passe `sudo`, puis **deux fois le mot de passe Opérateur** (12 caractères minimum ; retiens-le, c'est celui du dashboard). Ensuite, le script tourne seul.
 - La première fois, c'est surtout des téléchargements : les images Docker arrivent toutes construites de GitHub (voir l'étape 2 ci-dessous). Si elles ne le peuvent pas, le Pi les construit lui-même, et il faut compter **30 à 60 minutes**.
-- Lance-le **en SSH par l'Ethernet** : à l'étape 7, le Wi-Fi du Pi devient le point d'accès de la table, et une session passée par le Wi-Fi serait coupée.
+- Les fois suivantes, **plus besoin du numéro** : `infra/plug-and-play.sh` reprend la table de la dernière fois (`infra/secrets/table.env`).
+- **Le Wi-Fi du Pi** : à l'étape 8, il devient le point d'accès de la table (le réseau isolé que demande le sujet) et quitte donc le Wi-Fi sur lequel il était. Le script le dit avant de commencer et demande s'il continue ; tout ce qu'il télécharge l'est avant. Lance-le **en SSH par l'Ethernet** : une session passée par ce Wi-Fi tombe à l'étape 8, et le script finit alors seul (l'écran HDMI montre où il en est, le journal garde tout ; pour revenir, connecte ton PC au Wi-Fi `SentinelX-4`, puis `ssh ton-utilisateur@192.168.4.1`). Relancé ensuite, il ne touche plus au point d'accès s'il n'a pas changé : la connexion tient.
 
 Il déroule 10 étapes numérotées. Chacune affiche un spinner et son temps, avec en gris la dernière ligne de ce qu'elle fait ; une fois finie, elle passe à `✓` (ou à `!` s'il y a une remarque). Ce que disent les commandes (Docker, PlatformIO…) va dans un journal, `~/.local/share/sentinel-x/plug-and-play.log`, au lieu d'inonder l'écran.
 
@@ -77,10 +78,10 @@ Il déroule 10 étapes numérotées. Chacune affiche un spinner et son temps, av
 3. **Secrets et certificats** : dans `infra/secrets/`, jamais commités.
 4. **Webcam USB** : elle est donnée au service `vision` si elle est branchée, avec le moteur pas à pas qui la fait tourner.
 5. **Démarrage de la stack** : les conteneurs, sur les images de l'étape 2.
-6. **Firmware du Sentinel** : compilé avec les secrets de ce Pi ; les mots de passe ne quittent jamais le Pi.
-7. **Wi-Fi de la table** : le Wi-Fi du Pi devient le réseau `SentinelX-4`, en 2,4 GHz, WPA2, sans Internet. L'ESP32 a toujours l'adresse `192.168.4.10`, et le Pi lui donne l'heure.
-8. **Écran HDMI** : l'écran du Pi affiche en continu le statut du Poste de commande (voir [L'écran de statut](#lécran-de-statut)), à la place de l'invite de connexion.
-9. **Flash de l'ESP32** par USB (`– ignoré` avec `--no-flash`, ou quand il n'est pas en USB mais répond déjà sur le Wi-Fi).
+6. **Firmware du Sentinel** : compilé avec les secrets de ce Pi ; les mots de passe ne quittent jamais le Pi. Ses outils se sont téléchargés pendant les images de l'étape 2. Sa version (une empreinte de son code et de ses secrets) dit au Sentinel s'il doit le prendre.
+7. **Écran HDMI** : l'écran du Pi affiche en continu le statut du Poste de commande (voir [L'écran de statut](#lécran-de-statut)), à la place de l'invite de connexion.
+8. **Wi-Fi de la table** : le Wi-Fi du Pi devient le réseau `SentinelX-4`, en 2,4 GHz, WPA2, sans Internet. L'ESP32 a toujours l'adresse `192.168.4.10`, et le Pi lui donne l'heure. Déjà en place et inchangé : rien n'est redémarré.
+9. **Firmware sur le Sentinel** : par USB s'il est branché sur le Pi ; sinon **par le Wi-Fi** : le Pi l'annonce sur le broker, le Sentinel le télécharge en HTTPS sur le Pi, vérifie son empreinte et redémarre dessus (une trentaine de secondes). `– déjà à jour` s'il l'a déjà, `– ignoré` avec `--no-flash`.
 10. **Première mesure du Sentinel** : il attend que l'ESP32 rejoigne le Wi-Fi, puis sa première mesure sur le broker.
 
 Si une étape échoue, le script s'arrête sur un `✗`, avec la raison encadrée en rouge et les dernières lignes de la commande qui a échoué. Ctrl+C l'interrompt proprement ; relancé, il reprend sans rien casser.
@@ -110,7 +111,7 @@ La webcam peut être posée sur un moteur pas à pas 28BYJ-48, au-dessus du boî
    | + | 5 V, broche **4** |
 
    Les broches impaires sont celles de la rangée intérieure, la broche 1 étant à l'opposé des ports USB. Le moteur tire environ 200 mA, sans à-coups : la broche 5 V du Pi suffit, contrairement à un servo qui force. Laisse du mou au câble USB de la webcam.
-2. **Tourne la caméra à la main** pour qu'elle regarde droit devant, puis lance `infra/plug-and-play.sh 4 --no-flash`. L'étape 4 affiche `moteur pas à pas de la caméra sur GPIO 6,13,19,26, donné à vision`. Il n'y a rien d'autre à installer : le script donne le moteur à `vision` tout seul, et retire le servo s'il y en avait un.
+2. **Tourne la caméra à la main** pour qu'elle regarde droit devant, puis lance `infra/plug-and-play.sh --no-flash`. L'étape 4 affiche `moteur pas à pas de la caméra sur GPIO 6,13,19,26, donné à vision`. Il n'y a rien d'autre à installer : le script donne le moteur à `vision` tout seul, et retire le servo s'il y en avait un.
 
 Sans moteur branché, mets `PAN_DRIVE=none` dans `.env` avant de lancer le script : sinon `vision` croit tourner la caméra, et le jumeau place le bonhomme de travers.
 
@@ -153,7 +154,7 @@ La webcam peut être posée sur un servo, au-dessus du boîtier : elle tourne al
    infra/servo.sh
    sudo reboot
    ```
-3. **Après le redémarrage** : ajoute `PAN_DRIVE=pwm` dans `.env` (sans cette ligne, c'est le moteur pas à pas que le script donne à `vision`), puis `infra/plug-and-play.sh 4 --no-flash`. L'étape 4 affiche `servo de la caméra sur GPIO 18, donné à vision`.
+3. **Après le redémarrage** : ajoute `PAN_DRIVE=pwm` dans `.env` (sans cette ligne, c'est le moteur pas à pas que le script donne à `vision`), puis `infra/plug-and-play.sh --no-flash`. L'étape 4 affiche `servo de la caméra sur GPIO 18, donné à vision`.
 
 Au démarrage de `vision`, le servo se met au centre : c'est la position de repos, celle où la caméra regarde droit devant. Elle y revient 2 s après la fin d'une intrusion, puis fait sa ronde de -30° à +30° autour, comme le moteur pas à pas.
 
@@ -238,7 +239,7 @@ Laisse **1 minute** au MQ-2 et au PIR pour chauffer, puis :
 - **Présence** : passe devant le PIR.
 - **Son** : tape dans les mains près du capteur.
 
-Les seuils se règlent dans [`firmware/include/config.h`](../firmware/include/config.h), puis on relance le script pour reflasher.
+Les seuils se règlent dans [`firmware/include/config.h`](../firmware/include/config.h), puis on relance le script : le Sentinel reçoit le nouveau firmware par le Wi-Fi.
 
 ## Ensuite
 
@@ -248,7 +249,7 @@ Les seuils se règlent dans [`firmware/include/config.h`](../firmware/include/co
   cd ~/sentinel-x && infra/update.sh
   ```
   Il récupère le code et ses images, et ne remplace que les conteneurs qui ont changé : ni sudo, ni Wi-Fi relancé, l'ESP32 n'est pas touché. Si la mise à jour apporte un nouveau firmware ou change l'installation du Pi, il le dit à la fin, avec la commande à lancer.
-- **Tout repasser** (nouveau firmware, webcam ou servo ajouté, installation du Pi changée) : `infra/plug-and-play.sh 4`, ou `infra/plug-and-play.sh 4 --no-flash` pour ne pas toucher à l'ESP32.
+- **Tout repasser** (nouveau firmware, webcam ou servo ajouté, installation du Pi changée) : `infra/plug-and-play.sh`, ou `infra/plug-and-play.sh --no-flash` pour ne pas toucher à l'ESP32. Le nouveau firmware part par le Wi-Fi : pas de câble.
 - **Durcir le Pi avant le pentest** : [`DURCISSEMENT-PI.md`](DURCISSEMENT-PI.md), une fois que tout marche ici. Après, `sentinel-x.local` ne répond plus et SSH n'accepte que le PC Opérateur, sur le Wi-Fi de la table : `ssh ton-utilisateur@192.168.4.1`.
 
 ## Dépannage
@@ -259,7 +260,7 @@ L'écran HDMI dit si le Sentinel envoie ses mesures ([L'écran de statut](#lécr
 |---|---|
 | `wifi=0` et `Wi-Fi...` | Vérifie que l'écran HDMI dit le point d'accès `ACTIF` (sinon `nmcli connection show --active`), puis relance le script |
 | `MQTT: TLS/reseau` | Vérifie avec `docker compose ps` que `mosquitto` tourne, puis relance le script : il refait le certificat si besoin |
-| `MQTT: mot de passe` | Relance le script : il reflashe l'ESP32 avec le bon mot de passe |
+| `MQTT: mot de passe` | Le firmware a été fait pour d'autres secrets : il ne peut plus joindre le broker, donc plus se mettre à jour par le Wi-Fi. Branche l'ESP32 sur le Pi, puis relance le script |
 | `heure=0` | `systemctl status chrony` |
 | `T=nan` | Câblage du DHT22 et sa résistance de 10 kΩ entre DATA et 3V3. Rien n'est envoyé tant qu'il ne répond pas |
 | Pas de bip au démarrage, pas de sirène | L'enceinte : un fil sur IO25 **par une résistance de 100 Ω au moins**, l'autre sur **GND**, jamais sur le 5V. Ou le buzzer, + sur IO25 et − sur GND. Le moniteur doit afficher `[command] buzzer pattern` quand tu cliques sur la sirène : sinon, l'ordre n'arrive pas (Wi-Fi, broker) |
@@ -280,7 +281,10 @@ Le script lui-même :
 
 | Message | Quoi faire |
 |---|---|
-| `pas d'ESP32 en USB` | Ni en USB ni sur le Wi-Fi : branche l'ESP32 sur le Pi avec un câble de données, puis relance |
+| `pas de Sentinel, ni en USB ni sur le Wi-Fi` | La première fois : branche l'ESP32 sur le Pi avec un câble de données, puis relance. Ensuite, plus besoin de câble |
+| `son firmware date d'avant la mise à jour par le Wi-Fi` | Une dernière fois par USB : branche-le sur le Pi, puis relance |
+| `le Sentinel n'a pas pu prendre le nouveau firmware (HTTPS: …)` | Il garde l'ancien et réessaie à la prochaine relance. `HTTPS: 404` : le jeton du firmware a changé (`infra/secrets/firmware.env` refait) ; une fois par USB. Son moniteur série, en USB, dit `[ota] …` |
+| `le Sentinel n'est pas sur le Wi-Fi` | Il est éteint ou loin : dès qu'il se connecte, il prend le nouveau firmware tout seul (tant que le Pi n'a pas redémarré ; sinon, relance) |
 | `le flash a échoué` | Maintiens le bouton **BOOT** de l'ESP32 au début de l'envoi, puis relance |
 | `paquets manquants` / `Docker manque` / `PlatformIO manque` | Le Pi n'a pas Internet : branche l'Ethernet, puis relance |
 | `les images préconstruites sont encore privées` | Rien ne casse : le Pi les construit, c'est juste plus long. Pour aller vite, le propriétaire du dépôt (Arthur) rend publics, une fois, les paquets `sentinel-x-*` sur GitHub (*Package settings → Change visibility → Public*) |
@@ -291,9 +295,9 @@ Le script lui-même :
 | `NetworkManager ne tourne pas` | Le système est trop ancien : réinstalle un Raspberry Pi OS (64-bit) récent |
 | `pas de webcam USB` | Branche la webcam sur un port USB du Pi (elle doit apparaître dans `ls /dev/v4l/by-id`), puis relance avec `--no-flash` |
 | `pas d'écran HDMI détecté` | Branche l'écran : le statut s'y affiche seul. Écran noir : tableau ci-dessus |
-| Le moteur pas à pas ne bouge pas | `docker compose logs vision` : « Stepper on /dev/gpiochip0, GPIO 6, 13, 19, 26, ready » quand il est pris en main. « unavailable » : relance `infra/plug-and-play.sh <table> --no-flash`. Pour le faire tourner sans attendre une intrusion : « Tester le moteur », dans [Le moteur pas à pas](#le-moteur-pas-à-pas-de-la-caméra-en-option). Vérifie les fils IN1 à IN4, et le + et le − de la carte : ses LED s'allument quand le moteur tourne |
+| Le moteur pas à pas ne bouge pas | `docker compose logs vision` : « Stepper on /dev/gpiochip0, GPIO 6, 13, 19, 26, ready » quand il est pris en main. « unavailable » : relance `infra/plug-and-play.sh --no-flash`. Pour le faire tourner sans attendre une intrusion : « Tester le moteur », dans [Le moteur pas à pas](#le-moteur-pas-à-pas-de-la-caméra-en-option). Vérifie les fils IN1 à IN4, et le + et le − de la carte : ses LED s'allument quand le moteur tourne |
 | Le moteur pas à pas vibre sans tourner | Il manque des pas : `PAN_STEP_MS=3` dans `.env`, puis `docker compose up -d vision`. Ou IN1 à IN4 ne sont pas dans l'ordre |
-| Le servo ne bouge pas | `docker compose logs vision` : « Servo on /pwm ready » quand il est pris en main. « unavailable » : relance `infra/servo.sh`, redémarre le Pi, puis `infra/plug-and-play.sh <table> --no-flash`. Vérifie aussi son alimentation et le fil de signal sur le GPIO 18 |
+| Le servo ne bouge pas | `docker compose logs vision` : « Servo on /pwm ready » quand il est pris en main. « unavailable » : relance `infra/servo.sh`, redémarre le Pi, puis `infra/plug-and-play.sh --no-flash`. Vérifie aussi son alimentation et le fil de signal sur le GPIO 18 |
 | Le Pi redémarre quand le servo bouge | Le servo est alimenté par le Pi : donne-lui une alimentation 5 V à part, masses reliées |
 | La caméra ne tourne plus du tout | `DETECTOR=motion` dans `.env` : une caméra qui tourne a besoin du détecteur de personnes, `vision` la laisse fixe et le dit dans ses journaux. Enlève cette ligne pour qu'elle suive à nouveau |
 | La caméra dépasse la personne, puis revient | `PAN_SPEED_DEG_S` au-dessus de 40 dans `.env` : le moteur ne suit pas, enlève cette ligne |

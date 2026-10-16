@@ -5,7 +5,8 @@
 #   - one bearer token per AI service (vision, predictive);
 #   - the Operator's password hash;
 #   - the AI services' own files, vision.env and predictive.env: the same tokens and MQTT password;
-#   - screen.env, the MQTT password of the status screen on the Pi's HDMI (infra/screen.py).
+#   - screen.env, the MQTT password of the status screen on the Pi's HDMI (infra/screen.py);
+#   - firmware.env, the token the Sentinel gives the reverse proxy for its new firmware, over the Wi-Fi.
 # Run it on the Pi, from the repo root, before the first `docker compose up`:
 #   infra/setup.sh <table number>          e.g. infra/setup.sh 4  → the Pi is 192.168.4.1
 # What exists already is kept: delete a file (sudo: some belong to the containers) to make it again.
@@ -23,7 +24,7 @@ pi_ip="192.168.${table}.1"
 
 cd "$(dirname "$0")"
 secrets="$PWD/secrets"
-mkdir -p "$secrets/mosquitto" "$secrets/caddy"
+mkdir -p "$secrets/mosquitto" "$secrets/caddy" "$secrets/firmware"
 chmod 700 "$secrets"
 
 MOSQUITTO_IMAGE=eclipse-mosquitto:2.0
@@ -35,7 +36,10 @@ in_container() {
 # The end of this script hands mosquitto/ and caddy/ to the users the containers run as: a later run
 # that makes a certificate again (infra/plug-and-play.sh deletes one that is outdated) could no
 # longer write there. Back to us while this runs, handed over again at the end.
-in_container "chown $(id -u):$(id -g) /secrets/mosquitto /secrets/caddy"
+# firmware/ too: Docker made it as root if the reverse proxy started before it existed.
+in_container "chown $(id -u):$(id -g) /secrets/mosquitto /secrets/caddy /secrets/firmware"
+# The reverse proxy (65534) reads the firmware there: this directory only, inside a secrets/ of ours.
+chmod 755 "$secrets/firmware"
 # A certificate that was missing when its container started is an empty directory since: Docker makes
 # one in place of a file it mounts and does not find (a run that stopped after deleting it, then a
 # reboot). Removed, for the file to be made below; one that is not empty is not ours to remove.
@@ -80,7 +84,8 @@ certificate() {
 certificate "$secrets/mosquitto" broker "IP:$pi_ip,DNS:$pi_ip,DNS:mosquitto"
 # 127.0.0.1 and localhost: to check the stack from the Pi itself. sentinel-x.local: the dashboard
 # by its name, which the Operator laptop resolves from its hosts file (the table Wi-Fi has no DNS).
-certificate "$secrets/caddy" proxy "IP:$pi_ip,IP:127.0.0.1,DNS:localhost,DNS:sentinel-x.local${EXTRA_SAN:+,$EXTRA_SAN}"
+# The IP as a DNS entry too: the ESP32 fetches its new firmware there, as for the broker.
+certificate "$secrets/caddy" proxy "IP:$pi_ip,DNS:$pi_ip,IP:127.0.0.1,DNS:localhost,DNS:sentinel-x.local${EXTRA_SAN:+,$EXTRA_SAN}"
 
 echo "Credentials: MQTT accounts, service tokens, Operator password"
 # The api's MQTT password goes in both files: they are made together or not at all.
@@ -202,6 +207,19 @@ MQTT_PASSWORD=$screen_password
 SCREEN
   )
   made "screen.env, and the screen account in passwd"
+fi
+
+echo "Sentinel's firmware over the Wi-Fi: firmware.env"
+if [[ -f "$secrets/firmware.env" ]]; then
+  kept firmware.env
+else
+  (umask 077 && cat > "$secrets/firmware.env" <<FIRMWARE
+# Read by the reverse proxy (docker-compose.yml), built into the Sentinel's firmware by
+# infra/plug-and-play.sh. Made by infra/setup.sh: who gives it gets /firmware/sentinel-01.bin.
+FIRMWARE_TOKEN=$(openssl rand -hex 32)
+FIRMWARE
+  )
+  made firmware.env
 fi
 
 # The ACL, from infra/mosquitto/acl, each run. The broker runs as 1883 and the reverse proxy as

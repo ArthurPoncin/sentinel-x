@@ -5,13 +5,14 @@
 
 #include "alerts.h"
 #include "config.h"
+#include "ota.h"
 #include "probes.h"
 #include "speaker.h"
 #include "uplink.h"
 
 namespace {
 
-char telemetryTopic[64], alertTopic[64];
+char telemetryTopic[64], alertTopic[64], firmwareTopic[64];
 Readings readings;
 uint32_t lastCycle = 0;
 
@@ -96,8 +97,19 @@ void onCommand(const char *payload, size_t length) {
   if (strcmp(actuator, "buzzer") == 0) speaker::command(action);
 }
 
+// Retained: whoever asks the broker knows which firmware runs, and why the last update failed.
+void publishFirmware() {
+  JsonDocument doc;
+  doc["version"] = ota::version();
+  if (*ota::lastError()) doc["error"] = ota::lastError();
+  char payload[160];
+  serializeJson(doc, payload);
+  uplink::publish(firmwareTopic, payload, true);
+}
+
 // After a reconnection, the api may have missed transitions: it gets every raised Alert again.
 void onBrokerConnect() {
+  publishFirmware();
   alerts::reemitActive(enqueue);
   flushAlerts();
 }
@@ -122,15 +134,23 @@ void setup() {
   Serial.printf("\n[sentinel] %s booting\n", SENTINEL_ID);
   snprintf(telemetryTopic, sizeof telemetryTopic, "sentinel/%s/telemetry", SENTINEL_ID);
   snprintf(alertTopic, sizeof alertTopic, "sentinel/%s/alert", SENTINEL_ID);
+  snprintf(firmwareTopic, sizeof firmwareTopic, "sentinel/%s/firmware", SENTINEL_ID);
+  Serial.printf("[sentinel] firmware %s\n", ota::version());
 
   speaker::begin();
   speaker::beep(120);
   probes::begin();
   alerts::begin();
-  uplink::begin(onCommand, onBrokerConnect);
+  uplink::begin(onCommand, ota::command, onBrokerConnect);
 }
 
 void loop() {
+  // A new firmware asked by the Pi: the broker let go first, then a restart on it. Back here only
+  // when it failed: the uplink connects again, and says why on the firmware topic.
+  if (ota::pending()) {
+    uplink::stop();
+    ota::run();
+  }
   uint32_t now = millis();
   uplink::update(now);
   if (now - lastCycle >= CYCLE_MS) {

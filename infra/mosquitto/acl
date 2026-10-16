@@ -5,11 +5,17 @@ user sentinel-01
 topic write sentinel/sentinel-01/telemetry
 topic write sentinel/sentinel-01/alert
 topic read command/sentinel-01/actuator
+# The firmware it runs, retained; the one the Pi asks it to download (firmware/src/ota.h).
+topic write sentinel/sentinel-01/firmware
+topic read command/sentinel-01/firmware
 
 user api
 topic read sentinel/+/telemetry
 topic read sentinel/+/alert
 topic write command/+/actuator
+# infra/plug-and-play.sh, with the api's account: which firmware runs, and the new one to fetch.
+topic read sentinel/+/firmware
+topic write command/+/firmware
 # The Alerts that are not a Sentinel's, put up for the status screen (backend/src/alert-board.ts).
 topic write command-post/alerts
 

@@ -18,12 +18,13 @@ Firmware for the Sentinel: reads the probes, drives the Alarm, **decides its own
 
 ## Security
 - MQTTS on port 8883 only; **broker certificate verified against the team CA** (`setCACert`) — never `setInsecure()`.
-- Own MQTT credentials (`sentinel-01`). The broker ACL only lets it publish `sentinel/sentinel-01/{telemetry,alert}` and read `command/sentinel-01/actuator`.
+- Own MQTT credentials (`sentinel-01`). The broker ACL only lets it publish `sentinel/sentinel-01/{telemetry,alert,firmware}` and read `command/sentinel-01/{actuator,firmware}`.
+- A new firmware only from the Pi, over HTTPS checked against the team CA, at the address of its own build (never one from a message), behind a token, its MD5 checked before it boots it.
 
 ## Build and flash
-**Plug and play:** plug the ESP32 into a USB port of the Pi, then on the Pi run [`../infra/plug-and-play.sh`](../infra/plug-and-play.sh) `<table>`. It writes `include/secrets.h` from the Pi's own `infra/secrets/` (the credentials never leave the Command Post), builds the firmware and flashes it.
+**Plug and play:** on the Pi, [`../infra/plug-and-play.sh`](../infra/plug-and-play.sh). It writes `include/secrets.h` from the Pi's own `infra/secrets/` (the credentials never leave the Command Post), builds the firmware and gives it to the Sentinel: over USB when it is plugged into the Pi, which it must be for its very first one; **over the Wi-Fi** afterwards, without a cable, the Sentinel on its own supply ([`../infra/README.md`](../infra/README.md#the-sentinels-firmware-over-the-wi-fi)).
 
-By hand, from a laptop with PlatformIO: copy `include/secrets.example.h` to `include/secrets.h` (git-ignored), fill it from `infra/secrets/handover.txt` and `infra/secrets/ca.crt`, then `pio run -t upload` and `pio device monitor`.
+By hand, from a laptop with PlatformIO: copy `include/secrets.example.h` to `include/secrets.h` (git-ignored), fill it from `infra/secrets/handover.txt`, `infra/secrets/firmware.env` and `infra/secrets/ca.crt`, then `pio run -t upload` and `pio device monitor`. Built by hand, its version is `dev`: the next `plug-and-play.sh` replaces it over the Wi-Fi.
 
 | File | Role |
 |---|---|
@@ -33,6 +34,7 @@ By hand, from a laptop with PlatformIO: copy `include/secrets.example.h` to `inc
 | `src/alerts.*` | one state machine per kind; a severity change is raised again on the same `alert_id` |
 | `src/speaker.*` | the Alarm: siren (the "Axel F" riff of Crazy Frog as a square wave, 523 to 1397 Hz, looping; played on an esp_timer every 5 ms, so a TLS reconnection holding the loop does not stretch it) while an Alert is critical; `on` (steady 2600 Hz) / `pattern` (siren) / `off` from the Operator (`off` silences until the next critical) |
 | `src/uplink.*` | Wi-Fi (hostname `sentinel-01`), time from the Pi, MQTTS with the team CA, commands |
+| `src/ota.*` | the new firmware over the Wi-Fi: asked on `command/sentinel-01/firmware` (`{ version, md5 }`, retained), downloaded from `https://<the Pi>/firmware/sentinel-01.bin` with `FIRMWARE_TOKEN`, written to the other OTA partition, MD5 checked, then a restart. The firmware running, retained on `sentinel/sentinel-01/firmware`. The serial monitor says `[ota] …` |
 | `src/main.cpp` | one cycle per second: read, decide, sound, publish, and a line on the serial monitor |
 
 **What to expect:** a short beep from the speaker at boot, then the Pi's HDMI screen shows the Sentinel `EN LIGNE`. Until then, the serial monitor (`pio device monitor`) says what it waits for, a line a second: `T=… H=… air=… pir=… son=… | wifi=… heure=… broker=… <problem>`, the problem being `Wi-Fi...` or `MQTT: …` (TLS/network, password) until the broker is reached. Telemetry starts once the DHT22 has answered and the Pi gave the time: the contract wants every reading and a real `ts`. The MQ-2 and the PIR raise no Alert during their first minute (warm-up). If the sound sensor already hears sound at boot, the serial monitor says so: its screw is set too sensitive. The settings of the three probes (screws, jumper, the MQ-2 test with a lighter) are under « Réglages » in [`../docs/cablage/esp32.html`](../docs/cablage/esp32.html). Alert transitions made while the broker is unreachable are queued (16), and every raised Alert is sent again on reconnection.

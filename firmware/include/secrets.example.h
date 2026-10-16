@@ -10,6 +10,9 @@
 #define MQTT_USER "sentinel-01"
 #define MQTT_PASSWORD "sentinel-01's password, from infra/secrets/handover.txt"
 #define NTP_SERVER "192.168.4.1"   // chrony on the Pi: the table network has no Internet
+// The firmware over the Wi-Fi: https://BROKER_HOST/firmware/sentinel-01.bin, behind this token
+// (FIRMWARE_TOKEN in infra/secrets/firmware.env).
+#define FIRMWARE_TOKEN "the firmware token"
 
 // infra/secrets/ca.crt: the team CA that signed the broker's certificate.
 static const char CA_CERT[] = R"PEM(

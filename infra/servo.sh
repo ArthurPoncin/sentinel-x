@@ -3,7 +3,7 @@
 # exports it at each boot, for the vision service to write the servo's pulse to. Run it once on
 # the Pi, from the repo root, as your usual user, with the servo wired:
 #   infra/servo.sh
-# then reboot if it says so, and run infra/plug-and-play.sh <table> --no-flash: it finds the
+# then reboot if it says so, and run infra/plug-and-play.sh --no-flash: it finds the
 # channel and gives it to vision (docker-compose.pan.yml).
 #
 # Wiring: the servo's signal on GPIO 18 (pin 12), its ground on one of the Pi's (pin 14), its
@@ -55,11 +55,11 @@ echo "✓ Canal PWM exporté à chaque démarrage ($unit)."
 
 if $reboot; then
   echo
-  echo "Redémarre le Pi (sudo reboot), puis lance : infra/plug-and-play.sh <numéro de table> --no-flash"
+  echo "Redémarre le Pi (sudo reboot), puis lance : infra/plug-and-play.sh --no-flash"
 elif sudo systemctl restart "$unit" && [[ -e "$chip/pwm0/duty_cycle" ]]; then
   echo "✓ Canal prêt : $chip/pwm0"
   echo
-  echo "Lance maintenant : infra/plug-and-play.sh <numéro de table> --no-flash"
+  echo "Lance maintenant : infra/plug-and-play.sh --no-flash"
 else
   echo "Le canal PWM n'apparaît pas : systemctl status $unit dit pourquoi (un redémarrage peut suffire)." >&2
   exit 1

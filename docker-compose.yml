@@ -22,9 +22,16 @@ services:
     build: infra/caddy
     image: sentinel-x/reverse-proxy
     ports: ["443:8443"]
+    # FIRMWARE_TOKEN, for the Sentinel's update over the Wi-Fi. Optional: an install from before it
+    # (infra/update.sh) starts without, and gets it on its next infra/plug-and-play.sh.
+    env_file:
+      - path: infra/secrets/firmware.env
+        required: false
     volumes:
       - ./infra/secrets/caddy/proxy.crt:/certs/proxy.crt:ro
       - ./infra/secrets/caddy/proxy.key:/certs/proxy.key:ro
+      # The Sentinel's firmware, put there by infra/plug-and-play.sh: /firmware/sentinel-01.bin.
+      - ./infra/secrets/firmware:/srv/firmware:ro
     tmpfs: ["/config:mode=1777", "/data:mode=1777"]
     networks: [edge, internal]
     depends_on: [api, dashboard]

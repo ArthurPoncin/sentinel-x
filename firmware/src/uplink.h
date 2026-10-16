@@ -9,10 +9,13 @@ namespace uplink {
 using OnCommand = void (*)(const char *payload, size_t length);
 using OnConnect = void (*)();
 
-void begin(OnCommand onCommand, OnConnect onConnect);
+// onCommand: command/<id>/actuator; onFirmware: command/<id>/firmware (src/ota.h).
+void begin(OnCommand onCommand, OnCommand onFirmware, OnConnect onConnect);
 // Call it often: keeps the connections up, one attempt every few seconds, and reads commands.
 void update(uint32_t now);
-bool publish(const char *topic, const char *payload);
+bool publish(const char *topic, const char *payload, bool retained = false);
+// Lets go of the broker, for the firmware's download: update() connects again afterwards.
+void stop();
 
 bool wifiUp();
 bool timeKnown();

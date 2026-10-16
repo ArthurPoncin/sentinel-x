@@ -93,9 +93,9 @@ fi
 # What the pull brought that this script does not apply: each with the command that does.
 next=()
 if changed firmware; then
-  next+=("Le firmware du Sentinel a changé : branche l'ESP32 sur le Pi, puis infra/plug-and-play.sh <numéro de table>")
-elif changed infra/setup.sh infra/mosquitto/acl infra/plug-and-play.sh infra/screen.py infra/eye.py infra/servo.sh; then
-  next+=("L'installation du Pi a changé (comptes du broker, Wi-Fi, écran…) : infra/plug-and-play.sh <numéro de table> --no-flash")
+  next+=("Le firmware du Sentinel a changé : infra/plug-and-play.sh le lui envoie par le Wi-Fi, sans câble")
+elif changed infra/setup.sh infra/mosquitto/acl infra/plug-and-play.sh infra/screen.py infra/eye.py infra/servo.sh infra/caddy/Caddyfile docker-compose.yml; then
+  next+=("L'installation du Pi a changé (comptes du broker, Wi-Fi, écran…) : infra/plug-and-play.sh")
 fi
 if changed cyber/harden.sh; then
   next+=("Le durcissement a changé : cyber/harden.sh <numéro de table>, après plug-and-play.sh s'il est à relancer")

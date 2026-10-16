@@ -15,14 +15,16 @@ constexpr uint32_t RETRY_MS = 5000;
 WiFiClientSecure tls;
 PubSubClient mqtt(tls);
 uplink::OnCommand commandHandler;
+uplink::OnCommand firmwareHandler;
 uplink::OnConnect connectHandler;
-char commandTopic[64];
+char commandTopic[64], firmwareTopic[64];
 bool clockStarted = false;
 uint32_t lastAttempt = 0;
 const char *why = "Wi-Fi...";
 
-void onMessage(char *, uint8_t *payload, unsigned int length) {
-  commandHandler(reinterpret_cast<const char *>(payload), length);
+void onMessage(char *topic, uint8_t *payload, unsigned int length) {
+  auto handler = strcmp(topic, firmwareTopic) == 0 ? firmwareHandler : commandHandler;
+  handler(reinterpret_cast<const char *>(payload), length);
 }
 
 // What PubSubClient's state means, to fix it from the serial monitor.
@@ -40,6 +42,7 @@ void connectBroker() {
   if (mqtt.connect(SENTINEL_ID, MQTT_USER, MQTT_PASSWORD)) {
     why = "";
     mqtt.subscribe(commandTopic, 1);
+    mqtt.subscribe(firmwareTopic, 1);
     Serial.println("[uplink] broker connected");
     connectHandler();
     return;
@@ -54,10 +57,12 @@ void connectBroker() {
 
 namespace uplink {
 
-void begin(OnCommand onCommand, OnConnect onConnect) {
+void begin(OnCommand onCommand, OnCommand onFirmware, OnConnect onConnect) {
   commandHandler = onCommand;
+  firmwareHandler = onFirmware;
   connectHandler = onConnect;
   snprintf(commandTopic, sizeof commandTopic, "command/%s/actuator", SENTINEL_ID);
+  snprintf(firmwareTopic, sizeof firmwareTopic, "command/%s/firmware", SENTINEL_ID);
 
   // Before mode(): the name is applied when the station starts. The Pi's DHCP gives sentinel-01
   // its reserved address by this name.
@@ -93,7 +98,16 @@ void update(uint32_t now) {
   connectBroker();
 }
 
-bool publish(const char *topic, const char *payload) { return mqtt.connected() && mqtt.publish(topic, payload); }
+bool publish(const char *topic, const char *payload, bool retained) {
+  return mqtt.connected() && mqtt.publish(topic, payload, retained);
+}
+
+void stop() {
+  mqtt.disconnect();
+  tls.stop();
+  why = "mise a jour...";
+  lastAttempt = 0;
+}
 
 bool wifiUp() { return WiFi.status() == WL_CONNECTED; }
 bool timeKnown() { return time(nullptr) > 1700000000; }
