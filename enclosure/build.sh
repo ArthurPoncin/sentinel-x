@@ -13,6 +13,7 @@ parts=(
   "sentinel base"
   "sentinel lid"
   "leap-stand stand"
+  "screw-test plate"
 )
 
 for p in "${parts[@]}"; do
@@ -33,8 +34,8 @@ shot() {  # file part camera png
     -o "apercu/$4.png" "$1.scad" >/dev/null 2>&1
   echo "✓ apercu/$4.png"
 }
-shot command-post assembly "72,62,92,62,0,32,720" poste-de-commande
-shot command-post assembly "72,62,92,62,0,212,720" poste-de-commande-arriere
+shot command-post assembly "72,62,118,62,0,32,900" poste-de-commande
+shot command-post assembly "72,62,118,62,0,212,900" poste-de-commande-arriere
 shot command-post inside "72,62,38,52,0,212,520" poste-de-commande-interieur
 shot sentinel assembly "63,66,25,58,0,22,420" sentinel
 shot sentinel inside "63,68,10,18,0,0,360" sentinel-interieur

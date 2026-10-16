@@ -44,10 +44,18 @@ module cs_m3(len = 20) {
   cylinder(h = 5, d = 7);
 }
 
-// Boss from z = 0 to h, with a pilot hole `depth` deep from its top for a self-tapping screw.
+// Pilot holes for the machine screws, which cut their own thread in the plastic. A hole this small prints some 0.3 mm
+// narrower than drawn: drawn at about the screw's own size, it comes out where the screw goes in by hand and still bites.
+// (At 2.1 mm, the screen's M3 would not go in.) screw-test.scad tries them on a small plate before the big parts.
+pilot_m2 = 1.9;
+pilot_m25 = 2.5;
+pilot_m3 = 2.9;
+
+// Boss from z = 0 to h, with a pilot hole `depth` deep from its top for a screw, its mouth chamfered for the screw to start straight.
 module boss(h, d, pilot, depth) difference() {
   cylinder(h = h, d = d);
   translate([0, 0, h - depth]) cylinder(h = depth + eps, d = pilot, $fn = 24);
+  translate([0, 0, h - 0.5]) cylinder(h = 0.5 + eps, d1 = pilot, d2 = pilot + 1, $fn = 24);
 }
 
 // Half a ring (its lower half once turned into place) that a round part rests in: a capsule, a gas sensor's can.

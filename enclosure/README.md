@@ -1,10 +1,10 @@
 # enclosure/ : les boîtiers à imprimer
 
-Deux boîtiers, le Poste de commande et le Sentinel, plus le support du Leap Motion : sept fichiers STL dans [`stl/`](stl/), chacun déjà posé dans le bon sens pour l'impression. Aucun ne demande de support.
+Deux boîtiers, le Poste de commande et le Sentinel, plus le support du Leap Motion : sept fichiers STL dans [`stl/`](stl/), et un huitième pour essayer les trous de vis avant, chacun déjà posé dans le bon sens pour l'impression. Aucun ne demande de support.
 
 | Objet | Ce qu'il contient | Taille hors tout |
 |---|---|---|
-| **Poste de commande** | Raspberry Pi 4, écran 5 pouces HDMI 800×480 (SunFounder) en façade, carte ULN2003 ; sur le toit, une tour de 30 mm avec le moteur 28BYJ-48 dedans et la Logitech C920 sur son support | 150 × 140 × 112 mm, 141 mm en haut de la tour, 197 mm en haut de la C920 |
+| **Poste de commande** | Raspberry Pi 4, écran 5 pouces HDMI 800×480 (SunFounder) en façade, carte ULN2003 ; sur le toit, une tour de 30 mm avec le moteur 28BYJ-48 dedans et la Logitech C920 sur son support | 150 × 140 × 160 mm, 189 mm en haut de la tour, 245 mm en haut de la C920 |
 | **Sentinel** | ESP32 sur son support, trois WAGO 221 pour les alimentations, DHT22, MQ-2, PIR HC-SR501, micro CZN-15E, enceinte 70 × 30 mm | 138 × 137 × 61 mm |
 | **Support Leap Motion** | Le Leap Motion Controller d'origine, à plat sur le bureau de l'Opérateur | 128 × 58 × 15 mm |
 
@@ -21,32 +21,39 @@ Deux boîtiers, le Poste de commande et le Sentinel, plus le support du Leap Mot
 | Fichier | Pièce | Posée sur le plateau par |
 |---|---|---|
 | `command-post-shell.stl` | Coque : toit et trois murs | le toit |
-| `command-post-base.stl` | Socle : le Pi, la carte ULN2003 | le dessous |
+| `command-post-base.stl` | Socle : le fond avec le Pi et la carte ULN2003, et les murs du bas, sur 48 mm, sur lesquels la coque se pose | le dessous |
 | `command-post-bezel.stl` | Façade : la fenêtre de l'écran, les quatre plots où il se visse | la face avant |
 | `command-post-tower.stl` | Tour de la caméra : le moteur sous son sommet | le sommet |
 | [`Rajout/Porte_clés_EPSI_monochrome_v3.stl`](Rajout/) | Porte-clés EPSI, 70 × 27 mm, collé dans son logement du mur droit du Poste de commande | le dessous |
 | `sentinel-base.stl` | Boîte du Sentinel : fond, murs, compartiments, support de l'ESP32, logements des trois WAGO | le fond |
 | `sentinel-lid.stl` | Couvercle du Sentinel, avec le cadre de l'enceinte | le dessus |
 | `leap-stand-stand.stl` | Support du Leap Motion | le dessous |
+| `screw-test-plate.stl` | Essai des trous de vis : huit plots, M2,5 et M3, chacun avec son diamètre gravé devant | le dessous |
+
+La coque a d'abord été imprimée avec 20 mm de place au-dessus de l'écran, pour un adaptateur HDMI coudé. Le câble de l'équipe a une fiche droite, rigide sur 45 à 50 mm : le socle a maintenant des murs qui surélèvent la coque. **Si la coque et la tour sont déjà imprimées, seuls le socle et la façade sont à réimprimer.**
+
+Les trous où les vis se taillent leur filet étaient trop petits : à 2,1 mm, les M3 de l'écran ne rentraient pas. Ils sont maintenant dessinés à 2,5 mm pour les M2,5, 2,9 mm pour les M3 et 1,9 mm pour les M2 (`common.scad`, `pilot_m25`, `pilot_m3`, `pilot_m2`) : un petit trou s'imprime environ 0,3 mm plus étroit que dessiné. Les plots de l'écran sont aussi percés 1,8 mm plus loin, dans la façade : une M3 × 8 dépasse de 6,4 mm de la carte, et les plots ne font que 6 mm. Les pièces déjà imprimées avec les anciens trous (coque, tour, Sentinel) se reprennent au foret, sans réimpression : 2,5 mm pour les M3, 2,2 mm pour les M2,5, 1,7 mm pour les M2.
 
 ## Impression
 
 Sur la Creality K2 Plus du myDiL (350 mm de plateau : chaque pièce passe en une fois).
 
+**D'abord l'essai des trous de vis** (`screw-test-plate.stl`, dix minutes). On visse une vraie M2,5 et une vraie M3 dans chaque plot. Le bon trou prend la vis au tournevis, à la main, et la tient. Si ce n'est pas celui du milieu (2,5 et 2,9), on reporte le bon diamètre dans `common.scad`, puis `./build.sh` avant d'imprimer le reste.
+
 - **Matière** : PLA pour le Poste de commande et le Leap. **PETG** de préférence pour le Sentinel : la chauffe du MQ-2 dégage près d'un watt dans son compartiment.
 - Couches de 0,2 mm, 3 périmètres, remplissage 15 à 20 % (gyroïde), sans support, sans bordure.
-- Au plus 750 g de filament pour le tout (le volume plein des pièces), moins avec le remplissage.
+- Au plus 820 g de filament pour le tout (le volume plein des pièces), moins avec le remplissage.
 
 ## Visserie et petit matériel
 
 | Pour | Quoi |
 |---|---|
-| Le Pi sur le socle | 4 vis M2,5 × 6 |
-| Le socle sous la coque | 4 vis M3 × 12 tête fraisée, par en dessous |
+| Le Pi sur le socle | 4 vis M2,5 × 6 : les trous du Pi 4 font 2,7 mm, une M3 n'y passe pas |
+| Le socle sous la coque | 4 vis M3 × 12 tête fraisée, par les puits des coins du socle : un tournevis à tige de 5 cm au moins |
 | La tour sur le toit | 3 vis M3 × 10, par l'intérieur du boîtier |
 | Le moteur dans la tour | 2 vis M3 × 8 tête fraisée et 2 écrous M3 |
-| L'écran sur la façade | 4 vis M2,5 × 8, par les trous de ses oreilles |
-| Le câble HDMI de l'écran | Un adaptateur HDMI coudé à 90°, mâle-femelle, dont la sortie part vers l'arrière (à l'opposé de la vitre) |
+| L'écran sur la façade | 4 vis M3 × 8 (ou × 6), par les trous de ses oreilles |
+| Le câble HDMI de l'écran | Le câble micro-HDMI vers HDMI tel quel, sa fiche droite dans l'écran (50 mm de rigide au plus) |
 | L'alimentation de l'écran | 2 fils Dupont mâle-femelle, ou un câble micro-USB coudé |
 | La carte ULN2003 | 4 vis M3 × 6, ou un carré d'adhésif double face mousse si ses trous ne tombent pas (prévus à 29,5 × 27 mm) |
 | Le couvercle du Sentinel | 4 vis M3 × 12 tête fraisée |
@@ -59,16 +66,16 @@ Sur la Creality K2 Plus du myDiL (350 mm de plateau : chaque pièce passe en une
 
 ## Montage du Poste de commande
 
-1. **Écran sur la façade.** Vitre contre la façade, **son connecteur HDMI en haut** : les quatre oreilles de sa carte tombent sur les quatre plots. Quatre vis M2,5 × 8 ; serrées, elles plaquent la vitre contre la fenêtre.
-   L'adaptateur HDMI coudé se branche dessus, sa sortie vers l'arrière : le câble passe sous le toit, au-dessus du Pi, et redescend au fond vers le micro-HDMI 1. Il reste 20 mm entre le haut de la carte et le toit.
+1. **Écran sur la façade.** Vitre contre la façade, **son connecteur HDMI en haut** : les quatre oreilles de sa carte tombent sur les quatre plots. Quatre vis M3 × 8 ; serrées, elles plaquent la vitre contre la fenêtre.
+   Le câble HDMI s'y branche, sa fiche droite vers le haut. Au-dessus d'elle, il se couche vers l'arrière sous le toit, passe au-dessus du Pi et redescend au fond vers le micro-HDMI 1. Il y a 68 mm entre le haut de la carte et le toit : 50 mm de fiche, et de quoi couder le câble.
 2. **Pi sur le socle.** Carte SD vers la droite (l'encoche du mur droit la laisse accessible), connecteur GPIO vers l'avant, ports USB et Ethernet vers la gauche. Quatre vis M2,5.
 3. **Carte ULN2003** sur les quatre plots du coin arrière gauche.
 4. **Moteur dans la tour.** Son axe sort par le trou du sommet, le capot de ses fils vers l'arrière. Deux vis fraisées par le dessus, les écrous dessous, sur ses pattes.
    **Tour sur le toit.** Elle se pose dans son logement, le triangle gravé vers l'avant (ses trois vis ne tombent que dans ce sens), et se visse par l'intérieur de la coque avec trois vis M3 × 10. Le fil du moteur descend dans le boîtier par le trou du toit.
 5. **Support de la caméra** : celui que l'équipe a déjà imprimé (`support_c920_28byj48.stl`), enfoncé sur l'axe du moteur. Le haut de la tour est creusé autour de l'axe : son cône ne frotte pas.
 6. **Webcam.** La C920 se visse sur le pas de vis du support, son clip replié dessous, **sa lentille au-dessus du triangle gravé** sur la tour : elle regarde droit devant. C'est le zéro du moteur, à refaire avant chaque démarrage (il compte ses pas depuis là). Son câble entre dans la tour par le trou à l'arrière gauche, juste sous le support, et descend jusqu'à un port USB du Pi. Laisse-lui du mou : la caméra tourne d'un quart de tour de chaque côté.
-7. **Câblage**, comme sur [`docs/cablage/raspberry-pi.html`](../docs/cablage/raspberry-pi.html) : broches 31, 33, 35, 37 vers IN1 à IN4, 39 vers −, 4 vers + ; le moteur dans la prise blanche de l'ULN2003 ; l'écran sur le micro-HDMI 1. On n'enfiche pas l'écran sur le GPIO comme le prévoit SunFounder (avec son adaptateur HDMI en U) : son connecteur couvrirait les broches 1 à 26, dont la 4 du moteur. Il s'alimente par deux fils Dupont mâle-femelle, de la broche 2 (5 V) et de la broche 6 (GND) du Pi vers les mêmes broches de son connecteur noir, au dos ; ou par son micro-USB sur un port USB du Pi, avec un câble coudé (11 mm seulement jusqu'au mur droit). Si l'image est à l'envers, ajouter `,rotate=180` après `video=HDMI-A-2:800x480M@60D` dans `/boot/firmware/cmdline.txt`. Le câble USB de l'ESP32 et, si besoin, l'Ethernet passent dans l'encoche arrière gauche, l'alimentation USB-C dans l'encoche arrière droite. Toutes les fiches restent dedans : à l'arrière ne sortent que l'alimentation et le câble de l'ESP32, plus l'Ethernet s'il est branché.
-8. **Fermeture.** La tour vissée avant (ses vis sont au-dessus de la façade), la façade debout dans la rainure à l'avant du socle, on descend la coque par-dessus : la façade glisse dans les rainures des murs jusqu'à celle du toit. Quatre vis M3 × 12 par-dessous.
+7. **Câblage**, comme sur [`docs/cablage/raspberry-pi.html`](../docs/cablage/raspberry-pi.html) : broches 31, 33, 35, 37 vers IN1 à IN4, 39 vers −, 4 vers + ; le moteur dans la prise blanche de l'ULN2003 ; l'écran sur le micro-HDMI 1. On n'enfiche pas l'écran sur le GPIO comme le prévoit SunFounder (avec son adaptateur HDMI en U) : son connecteur couvrirait les broches 1 à 26, dont la 4 du moteur. Il s'alimente par deux fils Dupont mâle-femelle, de la broche 2 (5 V) et de la broche 6 (GND) du Pi vers les mêmes broches de son connecteur noir, au dos ; ou par son micro-USB sur un port USB du Pi, avec un câble coudé (11 mm seulement jusqu'au mur droit). Si l'image est à l'envers, ajouter `,rotate=180` après `video=HDMI-A-2:800x480M@60D` dans `/boot/firmware/cmdline.txt`. Le câble USB de l'ESP32 et, si besoin, l'Ethernet passent dans l'encoche arrière gauche du socle, l'alimentation USB-C dans l'encoche arrière droite : chacun s'y glisse par en dessous, par la fente du fond juste devant. Toutes les fiches restent dedans : à l'arrière ne sortent que l'alimentation et le câble de l'ESP32, plus l'Ethernet s'il est branché.
+8. **Fermeture.** La tour vissée avant (ses vis sont au-dessus de la façade), la façade debout dans les rainures du socle, le câble HDMI couché vers l'arrière, on descend la coque par-dessus : la façade glisse dans ses rainures jusqu'à celle du toit, la coque se pose sur les murs du socle et ses encoches du bas sur les languettes du socle. Boîtier couché sur le côté, quatre vis M3 × 12 par les puits des coins, sous le fond : chacune au bout du tournevis (une pointe aimantée aide), 47 mm de puits jusqu'à la coque.
 9. **Porte-clés EPSI** dans son logement, sur le mur droit : le logo vers l'avant, le trou d'anneau vers l'arrière. Un point de colle cyanoacrylate, ou de l'adhésif double face fin.
 
 ## Montage du Sentinel
@@ -116,7 +123,7 @@ Toutes ces cotes sont en tête des fichiers `.scad`. Après un changement, `./bu
 | Cote | Valeur prise | Fichier, variable | Si c'est faux |
 |---|---|---|---|
 | **Écran 5 pouces SunFounder** (la carte Waveshare 5inch HDMI LCD Rev 2.1, comme la Joy-IT RB-LCD-5) : carte, oreilles, zone affichée | Carte 121,1 × 78 mm ; ses quatre oreilles arrondies la portent à 92,3 mm de haut, trous Ø 3 à 115,1 × 83,9 mm ; zone affichée 110,7 × 67,4 mm, décalée de 2,2 mm vers la prise HDMI ; 6,2 mm de la vitre à la carte. D'après le modèle 3D de Waveshare | `command-post.scad`, `scr`, `scr_holes`, `scr_ear`, `scr_view`, `scr_view_off`, `scr_glass` | Mesurer l'entraxe des trous : seule la façade change, sauf si l'écran est plus grand |
-| Place pour l'adaptateur HDMI coudé | 20 mm au-dessus de la carte | `hdmi_room` | Avec un câble droit sans adaptateur, 45 mm : le boîtier grandit de 25 mm |
+| Fiche HDMI du câble, droite | 50 mm de rigide depuis l'entrée de la prise (l'équipe a mesuré 45 à 50 mm), puis 18 mm pour couder le câble : 68 mm au-dessus de la carte | `hdmi_plug`, `hdmi_room` | Seuls le socle et la façade changent : les murs du socle font la différence avec la coque, imprimée pour 20 mm (`shell_room`) |
 | ESP32 DevKitC V4 d'AZ-Delivery | 56 × 28 mm | `sentinel.scad`, `esp` | Les supports s'écartent ou se rapprochent seuls |
 | WAGO 221 | 18,7 / 29,9 mm de large (3, 5 pôles), 18,6 mm de profondeur | `wago_w`, et leur liste dans `wagos` | Un point de colle chaude |
 | Trous de la carte ULN2003 (la carte classique : puce ULN2003AN, entrées IN1 à IN7, LED A à D, prise blanche à 5 fils) | 29,5 × 27 mm | `uln_holes` | Adhésif mousse sur les plots |
@@ -125,6 +132,7 @@ Toutes ces cotes sont en tête des fichiers `.scad`. Après un changement, `./bu
 | PIR HC-SR501 | Carte 32 × 24 mm, lentille Ø 23, trous M2 à 28 mm. D'après la fiche du vendeur | `pir`, `pir_skirt` | Un point de colle |
 | Module son CZN-15E | Carte 32 × 17 mm, micro Ø 9,7 couché à un bout, 3 broches coudées à l'autre, un trou Ø 3. D'après les photos du vendeur | `czn_pcb`, `czn_mic` | Colle chaude sur le plot |
 | Leap Motion d'origine | 80 × 30 mm | `leap-stand.scad`, `leap` | — |
+| Trous des vis qui se taillent leur filet | Dessinés à 2,5 mm (M2,5), 2,9 mm (M3), 1,9 mm (M2) : la K2 Plus les sort 0,3 mm plus étroits | `common.scad`, `pilot_m25`, `pilot_m3`, `pilot_m2` | L'essai `screw-test-plate.stl` dit lequel prendre |
 
 Mesurés : l'enceinte (70 × 30 × 18 mm, par l'équipe) et le support de caméra déjà imprimé (Ø 30 mm, cône de 45°, axe à méplats de 6,5 mm de profondeur). La C920 d'après la fiche de Logitech : 94 × 24 × 29 mm, 162 g.
 

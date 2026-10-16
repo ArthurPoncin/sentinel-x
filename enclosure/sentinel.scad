@@ -138,12 +138,14 @@ module base() {
       dht_holder();
       translate([mic[0], 0, mic[1]]) rotate([-90, 0, 0]) cradle(10.3, 13.5, 2.5);
       // the post its board rests on, under its mounting hole: hot glue, or an M3 if the hole falls on it
-      translate([mic[0], 29, 0]) boss(czn_z - 0.3, 6, 2.5, 8);
-      for (s = [-1, 1]) translate([pir[0] + s * 14, 0, pir[1]]) rotate([-90, 0, 0]) boss(pir_skirt, 3.8, 1.7, pir_skirt);
+      translate([mic[0], 29, 0]) boss(czn_z - 0.3, 6, pilot_m3, 8);
+      for (s = [-1, 1]) translate([pir[0] + s * 14, 0, pir[1]]) rotate([-90, 0, 0]) boss(pir_skirt, 3.8, pilot_m2, pir_skirt);
       for (sx = [-1, 1], sy = [-1, 1]) translate([mq_at[0] + sx * mq_holes[0] / 2, mq_at[1] + mq_pcb[0] / 2 + sy * mq_holes[1] / 2, 0])
-        boss(mq_z, 6, 2.1, 8);
+        boss(mq_z, 6, pilot_m25, 8);
     }
-    for (c = corner) translate([c[0], c[1], H - 14]) cylinder(h = 15, d = 2.5, $fn = 24);
+    for (c = corner) translate([c[0], c[1], H - 14]) cylinder(h = 15, d = pilot_m3, $fn = 24);
+    // the PIR's pilot holes go on into the front wall: an M2 x 6 reaches 4.8 mm past its board, the posts are 4 long
+    for (s = [-1, 1]) translate([pir[0] + s * 14, eps, pir[1]]) rotate([90, 0, 0]) cylinder(h = 1.4, d = pilot_m2, $fn = 24);
 
     // wires out of the two compartments: the DHT22's along the floor, the MQ-2's plugs through a slot open at the top
     translate([12, dht_box[1] - 1, -eps]) cube([10, iw + 2, 12]);
