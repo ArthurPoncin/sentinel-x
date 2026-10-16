@@ -483,7 +483,11 @@ else
   for candidate in /dev/ttyUSB* /dev/ttyACM*; do
     if [[ -z "$port" && -e "$candidate" ]]; then port="$candidate"; fi
   done
-  if [[ -z "$port" ]]; then
+  # A Sentinel powered on its own, not by the Pi, is no longer on a USB port: when it already
+  # answers on the Wi-Fi, it keeps the firmware it has.
+  if [[ -z "$port" ]] && ping -c 1 -W 2 "$sentinel_ip" >/dev/null 2>&1; then
+    ui_skip "pas en USB, déjà sur le Wi-Fi en $sentinel_ip : il garde son firmware"
+  elif [[ -z "$port" ]]; then
     ui_note "pas d'ESP32 en USB : branche-le sur le Pi avec un câble de données, puis relance (ou --no-flash)."
   else
     id -nG | grep -qw dialout || sudo usermod -aG dialout "$USER"

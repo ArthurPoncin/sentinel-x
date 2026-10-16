@@ -80,7 +80,7 @@ Il déroule 10 étapes numérotées. Chacune affiche un spinner et son temps, av
 6. **Firmware du Sentinel** : compilé avec les secrets de ce Pi ; les mots de passe ne quittent jamais le Pi.
 7. **Wi-Fi de la table** : le Wi-Fi du Pi devient le réseau `SentinelX-4`, en 2,4 GHz, WPA2, sans Internet. L'ESP32 a toujours l'adresse `192.168.4.10`, et le Pi lui donne l'heure.
 8. **Écran HDMI** : l'écran du Pi affiche en continu le statut du Poste de commande (voir [L'écran de statut](#lécran-de-statut)), à la place de l'invite de connexion.
-9. **Flash de l'ESP32** par USB (`– ignoré` avec `--no-flash`).
+9. **Flash de l'ESP32** par USB (`– ignoré` avec `--no-flash`, ou quand il n'est pas en USB mais répond déjà sur le Wi-Fi).
 10. **Première mesure du Sentinel** : il attend que l'ESP32 rejoigne le Wi-Fi, puis sa première mesure sur le broker.
 
 Si une étape échoue, le script s'arrête sur un `✗`, avec la raison encadrée en rouge et les dernières lignes de la commande qui a échoué. Ctrl+C l'interrompt proprement ; relancé, il reprend sans rien casser.
@@ -280,7 +280,7 @@ Le script lui-même :
 
 | Message | Quoi faire |
 |---|---|
-| `pas d'ESP32 en USB` | Branche l'ESP32 sur le Pi avec un câble de données, puis relance |
+| `pas d'ESP32 en USB` | Ni en USB ni sur le Wi-Fi : branche l'ESP32 sur le Pi avec un câble de données, puis relance |
 | `le flash a échoué` | Maintiens le bouton **BOOT** de l'ESP32 au début de l'envoi, puis relance |
 | `paquets manquants` / `Docker manque` / `PlatformIO manque` | Le Pi n'a pas Internet : branche l'Ethernet, puis relance |
 | `les images préconstruites sont encore privées` | Rien ne casse : le Pi les construit, c'est juste plus long. Pour aller vite, le propriétaire du dépôt (Arthur) rend publics, une fois, les paquets `sentinel-x-*` sur GitHub (*Package settings → Change visibility → Public*) |
