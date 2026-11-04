@@ -250,7 +250,7 @@ Les seuils se règlent dans [`firmware/include/config.h`](../firmware/include/co
   ```
   Il récupère le code et ses images, et ne remplace que les conteneurs qui ont changé : ni sudo, ni Wi-Fi relancé, l'ESP32 n'est pas touché. Si la mise à jour apporte un nouveau firmware ou change l'installation du Pi, il le dit à la fin, avec la commande à lancer.
 - **Tout repasser** (nouveau firmware, webcam ou servo ajouté, installation du Pi changée) : `infra/plug-and-play.sh`, ou `infra/plug-and-play.sh --no-flash` pour ne pas toucher à l'ESP32. Le nouveau firmware part par le Wi-Fi : pas de câble.
-- **Le dashboard depuis n'importe où** (en option) : une adresse publique `https://sentinel-x.<tailnet>.ts.net/`, par Tailscale Funnel. Le Pi garde l'Ethernet branché, aucun port n'est ouvert, aucun DNS à toucher. Réglages sur Tailscale et commandes sur le Pi : [`infra/README.md`](../infra/README.md#the-dashboard-from-anywhere).
+- **Le dashboard depuis n'importe où** (en option) : une adresse publique `https://sentinel-x.<tailnet>.ts.net/`, par Tailscale Funnel. Le Pi garde l'Ethernet branché, aucun port n'est ouvert, aucun DNS à toucher. Pas à pas : [`ACCES-DISTANT-PI.md`](ACCES-DISTANT-PI.md).
 - **Durcir le Pi avant le pentest** : [`DURCISSEMENT-PI.md`](DURCISSEMENT-PI.md), une fois que tout marche ici. Après, `sentinel-x.local` ne répond plus et SSH n'accepte que le PC Opérateur, sur le Wi-Fi de la table : `ssh ton-utilisateur@192.168.4.1`.
 
 ## Dépannage
