@@ -463,9 +463,9 @@ for node in /dev/v4l/by-id/usb-*-video-index0; do
   if [[ -z "$webcam" && -e "$node" ]]; then webcam="$node"; fi
 done
 touch .env
-# The COMPOSE_FILE lines this step writes: with the webcam, with its servo or its stepper, with both.
-# And PAN_STEPPER=true, which the stepper once needed to be given.
-sed -i -e '\|^COMPOSE_FILE=docker-compose\.yml\(:docker-compose\.camera\.yml\)\?\(:docker-compose\.pan\.yml\)\?\(:docker-compose\.stepper\.yml\)\?$|d' \
+# The COMPOSE_FILE lines this step writes: with the webcam, with its servo or its stepper, with both,
+# with the tunnel. And PAN_STEPPER=true, which the stepper once needed to be given.
+sed -i -e '\|^COMPOSE_FILE=docker-compose\.yml\(:docker-compose\.camera\.yml\)\?\(:docker-compose\.pan\.yml\)\?\(:docker-compose\.stepper\.yml\)\?\(:docker-compose\.tunnel\.yml\)\?$|d' \
   -e '/^CAMERA_DEVICE=/d' -e '/^PAN_PWM_CHANNEL=/d' -e '/^PAN_GID=/d' -e '/^PAN_GPIO_GID=/d' -e '/^PAN_STEPPER=true$/d' .env
 if [[ -z "$webcam" ]]; then
   ui_note "pas de webcam USB : vision tournera sans caméra. Branche-la sur un port USB du Pi, puis relance avec --no-flash."
@@ -514,6 +514,11 @@ elif [[ -c /dev/gpiochip0 ]]; then
     stepper_pins="$(sed -n 's/^PAN_STEPPER_PINS=//p' .env | tail -n 1)"
     ui_detail "moteur pas à pas de la caméra sur GPIO ${stepper_pins:-6,13,19,26}, donné à vision"
   fi
+fi
+# The dashboard on its public address, once the tunnel's auth key is there (infra/README.md#the-dashboard-from-anywhere).
+if grep -q '^TS_AUTHKEY=.' "$secrets/tunnel.env" 2>/dev/null; then
+  compose_files+=:docker-compose.tunnel.yml
+  ui_detail "Tailscale Funnel : le dashboard sur son adresse publique"
 fi
 [[ "$compose_files" == docker-compose.yml ]] || printf 'COMPOSE_FILE=%s\n' "$compose_files" >>.env
 ui_done

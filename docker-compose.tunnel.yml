@@ -1,0 +1,42 @@
+# The dashboard from anywhere, on a public address (infra/README.md#the-dashboard-from-anywhere):
+# Tailscale Funnel, which the Pi opens outward to Tailscale — no port published, nothing let in, no
+# DNS of ours touched: the address is https://sentinel-x.<tailnet>.ts.net/.
+# On top of docker-compose.yml, taken by infra/plug-and-play.sh once infra/secrets/tunnel.env holds
+# an auth key (TS_AUTHKEY), through COMPOSE_FILE in .env, like the webcam's file.
+# Funnel hands each request to the proxy over HTTPS (infra/tailscale/serve.json), its certificate
+# checked against the team CA, as sentinel-x.local. The proxy, the Operator session and the Origin
+# checks of the api stay as they are: the tunnel is one more way in to the same door.
+services:
+  tunnel:
+    image: tailscale/tailscale:v1.104.1
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    # Userspace networking (the image's default): no /dev/net/tun, no NET_ADMIN.
+    cap_drop: [ALL]
+    read_only: true
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    env_file: infra/secrets/tunnel.env
+    environment:
+      TS_HOSTNAME: sentinel-x
+      TS_USERSPACE: "true"
+      TS_STATE_DIR: /var/lib/tailscale
+      # The key is used once, to join the tailnet: after that, the state on the volume is the node.
+      TS_AUTH_ONCE: "true"
+      TS_SERVE_CONFIG: /config/serve.json
+      # The team CA next to the system's roots (Go reads both): the proxy's certificate is verified.
+      SSL_CERT_DIR: /etc/ssl/sentinel-x
+    volumes:
+      - tunnel-state:/var/lib/tailscale
+      - ./infra/tailscale/serve.json:/config/serve.json:ro
+      - ./infra/secrets/ca.crt:/etc/ssl/sentinel-x/ca.crt:ro
+    tmpfs: ["/tmp"]
+    # The proxy under the name its certificate bears.
+    links: ["reverse-proxy:sentinel-x.local"]
+    # edge: the way out to Tailscale, and to the proxy. Never internal.
+    networks: [edge]
+
+volumes:
+  # The node's identity on the tailnet: kept, so the address stays the same.
+  tunnel-state:
