@@ -115,6 +115,26 @@ infra/update.sh                                 # update: git pull, the new imag
   ```
   It reads `api-data` mounted `:ro` at `/history` (the api writes it as `node`, files `0644`: readable by `predictive`'s uid 10001, writable by the api only) and writes `/model/model.joblib` on `predictive-model`; the running `predictive` takes the new model up by itself, no restart.
 
+## The dashboard from anywhere
+Optional: the dashboard on a public address, `https://sentinel-x.<tailnet>.ts.net/`, through **Tailscale Funnel** ([`../docker-compose.tunnel.yml`](../docker-compose.tunnel.yml)). The `tunnel` container opens the connection outward, to Tailscale, over port 443: no port is published, no DNS record to make, and `harden.sh` needs no change (containers may go out, nothing more comes in). Tailscale gives the public certificate: nothing to install on the laptop that opens it. Funnel hands each request to the proxy as [`tailscale/serve.json`](tailscale/serve.json) says: HTTPS to `sentinel-x.local:8443`, the proxy's certificate checked against the team CA, the `Host` kept for the api's Origin check. The table network stays as it is, without a route out: only the Pi needs Internet, through its Ethernet, for as long as the address must answer.
+
+**On Tailscale, once** (free *Personal* plan), in the admin console:
+1. *DNS*: MagicDNS and *HTTPS Certificates* on. The tailnet's name there (`<tailnet>.ts.net`) is the end of the address; it can be changed once for a more readable one.
+2. *Access controls*: Funnel allowed for the node, in the policy's `nodeAttrs` (`"attr": ["funnel"]`, already there in a new tailnet's policy).
+3. *Settings → Keys → Generate auth key*: one-off is enough, the node's state is kept on the `tunnel-state` volume.
+
+**On the Pi**, Ethernet plugged in, from the repo:
+```bash
+read -rsp 'Auth key: ' k && (umask 077 && printf 'TS_AUTHKEY=%s\n' "$k" >infra/secrets/tunnel.env); unset k
+infra/plug-and-play.sh --no-flash       # adds docker-compose.tunnel.yml to COMPOSE_FILE, starts the tunnel
+docker compose logs tunnel              # the node's address, then the Funnel set up
+```
+Then, in the admin console, *Machines → sentinel-x → Disable key expiry*: otherwise the node leaves the tailnet after 180 days.
+
+- **What changes for security:** anyone on the Internet reaches the login page, the camera feed and the siren being behind it. The api limits logins to 5 a minute per address; behind the tunnel every visitor has the address of the `tunnel` container, so those 5 are shared by them all, the table Wi-Fi keeping its own (shortcut: the real address is in the `X-Forwarded-For` Funnel sets, to trust in Caddy if remote logins get locked out). Without `AllowFunnel` in `serve.json`, the same address answers on the tailnet only: to the team's devices that run Tailscale, and to no one else.
+- **Not yet run on the Pi** when this was written: `docker compose logs tunnel` says why it fails, `x509` when the proxy's certificate is refused.
+- **To close it:** `docker compose rm -sf tunnel`, delete `infra/secrets/tunnel.env`, `infra/plug-and-play.sh --no-flash`, and remove the machine in the admin console.
+
 ## Container stack (Docker-Compose, on the Pi)
 `reverse-proxy` · `mosquitto` · `api` · `dashboard` · `vision` · `predictive` (the history: SQLite on the `api-data` volume) — roles in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#container-stack-docker-compose-on-the-pi).
 Resilient & reproducible — `docker compose up` brings the Command Post online.
@@ -175,7 +195,7 @@ A critical Alert makes it beat, with a red frame. Around the eye, a radar seen f
 ## Network topology
 - The **Pi is the Wi-Fi access point** (hostapd, WPA2-PSK CCMP) with DHCP reservations (dnsmasq) for **`192.168.X.0/24`** — IP plan in [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md#network-topology).
 - The **Sentinel (ESP32)** and the **Operator laptop** join that Wi-Fi. The Sentinel has no cable to the Pi: its firmware comes over that Wi-Fi too.
-- No route/NAT to other networks; the Pi's Ethernet is for setup only — **pull Docker images and Python packages before going isolated**.
+- No route/NAT to other networks; the Pi's Ethernet is for setup only — **pull Docker images and Python packages before going isolated** — and for the [public address](#the-dashboard-from-anywhere), when there is one.
 - No interference with neighboring tables (own SSID, own channel if possible).
 
 ## TODO
